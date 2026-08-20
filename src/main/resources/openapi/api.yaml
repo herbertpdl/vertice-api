@@ -47,6 +47,12 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: Email already in use
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /api/trainers/{id}:
     get:
@@ -104,6 +110,18 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: Email already in use by another trainer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
     delete:
       tags: [Trainers]
@@ -138,6 +156,7 @@ components:
         email:
           type: string
           format: email
+          minLength: 1
 
     TrainerResponse:
       type: object

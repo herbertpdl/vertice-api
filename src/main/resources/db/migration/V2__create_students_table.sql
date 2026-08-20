@@ -1,0 +1,6 @@
+CREATE TABLE students (
+    id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name   VARCHAR(255) NOT NULL,
+    email  VARCHAR(255) NOT NULL,
+    CONSTRAINT uq_students_email UNIQUE (email)
+);
