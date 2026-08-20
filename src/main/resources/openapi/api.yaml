@@ -35,7 +35,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TrainerRequest'
+              $ref: '#/components/schemas/TrainerCreateRequest'
       responses:
         '201':
           description: Trainer created
@@ -146,6 +146,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /api/trainers/{id}/password:
+    put:
+      tags: [Trainers]
+      operationId: setTrainerPassword
+      summary: Set or change a trainer's password
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPasswordRequest'
+      responses:
+        '204':
+          description: Password updated
+        '404':
+          description: Trainer not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
   /api/students:
     get:
       tags: [Students]
@@ -170,7 +204,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StudentRequest'
+              $ref: '#/components/schemas/StudentCreateRequest'
       responses:
         '201':
           description: Student created
@@ -281,6 +315,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /api/students/{id}/password:
+    put:
+      tags: [Students]
+      operationId: setStudentPassword
+      summary: Set or change a student's password
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPasswordRequest'
+      responses:
+        '204':
+          description: Password updated
+        '404':
+          description: Student not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
 components:
   schemas:
     TrainerRequest:
@@ -294,6 +362,22 @@ components:
           type: string
           format: email
           minLength: 1
+
+    TrainerCreateRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
 
     TrainerResponse:
       type: object
@@ -318,6 +402,22 @@ components:
           format: email
           minLength: 1
 
+    StudentCreateRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+
     StudentResponse:
       type: object
       properties:
@@ -328,6 +428,15 @@ components:
           type: string
         email:
           type: string
+
+    SetPasswordRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
 
     ProblemDetail:
       type: object

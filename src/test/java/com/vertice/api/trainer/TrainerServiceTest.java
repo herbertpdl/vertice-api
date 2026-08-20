@@ -2,6 +2,7 @@ package com.vertice.api.trainer;
 
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.model.TrainerCreateRequest;
 import com.vertice.api.generated.model.TrainerRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
@@ -25,11 +28,29 @@ class TrainerServiceTest {
     @Mock
     private TrainerRepository trainerRepository;
 
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     private TrainerService service;
 
     @BeforeEach
     void setUp() {
-        service = new TrainerService(trainerRepository, Mappers.getMapper(TrainerMapper.class));
+        service = new TrainerService(trainerRepository, Mappers.getMapper(TrainerMapper.class), passwordEncoder);
+    }
+
+    @Test
+    void createTrainer_hashesPasswordBeforeSaving() {
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+
+        service.createTrainer(request);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Trainer.class);
+        verify(trainerRepository).save(captor.capture());
+        Trainer saved = captor.getValue();
+
+        assertThat(saved.getPasswordHash()).isNotEqualTo("supersecret1");
+        assertThat(passwordEncoder.matches("supersecret1", saved.getPasswordHash())).isTrue();
     }
 
     @Test
@@ -39,7 +60,7 @@ class TrainerServiceTest {
         existing.setEmail("coach@vertice.com");
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
 
-        TrainerRequest request = new TrainerRequest("New Coach", "coach@vertice.com");
+        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
 
         assertThatThrownBy(() -> service.createTrainer(request))
                 .isInstanceOf(DuplicateEmailException.class);
@@ -52,6 +73,7 @@ class TrainerServiceTest {
         existing.setId(1L);
         existing.setName("Old Name");
         existing.setEmail("coach@vertice.com");
+        existing.setPasswordHash("$2a$10$existingHash");
 
         when(trainerRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
@@ -63,6 +85,7 @@ class TrainerServiceTest {
 
         assertThat(response.getName()).isEqualTo("New Name");
         assertThat(response.getEmail()).isEqualTo("coach@vertice.com");
+        assertThat(existing.getPasswordHash()).isEqualTo("$2a$10$existingHash");
     }
 
     @Test
@@ -98,6 +121,40 @@ class TrainerServiceTest {
         when(trainerRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.deleteTrainer(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void setPassword_hashesAndSaves() {
+        Trainer existing = new Trainer();
+        existing.setId(1L);
+        existing.setPasswordHash("$2a$10$oldHash");
+
+        when(trainerRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.setPassword(1L, "brandNewPassword1");
+
+        assertThat(existing.getPasswordHash()).isNotEqualTo("$2a$10$oldHash");
+        assertThat(existing.getPasswordHash()).isNotEqualTo("brandNewPassword1");
+        assertThat(passwordEncoder.matches("brandNewPassword1", existing.getPasswordHash())).isTrue();
+    }
+
+    @Test
+    void passwordEncoder_saltsSamePasswordDifferently() {
+        String hash1 = passwordEncoder.encode("samePassword1");
+        String hash2 = passwordEncoder.encode("samePassword1");
+
+        assertThat(hash1).isNotEqualTo(hash2);
+        assertThat(passwordEncoder.matches("samePassword1", hash1)).isTrue();
+        assertThat(passwordEncoder.matches("samePassword1", hash2)).isTrue();
+    }
+
+    @Test
+    void setPassword_throwsWhenMissing() {
+        when(trainerRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.setPassword(99L, "brandNewPassword1"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

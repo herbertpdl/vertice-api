@@ -2,6 +2,7 @@ package com.vertice.api.student;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 
 @Data
 @Entity
@@ -17,4 +18,8 @@ public class Student {
 
     @Column(nullable = false, unique = true)
     private String email;
+
+    @ToString.Exclude
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 }
