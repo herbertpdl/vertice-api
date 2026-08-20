@@ -2,9 +2,11 @@ package com.vertice.api.trainer;
 
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.model.TrainerCreateRequest;
 import com.vertice.api.generated.model.TrainerRequest;
 import com.vertice.api.generated.model.TrainerResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +19,7 @@ public class TrainerService {
 
     private final TrainerRepository trainerRepository;
     private final TrainerMapper trainerMapper;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public List<TrainerResponse> listTrainers() {
@@ -30,9 +33,10 @@ public class TrainerService {
         return trainerMapper.toResponse(findByIdOrThrow(id));
     }
 
-    public TrainerResponse createTrainer(TrainerRequest request) {
+    public TrainerResponse createTrainer(TrainerCreateRequest request) {
         assertEmailAvailable(request.getEmail(), null);
         Trainer trainer = trainerMapper.toEntity(request);
+        trainer.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         return trainerMapper.toResponse(trainerRepository.save(trainer));
     }
 
@@ -46,6 +50,12 @@ public class TrainerService {
     public void deleteTrainer(Long id) {
         Trainer trainer = findByIdOrThrow(id);
         trainerRepository.delete(trainer);
+    }
+
+    public void setPassword(Long id, String rawPassword) {
+        Trainer trainer = findByIdOrThrow(id);
+        trainer.setPasswordHash(passwordEncoder.encode(rawPassword));
+        trainerRepository.save(trainer);
     }
 
     private Trainer findByIdOrThrow(Long id) {

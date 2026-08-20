@@ -51,7 +51,7 @@ class TrainerControllerTest {
         mockMvc.perform(post("/api/trainers")
                         .with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\"}"))
+                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\",\"password\":\"supersecret1\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.email").value("coach@vertice.com"));
@@ -62,7 +62,7 @@ class TrainerControllerTest {
         mockMvc.perform(post("/api/trainers")
                         .with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"\",\"email\":\"coach@vertice.com\"}"))
+                        .content("{\"name\":\"\",\"email\":\"coach@vertice.com\",\"password\":\"supersecret1\"}"))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -71,7 +71,7 @@ class TrainerControllerTest {
         mockMvc.perform(post("/api/trainers")
                         .with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Coach\",\"email\":\"not-an-email\"}"))
+                        .content("{\"name\":\"Coach\",\"email\":\"not-an-email\",\"password\":\"supersecret1\"}"))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -80,7 +80,25 @@ class TrainerControllerTest {
         mockMvc.perform(post("/api/trainers")
                         .with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Coach\",\"email\":\"\"}"))
+                        .content("{\"name\":\"Coach\",\"email\":\"\",\"password\":\"supersecret1\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void createTrainer_withMissingPassword_returns422() throws Exception {
+        mockMvc.perform(post("/api/trainers")
+                        .with(jwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void createTrainer_withShortPassword_returns422() throws Exception {
+        mockMvc.perform(post("/api/trainers")
+                        .with(jwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\",\"password\":\"short\"}"))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -91,7 +109,7 @@ class TrainerControllerTest {
         mockMvc.perform(post("/api/trainers")
                         .with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\"}"))
+                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\",\"password\":\"supersecret1\"}"))
                 .andExpect(status().isConflict());
     }
 
@@ -151,5 +169,35 @@ class TrainerControllerTest {
 
         mockMvc.perform(delete("/api/trainers/99").with(jwt()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void setTrainerPassword_whenExists_returns204() throws Exception {
+        mockMvc.perform(put("/api/trainers/1/password")
+                        .with(jwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"brandNewPassword1\"}"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void setTrainerPassword_whenMissing_returns404() throws Exception {
+        org.mockito.Mockito.doThrow(new ResourceNotFoundException("Trainer", 99L))
+                .when(trainerService).setPassword(99L, "brandNewPassword1");
+
+        mockMvc.perform(put("/api/trainers/99/password")
+                        .with(jwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"brandNewPassword1\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void setTrainerPassword_withShortPassword_returns422() throws Exception {
+        mockMvc.perform(put("/api/trainers/1/password")
+                        .with(jwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"short\"}"))
+                .andExpect(status().isUnprocessableEntity());
     }
 }

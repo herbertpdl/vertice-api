@@ -2,6 +2,7 @@ package com.vertice.api.student;
 
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.model.StudentCreateRequest;
 import com.vertice.api.generated.model.StudentRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
@@ -25,11 +28,29 @@ class StudentServiceTest {
     @Mock
     private StudentRepository studentRepository;
 
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     private StudentService service;
 
     @BeforeEach
     void setUp() {
-        service = new StudentService(studentRepository, Mappers.getMapper(StudentMapper.class));
+        service = new StudentService(studentRepository, Mappers.getMapper(StudentMapper.class), passwordEncoder);
+    }
+
+    @Test
+    void createStudent_hashesPasswordBeforeSaving() {
+        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StudentCreateRequest request = new StudentCreateRequest("New Student", "student@vertice.com", "supersecret1");
+
+        service.createStudent(request);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).save(captor.capture());
+        Student saved = captor.getValue();
+
+        assertThat(saved.getPasswordHash()).isNotEqualTo("supersecret1");
+        assertThat(passwordEncoder.matches("supersecret1", saved.getPasswordHash())).isTrue();
     }
 
     @Test
@@ -39,7 +60,7 @@ class StudentServiceTest {
         existing.setEmail("student@vertice.com");
         when(studentRepository.findByEmail("student@vertice.com")).thenReturn(Optional.of(existing));
 
-        StudentRequest request = new StudentRequest("New Student", "student@vertice.com");
+        StudentCreateRequest request = new StudentCreateRequest("New Student", "student@vertice.com", "supersecret1");
 
         assertThatThrownBy(() -> service.createStudent(request))
                 .isInstanceOf(DuplicateEmailException.class);
@@ -52,6 +73,7 @@ class StudentServiceTest {
         existing.setId(1L);
         existing.setName("Old Name");
         existing.setEmail("student@vertice.com");
+        existing.setPasswordHash("$2a$10$existingHash");
 
         when(studentRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(studentRepository.findByEmail("student@vertice.com")).thenReturn(Optional.of(existing));
@@ -63,6 +85,7 @@ class StudentServiceTest {
 
         assertThat(response.getName()).isEqualTo("New Name");
         assertThat(response.getEmail()).isEqualTo("student@vertice.com");
+        assertThat(existing.getPasswordHash()).isEqualTo("$2a$10$existingHash");
     }
 
     @Test
@@ -98,6 +121,30 @@ class StudentServiceTest {
         when(studentRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.deleteStudent(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void setPassword_hashesAndSaves() {
+        Student existing = new Student();
+        existing.setId(1L);
+        existing.setPasswordHash("$2a$10$oldHash");
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.setPassword(1L, "brandNewPassword1");
+
+        assertThat(existing.getPasswordHash()).isNotEqualTo("$2a$10$oldHash");
+        assertThat(existing.getPasswordHash()).isNotEqualTo("brandNewPassword1");
+        assertThat(passwordEncoder.matches("brandNewPassword1", existing.getPasswordHash())).isTrue();
+    }
+
+    @Test
+    void setPassword_throwsWhenMissing() {
+        when(studentRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.setPassword(99L, "brandNewPassword1"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

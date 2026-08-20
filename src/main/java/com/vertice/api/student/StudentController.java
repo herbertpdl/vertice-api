@@ -1,6 +1,8 @@
 package com.vertice.api.student;
 
 import com.vertice.api.generated.api.StudentsApi;
+import com.vertice.api.generated.model.SetPasswordRequest;
+import com.vertice.api.generated.model.StudentCreateRequest;
 import com.vertice.api.generated.model.StudentRequest;
 import com.vertice.api.generated.model.StudentResponse;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +24,8 @@ public class StudentController implements StudentsApi {
     }
 
     @Override
-    public ResponseEntity<StudentResponse> createStudent(StudentRequest studentRequest) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(studentService.createStudent(studentRequest));
+    public ResponseEntity<StudentResponse> createStudent(StudentCreateRequest studentCreateRequest) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(studentService.createStudent(studentCreateRequest));
     }
 
     @Override
@@ -39,6 +41,12 @@ public class StudentController implements StudentsApi {
     @Override
     public ResponseEntity<Void> deleteStudent(Long id) {
         studentService.deleteStudent(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    public ResponseEntity<Void> setStudentPassword(Long id, SetPasswordRequest setPasswordRequest) {
+        studentService.setPassword(id, setPasswordRequest.getPassword());
         return ResponseEntity.noContent().build();
     }
 }
