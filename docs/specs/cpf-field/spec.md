@@ -42,15 +42,23 @@ either resource, see `grpc-trainer`/`grpc-student`).
 ## 2. Data model
 
 `ALTER TABLE trainers ADD COLUMN cpf VARCHAR(11)`, same for `students`. New migrations:
-`V7__add_cpf_to_trainers.sql`, `V8__add_cpf_to_students.sql`, mirroring `V5`/`V6`'s
-nullable-backfill-NOT NULL-unique shape exactly:
+`V7__add_cpf_to_trainers.sql`, `V8__add_cpf_to_students.sql`, following `V5`/`V6`'s
+nullable-backfill-NOT NULL shape, with one difference: `cpf` needs a *unique* backfill value
+per existing row (unlike `password_hash`, which shares one empty-string placeholder across all
+rows — fine there since it isn't unique). Backfilling every row with the same placeholder would
+violate the new unique constraint the moment it's added, so the placeholder is derived from each
+row's own `id` instead:
 
 ```sql
 ALTER TABLE trainers ADD COLUMN cpf VARCHAR(11);
-UPDATE trainers SET cpf = '' WHERE cpf IS NULL;
+UPDATE trainers SET cpf = LPAD(id::text, 11, '0') WHERE cpf IS NULL;
 ALTER TABLE trainers ALTER COLUMN cpf SET NOT NULL;
 ALTER TABLE trainers ADD CONSTRAINT uq_trainers_cpf UNIQUE (cpf);
 ```
+
+The placeholder never needs to itself pass `@Cpf` validation (see §3) — migrations write straight
+to the DB, bypassing Bean Validation entirely, and nothing re-validates an existing row unless it
+goes through `UpdateTrainer`/`UpdateStudent`, which supplies a whole new value anyway.
 
 `Trainer`/`Student` entities: `@Column(name = "cpf", nullable = false, unique = true) private
 String cpf;`. `TrainerRepository`/`StudentRepository` get a `findByCpf(String cpf)` method,
