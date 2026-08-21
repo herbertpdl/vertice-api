@@ -44,6 +44,12 @@ Two `@Profile`-gated beans in a new `GrpcSecurityConfig` (`com.vertice.api.grpc`
 
 No role/method-level differentiation in either case — same flat model REST uses today.
 
+**Discovered while implementing**: the `@Bean` method name matters, not just the type — naming a
+bean method `grpcSecurity()` collides with the framework's own `GrpcNativeSecurityConfigurerConfiguration.
+grpcSecurity()` bean (which produces the `GrpcSecurity` builder, a different type, but Spring
+resolves bean names per method name regardless of type), throwing `BeanDefinitionOverrideException`
+at boot. Renamed ours to `grpcAuthenticationInterceptor`/`localGrpcAuthenticationInterceptor`.
+
 ## 3. Error mapping
 
 A `@GrpcAdvice`-annotated `GrpcExceptionAdvice` (`com.vertice.api.grpc`) with
@@ -61,6 +67,12 @@ A `@GrpcAdvice`-annotated `GrpcExceptionAdvice` (`com.vertice.api.grpc`) with
 handled by the framework's own `SecurityGrpcExceptionHandler` (discovered while implementing —
 this is why `grpc-foundation`'s smoke test already got a clean `UNAUTHENTICATED` with zero code
 written). Nothing to add there.
+
+**Discovered while implementing**: `@GrpcExceptionHandler`-annotated methods on the `@GrpcAdvice`
+bean must be `public` — package-private methods compile fine but throw `IllegalAccessException` at
+dispatch time (caught internally, silently falling back to a generic `INTERNAL` instead of the
+mapped status), only visible by reading the server log. `GrpcExceptionAdvice` and its three handler
+methods are `public` for this reason.
 
 ## 4. Validation
 
