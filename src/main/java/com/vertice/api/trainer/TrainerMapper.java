@@ -1,8 +1,8 @@
 package com.vertice.api.trainer;
 
-import com.vertice.api.generated.model.TrainerCreateRequest;
-import com.vertice.api.generated.model.TrainerRequest;
-import com.vertice.api.generated.model.TrainerResponse;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerCreateRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerResponse;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;

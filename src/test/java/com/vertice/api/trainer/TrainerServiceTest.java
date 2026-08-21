@@ -2,8 +2,8 @@ package com.vertice.api.trainer;
 
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
-import com.vertice.api.generated.model.TrainerCreateRequest;
-import com.vertice.api.generated.model.TrainerRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerCreateRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,7 +41,11 @@ class TrainerServiceTest {
     void createTrainer_hashesPasswordBeforeSaving() {
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .build();
 
         service.createTrainer(request);
 
@@ -60,7 +64,11 @@ class TrainerServiceTest {
         existing.setEmail("coach@vertice.com");
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
 
-        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .build();
 
         assertThatThrownBy(() -> service.createTrainer(request))
                 .isInstanceOf(DuplicateEmailException.class);
@@ -79,7 +87,10 @@ class TrainerServiceTest {
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TrainerRequest request = new TrainerRequest("New Name", "coach@vertice.com");
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("New Name")
+                .setEmail("coach@vertice.com")
+                .build();
 
         var response = service.updateTrainer(1L, request);
 
@@ -101,7 +112,10 @@ class TrainerServiceTest {
         when(trainerRepository.findById(1L)).thenReturn(Optional.of(target));
         when(trainerRepository.findByEmail("coach2@vertice.com")).thenReturn(Optional.of(other));
 
-        TrainerRequest request = new TrainerRequest("Coach One", "coach2@vertice.com");
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("Coach One")
+                .setEmail("coach2@vertice.com")
+                .build();
 
         assertThatThrownBy(() -> service.updateTrainer(1L, request))
                 .isInstanceOf(DuplicateEmailException.class);

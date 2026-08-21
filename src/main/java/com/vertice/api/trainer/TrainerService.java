@@ -2,9 +2,9 @@ package com.vertice.api.trainer;
 
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
-import com.vertice.api.generated.model.TrainerCreateRequest;
-import com.vertice.api.generated.model.TrainerRequest;
-import com.vertice.api.generated.model.TrainerResponse;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerCreateRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
