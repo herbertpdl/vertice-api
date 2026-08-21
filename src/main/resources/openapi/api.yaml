@@ -1,7 +1,0 @@
-openapi: 3.0.3
-info:
-  title: Vertice Coach API
-  description: API for managing trainers, students, and training plans
-  version: 1.0.0
-
-paths: {}

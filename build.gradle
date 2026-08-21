@@ -2,7 +2,6 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.0'
 	id 'io.spring.dependency-management' version '1.1.7'
-	id 'org.openapi.generator' version '7.12.0'
 	id 'com.google.protobuf' version '0.9.6'
 }
 
@@ -39,7 +38,6 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	annotationProcessor 'org.projectlombok:lombok'
 	annotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
-	implementation 'io.swagger.core.v3:swagger-annotations:2.2.25'
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
@@ -54,37 +52,11 @@ dependencies {
 	testAnnotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
 }
 
-openApiGenerate {
-	generatorName = 'spring'
-	inputSpec = "${rootDir}/src/main/resources/openapi/api.yaml"
-	outputDir = "${layout.buildDirectory.get()}/generated"
-	apiPackage = 'com.vertice.api.generated.api'
-	modelPackage = 'com.vertice.api.generated.model'
-	configOptions = [
-		interfaceOnly    : 'true',
-		useSpringBoot3   : 'true',
-		useTags          : 'true',
-		dateLibrary      : 'java8',
-		openApiNullable  : 'false',
-		useJakartaEe     : 'true'
-	]
-}
-
 protobuf {
 	plugins {
 		grpc {}
 	}
 }
-
-sourceSets {
-	main {
-		java {
-			srcDir "${layout.buildDirectory.get()}/generated/src/main/java"
-		}
-	}
-}
-
-compileJava.dependsOn tasks.openApiGenerate
 
 tasks.withType(Test).configureEach {
 	useJUnitPlatform()
