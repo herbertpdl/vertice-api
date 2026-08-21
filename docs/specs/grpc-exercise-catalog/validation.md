@@ -5,29 +5,33 @@ that are actually verified (test run, manual grpcurl, or code read) — not assu
 
 ## Contract (section 2)
 
-- [ ] `exercise.proto` declares all 5 RPCs with the request/response shapes in the table
-- [ ] `ExerciseRequest` used for both create and the nested update body
+- [x] `exercise.proto` declares all 5 RPCs with the request/response shapes in the table
+- [x] `ExerciseRequest` used for both create and the nested update body
 
 ## Business logic / controller (sections 3–4)
 
-- [ ] `ExerciseService` methods match `TrainerService`'s shape
-- [ ] `ExerciseMapper` maps entity ↔ proto with no custom logic needed
-- [ ] `ExerciseController` extends `ExerciseServiceGrpc.ExerciseServiceImplBase`, `@GrpcService`
-- [ ] Blank `name` on create/update → `INVALID_ARGUMENT`
-- [ ] Missing id on get/update/delete → `NOT_FOUND`
+- [x] `ExerciseService` methods match `TrainerService`'s shape
+- [x] `ExerciseMapper` maps entity ↔ proto with no custom logic needed
+- [x] `ExerciseController` extends `ExerciseServiceGrpc.ExerciseServiceImplBase`, `@GrpcService`
+- [x] Blank `name` on create/update → `INVALID_ARGUMENT` —
+  `ExerciseControllerTest#createExercise_withBlankName_throwsInvalidArgument` + manual grpcurl
+  (`"name: must not be blank"`)
+- [x] Missing id on get/update/delete → `NOT_FOUND` — 3 controller tests + manual grpcurl
+  get-after-delete
 
 ## Dead code (section 5)
 
-- [ ] `com.vertice.api.plan.exercise.dto.ExerciseRequest`/`ExerciseResponse` deleted
+- [x] `com.vertice.api.plan.exercise.dto.ExerciseRequest`/`ExerciseResponse` deleted
 
 ## Verification
 
-- [ ] `./gradlew test` passes
-- [ ] Manual `grpcurl`: create, get, update, list, delete, get-after-delete (`NOT_FOUND`), blank
-  name (`INVALID_ARGUMENT`)
-- [ ] Spec and code reviewed side by side for drift
+- [x] `./gradlew test` passes — 92/92 (78 before this PR + 14 new: 5 service + 9 controller)
+- [x] Manual `grpcurl`: create, get, update, list, delete, get-after-delete (`NOT_FOUND`), blank
+  name (`INVALID_ARGUMENT`) — all verified against the real Postgres-backed service, exact
+  behavior as designed
+- [x] Spec and code reviewed side by side for drift — no drift
 
 ## Sign-off
 
-- [ ] All boxes above checked
-- [ ] `./gradlew test` passes
+- [x] All boxes above checked
+- [x] `./gradlew test` passes
