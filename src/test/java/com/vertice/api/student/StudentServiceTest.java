@@ -2,8 +2,8 @@ package com.vertice.api.student;
 
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
-import com.vertice.api.generated.model.StudentCreateRequest;
-import com.vertice.api.generated.model.StudentRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentCreateRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,7 +41,11 @@ class StudentServiceTest {
     void createStudent_hashesPasswordBeforeSaving() {
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        StudentCreateRequest request = new StudentCreateRequest("New Student", "student@vertice.com", "supersecret1");
+        StudentCreateRequest request = StudentCreateRequest.newBuilder()
+                .setName("New Student")
+                .setEmail("student@vertice.com")
+                .setPassword("supersecret1")
+                .build();
 
         service.createStudent(request);
 
@@ -60,7 +64,11 @@ class StudentServiceTest {
         existing.setEmail("student@vertice.com");
         when(studentRepository.findByEmail("student@vertice.com")).thenReturn(Optional.of(existing));
 
-        StudentCreateRequest request = new StudentCreateRequest("New Student", "student@vertice.com", "supersecret1");
+        StudentCreateRequest request = StudentCreateRequest.newBuilder()
+                .setName("New Student")
+                .setEmail("student@vertice.com")
+                .setPassword("supersecret1")
+                .build();
 
         assertThatThrownBy(() -> service.createStudent(request))
                 .isInstanceOf(DuplicateEmailException.class);
@@ -79,7 +87,10 @@ class StudentServiceTest {
         when(studentRepository.findByEmail("student@vertice.com")).thenReturn(Optional.of(existing));
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        StudentRequest request = new StudentRequest("New Name", "student@vertice.com");
+        StudentRequest request = StudentRequest.newBuilder()
+                .setName("New Name")
+                .setEmail("student@vertice.com")
+                .build();
 
         var response = service.updateStudent(1L, request);
 
@@ -101,7 +112,10 @@ class StudentServiceTest {
         when(studentRepository.findById(1L)).thenReturn(Optional.of(target));
         when(studentRepository.findByEmail("student2@vertice.com")).thenReturn(Optional.of(other));
 
-        StudentRequest request = new StudentRequest("Student One", "student2@vertice.com");
+        StudentRequest request = StudentRequest.newBuilder()
+                .setName("Student One")
+                .setEmail("student2@vertice.com")
+                .build();
 
         assertThatThrownBy(() -> service.updateStudent(1L, request))
                 .isInstanceOf(DuplicateEmailException.class);

@@ -1,52 +1,84 @@
 package com.vertice.api.student;
 
-import com.vertice.api.generated.api.StudentsApi;
-import com.vertice.api.generated.model.SetPasswordRequest;
-import com.vertice.api.generated.model.StudentCreateRequest;
-import com.vertice.api.generated.model.StudentRequest;
-import com.vertice.api.generated.model.StudentResponse;
+import com.google.protobuf.Empty;
+import com.vertice.api.generated.grpc.student.v1.DeleteStudentRequest;
+import com.vertice.api.generated.grpc.student.v1.GetStudentRequest;
+import com.vertice.api.generated.grpc.student.v1.ListStudentsRequest;
+import com.vertice.api.generated.grpc.student.v1.ListStudentsResponse;
+import com.vertice.api.generated.grpc.student.v1.SetStudentPasswordRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentCreateRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentResponse;
+import com.vertice.api.generated.grpc.student.v1.StudentServiceGrpc;
+import com.vertice.api.generated.grpc.student.v1.UpdateStudentRequest;
+import com.vertice.api.grpc.GrpcRequestValidator;
+import io.grpc.stub.StreamObserver;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.grpc.server.service.GrpcService;
 
-import java.util.List;
-
-@RestController
+@GrpcService
 @RequiredArgsConstructor
-public class StudentController implements StudentsApi {
+public class StudentController extends StudentServiceGrpc.StudentServiceImplBase {
 
     private final StudentService studentService;
+    private final GrpcRequestValidator validator;
 
     @Override
-    public ResponseEntity<List<StudentResponse>> listStudents() {
-        return ResponseEntity.ok(studentService.listStudents());
+    public void listStudents(ListStudentsRequest request, StreamObserver<ListStudentsResponse> responseObserver) {
+        responseObserver.onNext(ListStudentsResponse.newBuilder()
+                .addAllStudents(studentService.listStudents())
+                .build());
+        responseObserver.onCompleted();
     }
 
     @Override
-    public ResponseEntity<StudentResponse> createStudent(StudentCreateRequest studentCreateRequest) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(studentService.createStudent(studentCreateRequest));
+    public void getStudent(GetStudentRequest request, StreamObserver<StudentResponse> responseObserver) {
+        responseObserver.onNext(studentService.getStudent(request.getId()));
+        responseObserver.onCompleted();
     }
 
     @Override
-    public ResponseEntity<StudentResponse> getStudent(Long id) {
-        return ResponseEntity.ok(studentService.getStudent(id));
+    public void createStudent(StudentCreateRequest request, StreamObserver<StudentResponse> responseObserver) {
+        validator.validate(new CreateValidation(request.getName(), request.getEmail(), request.getPassword()));
+        responseObserver.onNext(studentService.createStudent(request));
+        responseObserver.onCompleted();
     }
 
     @Override
-    public ResponseEntity<StudentResponse> updateStudent(Long id, StudentRequest studentRequest) {
-        return ResponseEntity.ok(studentService.updateStudent(id, studentRequest));
+    public void updateStudent(UpdateStudentRequest request, StreamObserver<StudentResponse> responseObserver) {
+        validator.validate(new UpdateValidation(request.getStudent().getName(), request.getStudent().getEmail()));
+        responseObserver.onNext(studentService.updateStudent(request.getId(), request.getStudent()));
+        responseObserver.onCompleted();
     }
 
     @Override
-    public ResponseEntity<Void> deleteStudent(Long id) {
-        studentService.deleteStudent(id);
-        return ResponseEntity.noContent().build();
+    public void deleteStudent(DeleteStudentRequest request, StreamObserver<Empty> responseObserver) {
+        studentService.deleteStudent(request.getId());
+        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
     }
 
     @Override
-    public ResponseEntity<Void> setStudentPassword(Long id, SetPasswordRequest setPasswordRequest) {
-        studentService.setPassword(id, setPasswordRequest.getPassword());
-        return ResponseEntity.noContent().build();
+    public void setStudentPassword(SetStudentPasswordRequest request, StreamObserver<Empty> responseObserver) {
+        validator.validate(new PasswordValidation(request.getPassword()));
+        studentService.setPassword(request.getId(), request.getPassword());
+        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    private record CreateValidation(
+            @NotBlank String name,
+            @NotBlank @Email String email,
+            @NotBlank @Size(min = 8) String password) {
+    }
+
+    private record UpdateValidation(
+            @NotBlank String name,
+            @NotBlank @Email String email) {
+    }
+
+    private record PasswordValidation(@NotBlank @Size(min = 8) String password) {
     }
 }
