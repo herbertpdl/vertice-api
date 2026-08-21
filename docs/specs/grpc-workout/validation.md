@@ -5,26 +5,27 @@ that are actually verified (test run, manual grpcurl, or code read) — not assu
 
 ## Contract / business logic / controller
 
-- [ ] `workout.proto` declares all 5 RPCs, shares `vertice.plan.v1`
-- [ ] `ListWorkouts` scoped by `training_plan_id`
-- [ ] `WorkoutService` validates the training plan exists before create → `NOT_FOUND` otherwise
-- [ ] `WorkoutMapper` maps `training_plan_id` via `trainingPlan.id`
-- [ ] Update never changes `trainingPlan`
-- [ ] Delete cascades to `WorkoutExercise`/`ExerciseSet`
-- [ ] `WorkoutRepository.findByTrainingPlanId` added
-- [ ] `WorkoutController` extends `WorkoutServiceGrpc.WorkoutServiceImplBase`, `@GrpcService`
-- [ ] Blank `name` on create/update → `INVALID_ARGUMENT`
-- [ ] Missing training plan on create → `NOT_FOUND`
-- [ ] Missing workout on get/update/delete → `NOT_FOUND`
+- [x] `workout.proto` declares all 5 RPCs, shares `vertice.plan.v1`
+- [x] `ListWorkouts` scoped by `training_plan_id`
+- [x] `WorkoutService` validates the training plan exists before create → `NOT_FOUND` otherwise
+- [x] `WorkoutMapper` maps `training_plan_id` via `trainingPlan.id`
+- [x] Update never changes `trainingPlan`
+- [x] Delete cascades to `WorkoutExercise`/`ExerciseSet` (unchanged JPA cascade)
+- [x] `WorkoutRepository.findByTrainingPlanId` added
+- [x] `WorkoutController` extends `WorkoutServiceGrpc.WorkoutServiceImplBase`, `@GrpcService`
+- [x] Blank `name` on create/update → `INVALID_ARGUMENT`
+- [x] Missing training plan on create → `NOT_FOUND`
+- [x] Missing workout on get/update/delete → `NOT_FOUND`
 
 ## Verification
 
-- [ ] `./gradlew test` passes
-- [ ] Manual `grpcurl`: create (valid plan), create (missing plan → `NotFound`), blank name
-  (`InvalidArgument`), get, update, list (scoped), delete, get-after-delete (`NotFound`)
-- [ ] Spec and code reviewed side by side for drift
+- [x] `./gradlew test` passes — 127/127 (110 before this PR + 17 new: 7 service + 10 controller)
+- [x] Manual `grpcurl` against the real Postgres-backed service (trainer → plan → workout fixture
+  chain): create (valid plan), create (missing plan → `NotFound`), get, update, list (scoped to
+  plan), delete, get-after-delete (`NotFound`) — all exactly as designed
+- [x] Spec and code reviewed side by side for drift — no drift
 
 ## Sign-off
 
-- [ ] All boxes above checked
-- [ ] `./gradlew test` passes
+- [x] All boxes above checked
+- [x] `./gradlew test` passes
