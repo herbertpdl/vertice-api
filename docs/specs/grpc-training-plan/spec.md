@@ -44,6 +44,11 @@ fetched for the existence check — one query, not two. `toResponse` maps `train
 `Delete` cascades to `Workout`/`WorkoutExercise`/`ExerciseSet` for free (JPA `cascade = ALL,
 orphanRemoval = true` already configured on `TrainingPlan.workouts`).
 
+`TrainingPlan.description` is nullable, same as `Exercise.description` — reuses
+`grpc-exercise-catalog`'s `ProtoStrings#nullToEmpty` fix (`@Mapper(uses = ProtoStrings.class)` +
+`@Mapping(target = "description", qualifiedByName = "nullToEmpty")`) rather than rediscovering the
+same protobuf-rejects-null-strings problem.
+
 New repository method: `TrainingPlanRepository.findByTrainerId(Long trainerId)`.
 
 ## 4. Controller

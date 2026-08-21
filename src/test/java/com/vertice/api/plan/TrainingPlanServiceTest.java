@@ -119,6 +119,7 @@ class TrainingPlanServiceTest {
 
         assertThat(responses).hasSize(1);
         assertThat(responses.getFirst().getTrainerId()).isEqualTo(1L);
+        assertThat(responses.getFirst().getDescription()).isEmpty();
     }
 
     @Test
