@@ -23,9 +23,15 @@ that are actually verified (test run, manual grpcurl, or code read) — not assu
 
 - [x] `com.vertice.api.plan.exercise.dto.ExerciseRequest`/`ExerciseResponse` deleted
 
+## Discovered bug fix (section 5.1)
+
+- [x] `ExerciseMapper` no longer NPEs when `Exercise.description` is `null` —
+  `ExerciseServiceTest#getExercise_withNullDescription_returnsEmptyStringNotNull`
+
 ## Verification
 
-- [x] `./gradlew test` passes — 92/92 (78 before this PR + 14 new: 5 service + 9 controller)
+- [x] `./gradlew test` passes — 93/93 (78 before this PR + 14 new + 1 null-description regression
+  test)
 - [x] Manual `grpcurl`: create, get, update, list, delete, get-after-delete (`NOT_FOUND`), blank
   name (`INVALID_ARGUMENT`) — all verified against the real Postgres-backed service, exact
   behavior as designed

@@ -55,6 +55,19 @@ left over from before `Exercise` was refactored, confirmed unused anywhere (no c
 ever referenced them; `TrainingPlanController` is still an empty stub). Deleted, same as the
 Trainer/Student REST DTOs were deleted when those moved to gRPC.
 
+## 5.1 Discovered while implementing: null `description` crashes the mapper
+
+`Exercise.description` is a nullable column, but protobuf string setters reject `null` outright
+(`ExerciseResponse.Builder.setDescription(null)` throws `NullPointerException`) — MapStruct's
+generated `toResponse` calls that setter directly with whatever `entity.getDescription()` returns.
+Any exercise created/persisted with no description would crash `GetExercise`/`ListExercises`.
+
+Fixed with a small shared helper, `com.vertice.api.grpc.ProtoStrings#nullToEmpty` (a MapStruct
+`@Named` conversion method, referenced via `@Mapper(uses = ProtoStrings.class)` +
+`@Mapping(target = "description", qualifiedByName = "nullToEmpty")`), coalescing `null` to proto3's
+own empty-string zero value. Reusable for any other nullable-String-column-to-proto-response
+mapping later in this plan (`WorkoutExercise.notes`, `ExerciseSet.notes`).
+
 ## 6. Out of scope
 
 - `TrainingPlan`/`Workout`/`WorkoutExercise`/`ExerciseSet` RPCs — later PRs in the same plan.

@@ -66,6 +66,20 @@ class ExerciseServiceTest {
     }
 
     @Test
+    void getExercise_withNullDescription_returnsEmptyStringNotNull() {
+        Exercise existing = new Exercise();
+        existing.setId(1L);
+        existing.setName("Squat");
+        existing.setDescription(null);
+
+        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        var response = service.getExercise(1L);
+
+        assertThat(response.getDescription()).isEmpty();
+    }
+
+    @Test
     void updateExercise_throwsWhenMissing() {
         when(exerciseRepository.findById(99L)).thenReturn(Optional.empty());
 
