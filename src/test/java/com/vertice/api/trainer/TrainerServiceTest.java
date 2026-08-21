@@ -1,5 +1,6 @@
 package com.vertice.api.trainer;
 
+import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.trainer.v1.TrainerCreateRequest;
@@ -45,6 +46,7 @@ class TrainerServiceTest {
                 .setName("New Coach")
                 .setEmail("coach@vertice.com")
                 .setPassword("supersecret1")
+                .setCpf("11144477735")
                 .build();
 
         service.createTrainer(request);
@@ -68,6 +70,7 @@ class TrainerServiceTest {
                 .setName("New Coach")
                 .setEmail("coach@vertice.com")
                 .setPassword("supersecret1")
+                .setCpf("11144477735")
                 .build();
 
         assertThatThrownBy(() -> service.createTrainer(request))
@@ -76,26 +79,49 @@ class TrainerServiceTest {
     }
 
     @Test
-    void updateTrainer_allowsKeepingOwnEmail() {
+    void createTrainer_rejectsDuplicateCpf() {
+        Trainer existing = new Trainer();
+        existing.setId(1L);
+        existing.setCpf("11144477735");
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(existing));
+
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .build();
+
+        assertThatThrownBy(() -> service.createTrainer(request))
+                .isInstanceOf(DuplicateCpfException.class);
+        verify(trainerRepository, never()).save(any());
+    }
+
+    @Test
+    void updateTrainer_allowsKeepingOwnEmailAndCpf() {
         Trainer existing = new Trainer();
         existing.setId(1L);
         existing.setName("Old Name");
         existing.setEmail("coach@vertice.com");
+        existing.setCpf("11144477735");
         existing.setPasswordHash("$2a$10$existingHash");
 
         when(trainerRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(existing));
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
         TrainerRequest request = TrainerRequest.newBuilder()
                 .setName("New Name")
                 .setEmail("coach@vertice.com")
+                .setCpf("11144477735")
                 .build();
 
         var response = service.updateTrainer(1L, request);
 
         assertThat(response.getName()).isEqualTo("New Name");
         assertThat(response.getEmail()).isEqualTo("coach@vertice.com");
+        assertThat(response.getCpf()).isEqualTo("11144477735");
         assertThat(existing.getPasswordHash()).isEqualTo("$2a$10$existingHash");
     }
 
@@ -119,6 +145,33 @@ class TrainerServiceTest {
 
         assertThatThrownBy(() -> service.updateTrainer(1L, request))
                 .isInstanceOf(DuplicateEmailException.class);
+        verify(trainerRepository, never()).save(any());
+    }
+
+    @Test
+    void updateTrainer_rejectsCpfOwnedByAnotherTrainer() {
+        Trainer target = new Trainer();
+        target.setId(1L);
+        target.setEmail("coach1@vertice.com");
+        target.setCpf("52998224725");
+
+        Trainer other = new Trainer();
+        other.setId(2L);
+        other.setEmail("coach1@vertice.com");
+        other.setCpf("11144477735");
+
+        when(trainerRepository.findById(1L)).thenReturn(Optional.of(target));
+        when(trainerRepository.findByEmail("coach1@vertice.com")).thenReturn(Optional.of(target));
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(other));
+
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("Coach One")
+                .setEmail("coach1@vertice.com")
+                .setCpf("11144477735")
+                .build();
+
+        assertThatThrownBy(() -> service.updateTrainer(1L, request))
+                .isInstanceOf(DuplicateCpfException.class);
         verify(trainerRepository, never()).save(any());
     }
 

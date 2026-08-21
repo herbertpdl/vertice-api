@@ -1,6 +1,7 @@
 package com.vertice.api.trainer;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.trainer.v1.DeleteTrainerRequest;
@@ -40,6 +41,8 @@ import static org.mockito.Mockito.when;
 @ActiveProfiles("local")
 class TrainerControllerTest {
 
+    private static final String VALID_CPF = "11144477735";
+
     @MockitoBean
     private TrainerService trainerService;
 
@@ -59,7 +62,7 @@ class TrainerControllerTest {
 
     @Test
     void listTrainers_returnsAll() {
-        TrainerResponse trainer = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").build();
+        TrainerResponse trainer = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).build();
         when(trainerService.listTrainers()).thenReturn(java.util.List.of(trainer));
 
         ListTrainersResponse response = stub.listTrainers(ListTrainersRequest.newBuilder().build());
@@ -69,7 +72,7 @@ class TrainerControllerTest {
 
     @Test
     void getTrainer_whenExists_returnsTrainer() {
-        TrainerResponse trainer = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").build();
+        TrainerResponse trainer = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).build();
         when(trainerService.getTrainer(1L)).thenReturn(trainer);
 
         TrainerResponse response = stub.getTrainer(GetTrainerRequest.newBuilder().setId(1L).build());
@@ -89,11 +92,11 @@ class TrainerControllerTest {
 
     @Test
     void createTrainer_withValidRequest_returnsCreated() {
-        TrainerResponse created = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").build();
+        TrainerResponse created = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).build();
         when(trainerService.createTrainer(any())).thenReturn(created);
 
         TrainerResponse response = stub.createTrainer(TrainerCreateRequest.newBuilder()
-                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").build());
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build());
 
         assertThat(response).isEqualTo(created);
     }
@@ -101,25 +104,31 @@ class TrainerControllerTest {
     @Test
     void createTrainer_withBlankName_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createTrainer(TrainerCreateRequest.newBuilder()
-                .setName("").setEmail("coach@vertice.com").setPassword("supersecret1").build()));
+                .setName("").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build()));
     }
 
     @Test
     void createTrainer_withMalformedEmail_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createTrainer(TrainerCreateRequest.newBuilder()
-                .setName("Coach").setEmail("not-an-email").setPassword("supersecret1").build()));
+                .setName("Coach").setEmail("not-an-email").setPassword("supersecret1").setCpf(VALID_CPF).build()));
     }
 
     @Test
     void createTrainer_withBlankEmail_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createTrainer(TrainerCreateRequest.newBuilder()
-                .setName("Coach").setEmail("").setPassword("supersecret1").build()));
+                .setName("Coach").setEmail("").setPassword("supersecret1").setCpf(VALID_CPF).build()));
     }
 
     @Test
     void createTrainer_withShortPassword_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createTrainer(TrainerCreateRequest.newBuilder()
-                .setName("Coach").setEmail("coach@vertice.com").setPassword("short").build()));
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("short").setCpf(VALID_CPF).build()));
+    }
+
+    @Test
+    void createTrainer_withInvalidCpf_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createTrainer(TrainerCreateRequest.newBuilder()
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf("00000000000").build()));
     }
 
     @Test
@@ -127,7 +136,18 @@ class TrainerControllerTest {
         when(trainerService.createTrainer(any())).thenThrow(new DuplicateEmailException("coach@vertice.com"));
 
         assertThatThrownBy(() -> stub.createTrainer(TrainerCreateRequest.newBuilder()
-                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").build()))
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.ALREADY_EXISTS);
+    }
+
+    @Test
+    void createTrainer_withDuplicateCpf_throwsAlreadyExists() {
+        when(trainerService.createTrainer(any())).thenThrow(new DuplicateCpfException(VALID_CPF));
+
+        assertThatThrownBy(() -> stub.createTrainer(TrainerCreateRequest.newBuilder()
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.ALREADY_EXISTS);
@@ -135,12 +155,12 @@ class TrainerControllerTest {
 
     @Test
     void updateTrainer_whenExists_returnsUpdated() {
-        TrainerResponse updated = TrainerResponse.newBuilder().setId(1L).setName("New Name").setEmail("coach@vertice.com").build();
+        TrainerResponse updated = TrainerResponse.newBuilder().setId(1L).setName("New Name").setEmail("coach@vertice.com").setCpf(VALID_CPF).build();
         when(trainerService.updateTrainer(eq(1L), any())).thenReturn(updated);
 
         TrainerResponse response = stub.updateTrainer(UpdateTrainerRequest.newBuilder()
                 .setId(1L)
-                .setTrainer(TrainerRequest.newBuilder().setName("New Name").setEmail("coach@vertice.com").build())
+                .setTrainer(TrainerRequest.newBuilder().setName("New Name").setEmail("coach@vertice.com").setCpf(VALID_CPF).build())
                 .build());
 
         assertThat(response.getName()).isEqualTo("New Name");
@@ -152,7 +172,7 @@ class TrainerControllerTest {
 
         assertThatThrownBy(() -> stub.updateTrainer(UpdateTrainerRequest.newBuilder()
                 .setId(99L)
-                .setTrainer(TrainerRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com").build())
+                .setTrainer(TrainerRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).build())
                 .build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
@@ -163,7 +183,15 @@ class TrainerControllerTest {
     void updateTrainer_withBlankName_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.updateTrainer(UpdateTrainerRequest.newBuilder()
                 .setId(1L)
-                .setTrainer(TrainerRequest.newBuilder().setName("").setEmail("coach@vertice.com").build())
+                .setTrainer(TrainerRequest.newBuilder().setName("").setEmail("coach@vertice.com").setCpf(VALID_CPF).build())
+                .build()));
+    }
+
+    @Test
+    void updateTrainer_withInvalidCpf_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.updateTrainer(UpdateTrainerRequest.newBuilder()
+                .setId(1L)
+                .setTrainer(TrainerRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com").setCpf("not-a-cpf").build())
                 .build()));
     }
 

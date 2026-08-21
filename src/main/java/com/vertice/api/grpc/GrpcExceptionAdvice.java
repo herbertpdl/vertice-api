@@ -1,5 +1,6 @@
 package com.vertice.api.grpc;
 
+import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import io.grpc.Status;
@@ -26,6 +27,11 @@ public class GrpcExceptionAdvice {
 
     @GrpcExceptionHandler(DuplicateEmailException.class)
     public Status handleDuplicateEmail(DuplicateEmailException ex) {
+        return Status.ALREADY_EXISTS.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(DuplicateCpfException.class)
+    public Status handleDuplicateCpf(DuplicateCpfException ex) {
         return Status.ALREADY_EXISTS.withDescription(ex.getMessage());
     }
 

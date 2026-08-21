@@ -1,5 +1,6 @@
 package com.vertice.api.trainer;
 
+import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.trainer.v1.TrainerCreateRequest;
@@ -35,6 +36,7 @@ public class TrainerService {
 
     public TrainerResponse createTrainer(TrainerCreateRequest request) {
         assertEmailAvailable(request.getEmail(), null);
+        assertCpfAvailable(request.getCpf(), null);
         Trainer trainer = trainerMapper.toEntity(request);
         trainer.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         return trainerMapper.toResponse(trainerRepository.save(trainer));
@@ -43,6 +45,7 @@ public class TrainerService {
     public TrainerResponse updateTrainer(Long id, TrainerRequest request) {
         Trainer trainer = findByIdOrThrow(id);
         assertEmailAvailable(request.getEmail(), id);
+        assertCpfAvailable(request.getCpf(), id);
         trainerMapper.updateEntityFromRequest(request, trainer);
         return trainerMapper.toResponse(trainerRepository.save(trainer));
     }
@@ -68,6 +71,14 @@ public class TrainerService {
                 .filter(existing -> !existing.getId().equals(excludingId))
                 .ifPresent(existing -> {
                     throw new DuplicateEmailException(email);
+                });
+    }
+
+    private void assertCpfAvailable(String cpf, Long excludingId) {
+        trainerRepository.findByCpf(cpf)
+                .filter(existing -> !existing.getId().equals(excludingId))
+                .ifPresent(existing -> {
+                    throw new DuplicateCpfException(cpf);
                 });
     }
 }

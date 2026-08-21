@@ -20,17 +20,20 @@ message StudentResponse {
   int64 id = 1;
   string name = 2;
   string email = 3;
+  string cpf = 4;
 }
 
 message StudentRequest {
   string name = 1;
   string email = 2;
+  string cpf = 3;
 }
 
 message StudentCreateRequest {
   string name = 1;
   string email = 2;
   string password = 3;
+  string cpf = 4;
 }
 
 message ListStudentsRequest {

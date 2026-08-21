@@ -1,6 +1,7 @@
 package com.vertice.api.student;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.student.v1.DeleteStudentRequest;
@@ -39,6 +40,8 @@ import static org.mockito.Mockito.when;
 @ActiveProfiles("local")
 class StudentControllerTest {
 
+    private static final String VALID_CPF = "11144477735";
+
     @MockitoBean
     private StudentService studentService;
 
@@ -58,7 +61,7 @@ class StudentControllerTest {
 
     @Test
     void listStudents_returnsAll() {
-        StudentResponse student = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").build();
+        StudentResponse student = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").setCpf(VALID_CPF).build();
         when(studentService.listStudents()).thenReturn(java.util.List.of(student));
 
         ListStudentsResponse response = stub.listStudents(ListStudentsRequest.newBuilder().build());
@@ -68,7 +71,7 @@ class StudentControllerTest {
 
     @Test
     void getStudent_whenExists_returnsStudent() {
-        StudentResponse student = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").build();
+        StudentResponse student = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").setCpf(VALID_CPF).build();
         when(studentService.getStudent(1L)).thenReturn(student);
 
         StudentResponse response = stub.getStudent(GetStudentRequest.newBuilder().setId(1L).build());
@@ -88,11 +91,11 @@ class StudentControllerTest {
 
     @Test
     void createStudent_withValidRequest_returnsCreated() {
-        StudentResponse created = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").build();
+        StudentResponse created = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").setCpf(VALID_CPF).build();
         when(studentService.createStudent(any())).thenReturn(created);
 
         StudentResponse response = stub.createStudent(StudentCreateRequest.newBuilder()
-                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").build());
+                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build());
 
         assertThat(response).isEqualTo(created);
     }
@@ -100,25 +103,31 @@ class StudentControllerTest {
     @Test
     void createStudent_withBlankName_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
-                .setName("").setEmail("student@vertice.com").setPassword("supersecret1").build()));
+                .setName("").setEmail("student@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build()));
     }
 
     @Test
     void createStudent_withMalformedEmail_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
-                .setName("Student").setEmail("not-an-email").setPassword("supersecret1").build()));
+                .setName("Student").setEmail("not-an-email").setPassword("supersecret1").setCpf(VALID_CPF).build()));
     }
 
     @Test
     void createStudent_withBlankEmail_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
-                .setName("Student").setEmail("").setPassword("supersecret1").build()));
+                .setName("Student").setEmail("").setPassword("supersecret1").setCpf(VALID_CPF).build()));
     }
 
     @Test
     void createStudent_withShortPassword_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
-                .setName("Student").setEmail("student@vertice.com").setPassword("short").build()));
+                .setName("Student").setEmail("student@vertice.com").setPassword("short").setCpf(VALID_CPF).build()));
+    }
+
+    @Test
+    void createStudent_withInvalidCpf_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").setCpf("00000000000").build()));
     }
 
     @Test
@@ -126,7 +135,18 @@ class StudentControllerTest {
         when(studentService.createStudent(any())).thenThrow(new DuplicateEmailException("student@vertice.com"));
 
         assertThatThrownBy(() -> stub.createStudent(StudentCreateRequest.newBuilder()
-                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").build()))
+                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.ALREADY_EXISTS);
+    }
+
+    @Test
+    void createStudent_withDuplicateCpf_throwsAlreadyExists() {
+        when(studentService.createStudent(any())).thenThrow(new DuplicateCpfException(VALID_CPF));
+
+        assertThatThrownBy(() -> stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.ALREADY_EXISTS);
@@ -134,12 +154,12 @@ class StudentControllerTest {
 
     @Test
     void updateStudent_whenExists_returnsUpdated() {
-        StudentResponse updated = StudentResponse.newBuilder().setId(1L).setName("New Name").setEmail("student@vertice.com").build();
+        StudentResponse updated = StudentResponse.newBuilder().setId(1L).setName("New Name").setEmail("student@vertice.com").setCpf(VALID_CPF).build();
         when(studentService.updateStudent(eq(1L), any())).thenReturn(updated);
 
         StudentResponse response = stub.updateStudent(UpdateStudentRequest.newBuilder()
                 .setId(1L)
-                .setStudent(StudentRequest.newBuilder().setName("New Name").setEmail("student@vertice.com").build())
+                .setStudent(StudentRequest.newBuilder().setName("New Name").setEmail("student@vertice.com").setCpf(VALID_CPF).build())
                 .build());
 
         assertThat(response.getName()).isEqualTo("New Name");
@@ -151,7 +171,7 @@ class StudentControllerTest {
 
         assertThatThrownBy(() -> stub.updateStudent(UpdateStudentRequest.newBuilder()
                 .setId(99L)
-                .setStudent(StudentRequest.newBuilder().setName("Student").setEmail("student@vertice.com").build())
+                .setStudent(StudentRequest.newBuilder().setName("Student").setEmail("student@vertice.com").setCpf(VALID_CPF).build())
                 .build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
@@ -162,7 +182,15 @@ class StudentControllerTest {
     void updateStudent_withBlankName_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.updateStudent(UpdateStudentRequest.newBuilder()
                 .setId(1L)
-                .setStudent(StudentRequest.newBuilder().setName("").setEmail("student@vertice.com").build())
+                .setStudent(StudentRequest.newBuilder().setName("").setEmail("student@vertice.com").setCpf(VALID_CPF).build())
+                .build()));
+    }
+
+    @Test
+    void updateStudent_withInvalidCpf_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.updateStudent(UpdateStudentRequest.newBuilder()
+                .setId(1L)
+                .setStudent(StudentRequest.newBuilder().setName("Student").setEmail("student@vertice.com").setCpf("not-a-cpf").build())
                 .build()));
     }
 

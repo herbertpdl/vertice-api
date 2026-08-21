@@ -10,6 +10,7 @@ import com.vertice.api.generated.grpc.trainer.v1.TrainerCreateRequest;
 import com.vertice.api.generated.grpc.trainer.v1.TrainerResponse;
 import com.vertice.api.generated.grpc.trainer.v1.TrainerServiceGrpc;
 import com.vertice.api.generated.grpc.trainer.v1.UpdateTrainerRequest;
+import com.vertice.api.common.validation.Cpf;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.constraints.Email;
@@ -41,14 +42,14 @@ public class TrainerController extends TrainerServiceGrpc.TrainerServiceImplBase
 
     @Override
     public void createTrainer(TrainerCreateRequest request, StreamObserver<TrainerResponse> responseObserver) {
-        validator.validate(new CreateValidation(request.getName(), request.getEmail(), request.getPassword()));
+        validator.validate(new CreateValidation(request.getName(), request.getEmail(), request.getPassword(), request.getCpf()));
         responseObserver.onNext(trainerService.createTrainer(request));
         responseObserver.onCompleted();
     }
 
     @Override
     public void updateTrainer(UpdateTrainerRequest request, StreamObserver<TrainerResponse> responseObserver) {
-        validator.validate(new UpdateValidation(request.getTrainer().getName(), request.getTrainer().getEmail()));
+        validator.validate(new UpdateValidation(request.getTrainer().getName(), request.getTrainer().getEmail(), request.getTrainer().getCpf()));
         responseObserver.onNext(trainerService.updateTrainer(request.getId(), request.getTrainer()));
         responseObserver.onCompleted();
     }
@@ -71,12 +72,14 @@ public class TrainerController extends TrainerServiceGrpc.TrainerServiceImplBase
     private record CreateValidation(
             @NotBlank String name,
             @NotBlank @Email String email,
-            @NotBlank @Size(min = 8) String password) {
+            @NotBlank @Size(min = 8) String password,
+            @Cpf String cpf) {
     }
 
     private record UpdateValidation(
             @NotBlank String name,
-            @NotBlank @Email String email) {
+            @NotBlank @Email String email,
+            @Cpf String cpf) {
     }
 
     private record PasswordValidation(@NotBlank @Size(min = 8) String password) {
