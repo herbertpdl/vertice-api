@@ -49,6 +49,19 @@ core starter — no third-party starter needed:
 No `net.devh`/community starter needed — the official Boot 4.1 starter covers everything this
 project needs.
 
+**Discovered while implementing** (not knowable from the docs alone, recorded here so later specs
+don't rediscover it): `GrpcServerAutoConfiguration` — and, transitively, the reflection and health
+services — are gated behind `@ConditionalOnBean(BindableService.class)`. Spring Boot refuses to
+start a gRPC server for zero registered services. Since this spec deliberately adds no business
+service yet, `GrpcHealthConfig` (`com.vertice.api.grpc`) registers one empty placeholder
+`BindableService` (no RPCs) purely to satisfy that gate; it can be deleted once `grpc-trainer`
+registers a real one. Also discovered: simply having
+`spring-boot-starter-security-oauth2-resource-server` on the classpath is enough for Boot to
+auto-*require* a valid JWT on every gRPC call, with no code written for it — `grpc-cross-cutting`
+turns out to be about extending/customizing this default (e.g. mirroring `LocalSecurityConfig`'s
+profile-based bypass, which does **not** currently apply to gRPC — see section 3) rather than
+building auth from scratch.
+
 ## 3. Configuration
 
 - `spring.grpc.server.port=9090` — explicit in `application.properties`, mirroring the explicit
@@ -63,6 +76,12 @@ project needs.
   "relax everything under `local`" pattern for REST.
 - Health service stays default-enabled in all profiles (no reason to hide liveness), matching
   `/actuator/health` staying `permitAll()` in `SecurityConfig` today.
+- **Known gap, deliberately left for `grpc-cross-cutting`**: unlike REST, gRPC auth is *not*
+  bypassed under the `local` profile yet — `LocalSecurityConfig` only configures a Spring MVC
+  `SecurityFilterChain`, which the independently-autoconfigured gRPC security stack doesn't see.
+  Every gRPC call, including `Health/Check` and reflection, currently requires a valid JWT in
+  every profile. Manual `grpcurl` testing against `local` therefore returns `UNAUTHENTICATED`,
+  not a successful response — expected for this spec, fixed in the next one.
 
 ## 4. Out of scope
 
@@ -75,8 +94,13 @@ project needs.
 ## 5. Verification approach
 
 - `./gradlew test` stays green (existing REST tests untouched).
-- A new test boots the Spring context with the in-process gRPC test transport and calls the
-  standard `grpc.health.v1.Health/Check` RPC, asserting `SERVING`.
+- A new test (`GrpcHealthCheckTest`) boots the real Netty gRPC server on a fixed test port and
+  calls the standard `grpc.health.v1.Health/Check` RPC without credentials, asserting
+  `Status.Code.UNAUTHENTICATED` — proof the server is up, wired to the health service, and
+  enforcing auth by default (see the known gap in section 3). `@AutoConfigureTestGrpcTransport`
+  (in-process transport) was tried first but its `TestGrpcServerFactory` doesn't get the default
+  health/reflection services attached, only whatever `BindableService` beans exist explicitly —
+  fine for later specs testing real business services, not useful for this one.
 - Manual: `./gradlew bootRun --args='--spring.profiles.active=local'`, then
-  `grpcurl -plaintext localhost:9090 list` and
-  `grpcurl -plaintext localhost:9090 grpc.health.v1.Health/Check` return successfully.
+  `grpcurl -plaintext localhost:9090 list` — currently returns `Unauthenticated`, matching the
+  known gap above; will return the service list once `grpc-cross-cutting` adds the local bypass.
