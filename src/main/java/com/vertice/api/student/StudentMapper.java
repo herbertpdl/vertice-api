@@ -1,8 +1,8 @@
 package com.vertice.api.student;
 
-import com.vertice.api.generated.model.StudentCreateRequest;
-import com.vertice.api.generated.model.StudentRequest;
-import com.vertice.api.generated.model.StudentResponse;
+import com.vertice.api.generated.grpc.student.v1.StudentCreateRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentResponse;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;

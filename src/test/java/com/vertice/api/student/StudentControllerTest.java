@@ -1,203 +1,218 @@
 package com.vertice.api.student;
 
+import com.google.protobuf.Empty;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
-import com.vertice.api.config.SecurityConfig;
-import com.vertice.api.generated.model.StudentResponse;
+import com.vertice.api.generated.grpc.student.v1.DeleteStudentRequest;
+import com.vertice.api.generated.grpc.student.v1.GetStudentRequest;
+import com.vertice.api.generated.grpc.student.v1.ListStudentsRequest;
+import com.vertice.api.generated.grpc.student.v1.ListStudentsResponse;
+import com.vertice.api.generated.grpc.student.v1.SetStudentPasswordRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentCreateRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentResponse;
+import com.vertice.api.generated.grpc.student.v1.StudentServiceGrpc;
+import com.vertice.api.generated.grpc.student.v1.UpdateStudentRequest;
+import io.grpc.ManagedChannel;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.netty.NettyChannelBuilder;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(StudentController.class)
-@Import(SecurityConfig.class)
+@SpringBootTest(properties = "spring.grpc.server.port=19094")
+@ActiveProfiles("local")
 class StudentControllerTest {
-
-    @Autowired
-    private MockMvc mockMvc;
 
     @MockitoBean
     private StudentService studentService;
 
-    @Test
-    void listStudents_withoutJwt_returns401() throws Exception {
-        mockMvc.perform(get("/api/students"))
-                .andExpect(status().isUnauthorized());
+    private ManagedChannel channel;
+    private StudentServiceGrpc.StudentServiceBlockingStub stub;
+
+    @BeforeEach
+    void setUp() {
+        channel = NettyChannelBuilder.forTarget("localhost:19094").usePlaintext().build();
+        stub = StudentServiceGrpc.newBlockingStub(channel);
+    }
+
+    @AfterEach
+    void tearDown() throws InterruptedException {
+        channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
     }
 
     @Test
-    void listStudents_withJwt_returns200() throws Exception {
-        when(studentService.listStudents()).thenReturn(java.util.List.of());
+    void listStudents_returnsAll() {
+        StudentResponse student = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").build();
+        when(studentService.listStudents()).thenReturn(java.util.List.of(student));
 
-        mockMvc.perform(get("/api/students").with(jwt()))
-                .andExpect(status().isOk());
+        ListStudentsResponse response = stub.listStudents(ListStudentsRequest.newBuilder().build());
+
+        assertThat(response.getStudentsList()).containsExactly(student);
     }
 
     @Test
-    void createStudent_withValidBody_returns201() throws Exception {
-        StudentResponse response = new StudentResponse().id(1L).name("Student").email("student@vertice.com");
-        when(studentService.createStudent(any())).thenReturn(response);
+    void getStudent_whenExists_returnsStudent() {
+        StudentResponse student = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").build();
+        when(studentService.getStudent(1L)).thenReturn(student);
 
-        mockMvc.perform(post("/api/students")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Student\",\"email\":\"student@vertice.com\",\"password\":\"supersecret1\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.email").value("student@vertice.com"));
+        StudentResponse response = stub.getStudent(GetStudentRequest.newBuilder().setId(1L).build());
+
+        assertThat(response).isEqualTo(student);
     }
 
     @Test
-    void createStudent_withBlankName_returns422() throws Exception {
-        mockMvc.perform(post("/api/students")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"\",\"email\":\"student@vertice.com\",\"password\":\"supersecret1\"}"))
-                .andExpect(status().isUnprocessableEntity());
-    }
-
-    @Test
-    void createStudent_withBlankEmail_returns422() throws Exception {
-        mockMvc.perform(post("/api/students")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Student\",\"email\":\"\",\"password\":\"supersecret1\"}"))
-                .andExpect(status().isUnprocessableEntity());
-    }
-
-    @Test
-    void createStudent_withMalformedEmail_returns422() throws Exception {
-        mockMvc.perform(post("/api/students")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Student\",\"email\":\"not-an-email\",\"password\":\"supersecret1\"}"))
-                .andExpect(status().isUnprocessableEntity());
-    }
-
-    @Test
-    void createStudent_withMissingPassword_returns422() throws Exception {
-        mockMvc.perform(post("/api/students")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Student\",\"email\":\"student@vertice.com\"}"))
-                .andExpect(status().isUnprocessableEntity());
-    }
-
-    @Test
-    void createStudent_withShortPassword_returns422() throws Exception {
-        mockMvc.perform(post("/api/students")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Student\",\"email\":\"student@vertice.com\",\"password\":\"short\"}"))
-                .andExpect(status().isUnprocessableEntity());
-    }
-
-    @Test
-    void createStudent_withDuplicateEmail_returns409() throws Exception {
-        when(studentService.createStudent(any())).thenThrow(new DuplicateEmailException("student@vertice.com"));
-
-        mockMvc.perform(post("/api/students")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Student\",\"email\":\"student@vertice.com\",\"password\":\"supersecret1\"}"))
-                .andExpect(status().isConflict());
-    }
-
-    @Test
-    void getStudent_whenExists_returns200() throws Exception {
-        StudentResponse response = new StudentResponse().id(1L).name("Student").email("student@vertice.com");
-        when(studentService.getStudent(1L)).thenReturn(response);
-
-        mockMvc.perform(get("/api/students/1").with(jwt()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1));
-    }
-
-    @Test
-    void getStudent_whenMissing_returns404() throws Exception {
+    void getStudent_whenMissing_throwsNotFound() {
         when(studentService.getStudent(99L)).thenThrow(new ResourceNotFoundException("Student", 99L));
 
-        mockMvc.perform(get("/api/students/99").with(jwt()))
-                .andExpect(status().isNotFound());
+        assertThatThrownBy(() -> stub.getStudent(GetStudentRequest.newBuilder().setId(99L).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.NOT_FOUND);
     }
 
     @Test
-    void updateStudent_whenExists_returns200() throws Exception {
-        StudentResponse response = new StudentResponse().id(1L).name("New Name").email("student@vertice.com");
-        when(studentService.updateStudent(org.mockito.ArgumentMatchers.eq(1L), any())).thenReturn(response);
+    void createStudent_withValidRequest_returnsCreated() {
+        StudentResponse created = StudentResponse.newBuilder().setId(1L).setName("Student").setEmail("student@vertice.com").build();
+        when(studentService.createStudent(any())).thenReturn(created);
 
-        mockMvc.perform(put("/api/students/1")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"New Name\",\"email\":\"student@vertice.com\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("New Name"));
+        StudentResponse response = stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").build());
+
+        assertThat(response).isEqualTo(created);
     }
 
     @Test
-    void updateStudent_whenMissing_returns404() throws Exception {
-        when(studentService.updateStudent(org.mockito.ArgumentMatchers.eq(99L), any()))
-                .thenThrow(new ResourceNotFoundException("Student", 99L));
-
-        mockMvc.perform(put("/api/students/99")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Student\",\"email\":\"student@vertice.com\"}"))
-                .andExpect(status().isNotFound());
+    void createStudent_withBlankName_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("").setEmail("student@vertice.com").setPassword("supersecret1").build()));
     }
 
     @Test
-    void deleteStudent_whenExists_returns204() throws Exception {
-        mockMvc.perform(delete("/api/students/1").with(jwt()))
-                .andExpect(status().isNoContent());
+    void createStudent_withMalformedEmail_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("Student").setEmail("not-an-email").setPassword("supersecret1").build()));
     }
 
     @Test
-    void deleteStudent_whenMissing_returns404() throws Exception {
-        org.mockito.Mockito.doThrow(new ResourceNotFoundException("Student", 99L))
-                .when(studentService).deleteStudent(99L);
-
-        mockMvc.perform(delete("/api/students/99").with(jwt()))
-                .andExpect(status().isNotFound());
+    void createStudent_withBlankEmail_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("Student").setEmail("").setPassword("supersecret1").build()));
     }
 
     @Test
-    void setStudentPassword_whenExists_returns204() throws Exception {
-        mockMvc.perform(put("/api/students/1/password")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"password\":\"brandNewPassword1\"}"))
-                .andExpect(status().isNoContent());
+    void createStudent_withShortPassword_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("Student").setEmail("student@vertice.com").setPassword("short").build()));
     }
 
     @Test
-    void setStudentPassword_whenMissing_returns404() throws Exception {
-        org.mockito.Mockito.doThrow(new ResourceNotFoundException("Student", 99L))
+    void createStudent_withDuplicateEmail_throwsAlreadyExists() {
+        when(studentService.createStudent(any())).thenThrow(new DuplicateEmailException("student@vertice.com"));
+
+        assertThatThrownBy(() -> stub.createStudent(StudentCreateRequest.newBuilder()
+                .setName("Student").setEmail("student@vertice.com").setPassword("supersecret1").build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.ALREADY_EXISTS);
+    }
+
+    @Test
+    void updateStudent_whenExists_returnsUpdated() {
+        StudentResponse updated = StudentResponse.newBuilder().setId(1L).setName("New Name").setEmail("student@vertice.com").build();
+        when(studentService.updateStudent(eq(1L), any())).thenReturn(updated);
+
+        StudentResponse response = stub.updateStudent(UpdateStudentRequest.newBuilder()
+                .setId(1L)
+                .setStudent(StudentRequest.newBuilder().setName("New Name").setEmail("student@vertice.com").build())
+                .build());
+
+        assertThat(response.getName()).isEqualTo("New Name");
+    }
+
+    @Test
+    void updateStudent_whenMissing_throwsNotFound() {
+        when(studentService.updateStudent(eq(99L), any())).thenThrow(new ResourceNotFoundException("Student", 99L));
+
+        assertThatThrownBy(() -> stub.updateStudent(UpdateStudentRequest.newBuilder()
+                .setId(99L)
+                .setStudent(StudentRequest.newBuilder().setName("Student").setEmail("student@vertice.com").build())
+                .build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    @Test
+    void updateStudent_withBlankName_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.updateStudent(UpdateStudentRequest.newBuilder()
+                .setId(1L)
+                .setStudent(StudentRequest.newBuilder().setName("").setEmail("student@vertice.com").build())
+                .build()));
+    }
+
+    @Test
+    void deleteStudent_whenExists_succeeds() {
+        Empty response = stub.deleteStudent(DeleteStudentRequest.newBuilder().setId(1L).build());
+
+        assertThat(response).isEqualTo(Empty.getDefaultInstance());
+    }
+
+    @Test
+    void deleteStudent_whenMissing_throwsNotFound() {
+        doThrow(new ResourceNotFoundException("Student", 99L)).when(studentService).deleteStudent(99L);
+
+        assertThatThrownBy(() -> stub.deleteStudent(DeleteStudentRequest.newBuilder().setId(99L).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    @Test
+    void setStudentPassword_whenExists_succeeds() {
+        Empty response = stub.setStudentPassword(SetStudentPasswordRequest.newBuilder()
+                .setId(1L).setPassword("brandNewPassword1").build());
+
+        assertThat(response).isEqualTo(Empty.getDefaultInstance());
+    }
+
+    @Test
+    void setStudentPassword_whenMissing_throwsNotFound() {
+        doThrow(new ResourceNotFoundException("Student", 99L))
                 .when(studentService).setPassword(99L, "brandNewPassword1");
 
-        mockMvc.perform(put("/api/students/99/password")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"password\":\"brandNewPassword1\"}"))
-                .andExpect(status().isNotFound());
+        assertThatThrownBy(() -> stub.setStudentPassword(SetStudentPasswordRequest.newBuilder()
+                .setId(99L).setPassword("brandNewPassword1").build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.NOT_FOUND);
     }
 
     @Test
-    void setStudentPassword_withShortPassword_returns422() throws Exception {
-        mockMvc.perform(put("/api/students/1/password")
-                        .with(jwt())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"password\":\"short\"}"))
-                .andExpect(status().isUnprocessableEntity());
+    void setStudentPassword_withShortPassword_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.setStudentPassword(SetStudentPasswordRequest.newBuilder()
+                .setId(1L).setPassword("short").build()));
+    }
+
+    private void assertInvalidArgument(ThrowingCallable callable) {
+        assertThatThrownBy(callable)
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
     }
 }
