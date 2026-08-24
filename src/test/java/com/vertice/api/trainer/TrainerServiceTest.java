@@ -54,6 +54,52 @@ class TrainerServiceTest {
     }
 
     @Test
+    void createTrainer_mapsCrefWhenProvided() {
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+        request.setCref("123456-G/SP");
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Trainer.class);
+        service.createTrainer(request);
+        verify(trainerRepository).save(captor.capture());
+
+        assertThat(captor.getValue().getCref()).isEqualTo("123456-G/SP");
+    }
+
+    @Test
+    void createTrainer_leavesCrefNullWhenOmitted() {
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Trainer.class);
+        service.createTrainer(request);
+        verify(trainerRepository).save(captor.capture());
+
+        assertThat(captor.getValue().getCref()).isNull();
+    }
+
+    @Test
+    void updateTrainer_updatesCref() {
+        Trainer existing = new Trainer();
+        existing.setId(1L);
+        existing.setName("Coach");
+        existing.setEmail("coach@vertice.com");
+
+        when(trainerRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TrainerRequest request = new TrainerRequest("Coach", "coach@vertice.com");
+        request.setCref("123456-G/SP");
+
+        var response = service.updateTrainer(1L, request);
+
+        assertThat(response.getCref()).isEqualTo("123456-G/SP");
+    }
+
+    @Test
     void createTrainer_rejectsDuplicateEmail() {
         Trainer existing = new Trainer();
         existing.setId(1L);
