@@ -1,9 +1,10 @@
 package com.vertice.api.trainer;
 
+import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
-import com.vertice.api.generated.model.TrainerCreateRequest;
-import com.vertice.api.generated.model.TrainerRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerCreateRequest;
+import com.vertice.api.generated.grpc.trainer.v1.TrainerRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,7 +42,12 @@ class TrainerServiceTest {
     void createTrainer_hashesPasswordBeforeSaving() {
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .build();
 
         service.createTrainer(request);
 
@@ -57,8 +63,13 @@ class TrainerServiceTest {
     void createTrainer_mapsCrefWhenProvided() {
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
-        request.setCref("123456-G/SP");
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .setCref("123456-G/SP")
+                .build();
 
         var captor = org.mockito.ArgumentCaptor.forClass(Trainer.class);
         service.createTrainer(request);
@@ -68,16 +79,21 @@ class TrainerServiceTest {
     }
 
     @Test
-    void createTrainer_leavesCrefNullWhenOmitted() {
+    void createTrainer_leavesCrefBlankWhenOmitted() {
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .build();
 
         var captor = org.mockito.ArgumentCaptor.forClass(Trainer.class);
         service.createTrainer(request);
         verify(trainerRepository).save(captor.capture());
 
-        assertThat(captor.getValue().getCref()).isNull();
+        assertThat(captor.getValue().getCref()).isEmpty();
     }
 
     @Test
@@ -86,13 +102,19 @@ class TrainerServiceTest {
         existing.setId(1L);
         existing.setName("Coach");
         existing.setEmail("coach@vertice.com");
+        existing.setCpf("11144477735");
 
         when(trainerRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(existing));
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TrainerRequest request = new TrainerRequest("Coach", "coach@vertice.com");
-        request.setCref("123456-G/SP");
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("Coach")
+                .setEmail("coach@vertice.com")
+                .setCpf("11144477735")
+                .setCref("123456-G/SP")
+                .build();
 
         var response = service.updateTrainer(1L, request);
 
@@ -106,7 +128,12 @@ class TrainerServiceTest {
         existing.setEmail("coach@vertice.com");
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
 
-        TrainerCreateRequest request = new TrainerCreateRequest("New Coach", "coach@vertice.com", "supersecret1");
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .build();
 
         assertThatThrownBy(() -> service.createTrainer(request))
                 .isInstanceOf(DuplicateEmailException.class);
@@ -114,23 +141,49 @@ class TrainerServiceTest {
     }
 
     @Test
-    void updateTrainer_allowsKeepingOwnEmail() {
+    void createTrainer_rejectsDuplicateCpf() {
+        Trainer existing = new Trainer();
+        existing.setId(1L);
+        existing.setCpf("11144477735");
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(existing));
+
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .build();
+
+        assertThatThrownBy(() -> service.createTrainer(request))
+                .isInstanceOf(DuplicateCpfException.class);
+        verify(trainerRepository, never()).save(any());
+    }
+
+    @Test
+    void updateTrainer_allowsKeepingOwnEmailAndCpf() {
         Trainer existing = new Trainer();
         existing.setId(1L);
         existing.setName("Old Name");
         existing.setEmail("coach@vertice.com");
+        existing.setCpf("11144477735");
         existing.setPasswordHash("$2a$10$existingHash");
 
         when(trainerRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(existing));
         when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TrainerRequest request = new TrainerRequest("New Name", "coach@vertice.com");
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("New Name")
+                .setEmail("coach@vertice.com")
+                .setCpf("11144477735")
+                .build();
 
         var response = service.updateTrainer(1L, request);
 
         assertThat(response.getName()).isEqualTo("New Name");
         assertThat(response.getEmail()).isEqualTo("coach@vertice.com");
+        assertThat(response.getCpf()).isEqualTo("11144477735");
         assertThat(existing.getPasswordHash()).isEqualTo("$2a$10$existingHash");
     }
 
@@ -147,10 +200,40 @@ class TrainerServiceTest {
         when(trainerRepository.findById(1L)).thenReturn(Optional.of(target));
         when(trainerRepository.findByEmail("coach2@vertice.com")).thenReturn(Optional.of(other));
 
-        TrainerRequest request = new TrainerRequest("Coach One", "coach2@vertice.com");
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("Coach One")
+                .setEmail("coach2@vertice.com")
+                .build();
 
         assertThatThrownBy(() -> service.updateTrainer(1L, request))
                 .isInstanceOf(DuplicateEmailException.class);
+        verify(trainerRepository, never()).save(any());
+    }
+
+    @Test
+    void updateTrainer_rejectsCpfOwnedByAnotherTrainer() {
+        Trainer target = new Trainer();
+        target.setId(1L);
+        target.setEmail("coach1@vertice.com");
+        target.setCpf("52998224725");
+
+        Trainer other = new Trainer();
+        other.setId(2L);
+        other.setEmail("coach1@vertice.com");
+        other.setCpf("11144477735");
+
+        when(trainerRepository.findById(1L)).thenReturn(Optional.of(target));
+        when(trainerRepository.findByEmail("coach1@vertice.com")).thenReturn(Optional.of(target));
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(other));
+
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("Coach One")
+                .setEmail("coach1@vertice.com")
+                .setCpf("11144477735")
+                .build();
+
+        assertThatThrownBy(() -> service.updateTrainer(1L, request))
+                .isInstanceOf(DuplicateCpfException.class);
         verify(trainerRepository, never()).save(any());
     }
 

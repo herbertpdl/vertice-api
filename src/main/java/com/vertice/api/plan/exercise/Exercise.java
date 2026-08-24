@@ -1,7 +1,11 @@
 package com.vertice.api.plan.exercise;
 
-import com.vertice.api.plan.TrainingPlan;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import lombok.Data;
 
 @Data
@@ -17,12 +21,4 @@ public class Exercise {
     private String name;
 
     private String description;
-
-    private Integer sets;
-
-    private Integer reps;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "training_plan_id", nullable = false)
-    private TrainingPlan trainingPlan;
 }

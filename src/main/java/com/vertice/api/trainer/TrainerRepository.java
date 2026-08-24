@@ -7,4 +7,6 @@ import java.util.Optional;
 public interface TrainerRepository extends JpaRepository<Trainer, Long> {
 
     Optional<Trainer> findByEmail(String email);
+
+    Optional<Trainer> findByCpf(String cpf);
 }

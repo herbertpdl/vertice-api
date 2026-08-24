@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package vertice.plan.v1;
+
+import "google/protobuf/empty.proto";
+
+option java_package = "com.vertice.api.generated.grpc.plan.v1";
+option java_multiple_files = true;
+
+service TrainingPlanService {
+  rpc ListTrainingPlans(ListTrainingPlansRequest) returns (ListTrainingPlansResponse);
+  rpc GetTrainingPlan(GetTrainingPlanRequest) returns (TrainingPlanResponse);
+  rpc CreateTrainingPlan(TrainingPlanCreateRequest) returns (TrainingPlanResponse);
+  rpc UpdateTrainingPlan(UpdateTrainingPlanRequest) returns (TrainingPlanResponse);
+  rpc DeleteTrainingPlan(DeleteTrainingPlanRequest) returns (google.protobuf.Empty);
+}
+
+message TrainingPlanResponse {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  int64 trainer_id = 4;
+}
+
+message TrainingPlanRequest {
+  string name = 1;
+  string description = 2;
+}
+
+message TrainingPlanCreateRequest {
+  string name = 1;
+  string description = 2;
+  int64 trainer_id = 3;
+}
+
+message ListTrainingPlansRequest {
+  int64 trainer_id = 1;
+}
+
+message ListTrainingPlansResponse {
+  repeated TrainingPlanResponse training_plans = 1;
+}
+
+message GetTrainingPlanRequest {
+  int64 id = 1;
+}
+
+message UpdateTrainingPlanRequest {
+  int64 id = 1;
+  TrainingPlanRequest training_plan = 2;
+}
+
+message DeleteTrainingPlanRequest {
+  int64 id = 1;
+}

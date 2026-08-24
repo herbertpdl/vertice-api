@@ -1,10 +1,11 @@
 package com.vertice.api.student;
 
+import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
-import com.vertice.api.generated.model.StudentCreateRequest;
-import com.vertice.api.generated.model.StudentRequest;
-import com.vertice.api.generated.model.StudentResponse;
+import com.vertice.api.generated.grpc.student.v1.StudentCreateRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentRequest;
+import com.vertice.api.generated.grpc.student.v1.StudentResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class StudentService {
 
     public StudentResponse createStudent(StudentCreateRequest request) {
         assertEmailAvailable(request.getEmail(), null);
+        assertCpfAvailable(request.getCpf(), null);
         Student student = studentMapper.toEntity(request);
         student.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         return studentMapper.toResponse(studentRepository.save(student));
@@ -43,6 +45,7 @@ public class StudentService {
     public StudentResponse updateStudent(Long id, StudentRequest request) {
         Student student = findByIdOrThrow(id);
         assertEmailAvailable(request.getEmail(), id);
+        assertCpfAvailable(request.getCpf(), id);
         studentMapper.updateEntityFromRequest(request, student);
         return studentMapper.toResponse(studentRepository.save(student));
     }
@@ -68,6 +71,14 @@ public class StudentService {
                 .filter(existing -> !existing.getId().equals(excludingId))
                 .ifPresent(existing -> {
                     throw new DuplicateEmailException(email);
+                });
+    }
+
+    private void assertCpfAvailable(String cpf, Long excludingId) {
+        studentRepository.findByCpf(cpf)
+                .filter(existing -> !existing.getId().equals(excludingId))
+                .ifPresent(existing -> {
+                    throw new DuplicateCpfException(cpf);
                 });
     }
 }
