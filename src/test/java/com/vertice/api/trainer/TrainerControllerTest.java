@@ -143,6 +143,28 @@ class TrainerControllerTest {
     }
 
     @Test
+    void createTrainer_withCref_returnsCreated() {
+        TrainerResponse created = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setCref("123456-G/SP").build();
+        when(trainerService.createTrainer(any())).thenReturn(created);
+
+        TrainerResponse response = stub.createTrainer(TrainerCreateRequest.newBuilder()
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setCref("123456-G/SP").build());
+
+        assertThat(response.getCref()).isEqualTo("123456-G/SP");
+    }
+
+    @Test
+    void createTrainer_withoutCref_returnsCreated() {
+        TrainerResponse created = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).build();
+        when(trainerService.createTrainer(any())).thenReturn(created);
+
+        TrainerResponse response = stub.createTrainer(TrainerCreateRequest.newBuilder()
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build());
+
+        assertThat(response.getCref()).isEmpty();
+    }
+
+    @Test
     void createTrainer_withDuplicateCpf_throwsAlreadyExists() {
         when(trainerService.createTrainer(any())).thenThrow(new DuplicateCpfException(VALID_CPF));
 
@@ -164,6 +186,19 @@ class TrainerControllerTest {
                 .build());
 
         assertThat(response.getName()).isEqualTo("New Name");
+    }
+
+    @Test
+    void updateTrainer_withCref_returnsUpdated() {
+        TrainerResponse updated = TrainerResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setCref("123456-G/SP").build();
+        when(trainerService.updateTrainer(eq(1L), any())).thenReturn(updated);
+
+        TrainerResponse response = stub.updateTrainer(UpdateTrainerRequest.newBuilder()
+                .setId(1L)
+                .setTrainer(TrainerRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setCref("123456-G/SP").build())
+                .build());
+
+        assertThat(response.getCref()).isEqualTo("123456-G/SP");
     }
 
     @Test

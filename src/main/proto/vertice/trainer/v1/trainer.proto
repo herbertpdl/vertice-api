@@ -21,12 +21,14 @@ message TrainerResponse {
   string name = 2;
   string email = 3;
   string cpf = 4;
+  string cref = 5;
 }
 
 message TrainerRequest {
   string name = 1;
   string email = 2;
   string cpf = 3;
+  string cref = 4;
 }
 
 message TrainerCreateRequest {
@@ -34,6 +36,7 @@ message TrainerCreateRequest {
   string email = 2;
   string password = 3;
   string cpf = 4;
+  string cref = 5;
 }
 
 message ListTrainersRequest {

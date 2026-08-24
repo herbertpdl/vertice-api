@@ -60,6 +60,68 @@ class TrainerServiceTest {
     }
 
     @Test
+    void createTrainer_mapsCrefWhenProvided() {
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .setCref("123456-G/SP")
+                .build();
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Trainer.class);
+        service.createTrainer(request);
+        verify(trainerRepository).save(captor.capture());
+
+        assertThat(captor.getValue().getCref()).isEqualTo("123456-G/SP");
+    }
+
+    @Test
+    void createTrainer_leavesCrefBlankWhenOmitted() {
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TrainerCreateRequest request = TrainerCreateRequest.newBuilder()
+                .setName("New Coach")
+                .setEmail("coach@vertice.com")
+                .setPassword("supersecret1")
+                .setCpf("11144477735")
+                .build();
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Trainer.class);
+        service.createTrainer(request);
+        verify(trainerRepository).save(captor.capture());
+
+        assertThat(captor.getValue().getCref()).isEmpty();
+    }
+
+    @Test
+    void updateTrainer_updatesCref() {
+        Trainer existing = new Trainer();
+        existing.setId(1L);
+        existing.setName("Coach");
+        existing.setEmail("coach@vertice.com");
+        existing.setCpf("11144477735");
+
+        when(trainerRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(trainerRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
+        when(trainerRepository.findByCpf("11144477735")).thenReturn(Optional.of(existing));
+        when(trainerRepository.save(any(Trainer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TrainerRequest request = TrainerRequest.newBuilder()
+                .setName("Coach")
+                .setEmail("coach@vertice.com")
+                .setCpf("11144477735")
+                .setCref("123456-G/SP")
+                .build();
+
+        var response = service.updateTrainer(1L, request);
+
+        assertThat(response.getCref()).isEqualTo("123456-G/SP");
+    }
+
+    @Test
     void createTrainer_rejectsDuplicateEmail() {
         Trainer existing = new Trainer();
         existing.setId(1L);
