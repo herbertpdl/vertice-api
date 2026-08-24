@@ -19,6 +19,9 @@ public class Trainer {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(length = 20)
+    private String cref;
+
     @ToString.Exclude
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;

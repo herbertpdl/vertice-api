@@ -362,6 +362,9 @@ components:
           type: string
           format: email
           minLength: 1
+        cref:
+          type: string
+          maxLength: 20
 
     TrainerCreateRequest:
       type: object
@@ -378,6 +381,9 @@ components:
           type: string
           minLength: 8
           writeOnly: true
+        cref:
+          type: string
+          maxLength: 20
 
     TrainerResponse:
       type: object
@@ -388,6 +394,8 @@ components:
         name:
           type: string
         email:
+          type: string
+        cref:
           type: string
 
     StudentRequest:

@@ -103,6 +103,19 @@ class TrainerControllerTest {
     }
 
     @Test
+    void createTrainer_withCref_returns201() throws Exception {
+        TrainerResponse response = new TrainerResponse().id(1L).name("Coach").email("coach@vertice.com").cref("123456-G/SP");
+        when(trainerService.createTrainer(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/trainers")
+                        .with(jwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\",\"password\":\"supersecret1\",\"cref\":\"123456-G/SP\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.cref").value("123456-G/SP"));
+    }
+
+    @Test
     void createTrainer_withDuplicateEmail_returns409() throws Exception {
         when(trainerService.createTrainer(any())).thenThrow(new DuplicateEmailException("coach@vertice.com"));
 
@@ -142,6 +155,19 @@ class TrainerControllerTest {
                         .content("{\"name\":\"New Name\",\"email\":\"coach@vertice.com\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("New Name"));
+    }
+
+    @Test
+    void updateTrainer_withCref_returns200() throws Exception {
+        TrainerResponse response = new TrainerResponse().id(1L).name("Coach").email("coach@vertice.com").cref("123456-G/SP");
+        when(trainerService.updateTrainer(org.mockito.ArgumentMatchers.eq(1L), any())).thenReturn(response);
+
+        mockMvc.perform(put("/api/trainers/1")
+                        .with(jwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Coach\",\"email\":\"coach@vertice.com\",\"cref\":\"123456-G/SP\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cref").value("123456-G/SP"));
     }
 
     @Test
