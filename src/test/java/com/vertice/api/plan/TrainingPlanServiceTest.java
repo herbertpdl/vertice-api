@@ -3,8 +3,9 @@ package com.vertice.api.plan;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanRequest;
-import com.vertice.api.trainer.Trainer;
-import com.vertice.api.trainer.TrainerRepository;
+import com.vertice.api.user.Role;
+import com.vertice.api.user.User;
+import com.vertice.api.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,20 +30,21 @@ class TrainingPlanServiceTest {
     private TrainingPlanRepository trainingPlanRepository;
 
     @Mock
-    private TrainerRepository trainerRepository;
+    private UserRepository userRepository;
 
     private TrainingPlanService service;
 
     @BeforeEach
     void setUp() {
-        service = new TrainingPlanService(trainingPlanRepository, Mappers.getMapper(TrainingPlanMapper.class), trainerRepository);
+        service = new TrainingPlanService(trainingPlanRepository, Mappers.getMapper(TrainingPlanMapper.class), userRepository);
     }
 
     @Test
     void createTrainingPlan_setsTrainerAndSaves() {
-        Trainer trainer = new Trainer();
+        User trainer = new User();
         trainer.setId(1L);
-        when(trainerRepository.findById(1L)).thenReturn(Optional.of(trainer));
+        trainer.setRole(Role.TRAINER);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(trainer));
         when(trainingPlanRepository.save(any(TrainingPlan.class))).thenAnswer(inv -> inv.getArgument(0));
 
         TrainingPlanCreateRequest request = TrainingPlanCreateRequest.newBuilder()
@@ -59,7 +61,7 @@ class TrainingPlanServiceTest {
 
     @Test
     void createTrainingPlan_throwsWhenTrainerMissing() {
-        when(trainerRepository.findById(99L)).thenReturn(Optional.empty());
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
         TrainingPlanCreateRequest request = TrainingPlanCreateRequest.newBuilder()
                 .setName("Plan")
@@ -72,8 +74,25 @@ class TrainingPlanServiceTest {
     }
 
     @Test
+    void createTrainingPlan_throwsWhenUserIsNotTrainer() {
+        User client = new User();
+        client.setId(1L);
+        client.setRole(Role.CLIENT);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(client));
+
+        TrainingPlanCreateRequest request = TrainingPlanCreateRequest.newBuilder()
+                .setName("Plan")
+                .setTrainerId(1L)
+                .build();
+
+        assertThatThrownBy(() -> service.createTrainingPlan(request))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(trainingPlanRepository, never()).save(any());
+    }
+
+    @Test
     void updateTrainingPlan_updatesNameAndDescriptionOnly() {
-        Trainer trainer = new Trainer();
+        User trainer = new User();
         trainer.setId(1L);
         TrainingPlan existing = new TrainingPlan();
         existing.setId(1L);
@@ -106,7 +125,7 @@ class TrainingPlanServiceTest {
 
     @Test
     void listTrainingPlans_returnsPlansForTrainer() {
-        Trainer trainer = new Trainer();
+        User trainer = new User();
         trainer.setId(1L);
         TrainingPlan plan = new TrainingPlan();
         plan.setId(1L);
