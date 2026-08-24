@@ -1,7 +1,7 @@
 package com.vertice.api.plan;
 
 import com.vertice.api.plan.workout.Workout;
-import com.vertice.api.trainer.Trainer;
+import com.vertice.api.user.User;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -36,7 +36,7 @@ public class TrainingPlan {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "trainer_id", nullable = false)
-    private Trainer trainer;
+    private User trainer;
 
     @ToString.Exclude
     @EqualsAndHashCode.Exclude

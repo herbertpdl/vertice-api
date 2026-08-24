@@ -40,7 +40,7 @@ Exercise catalog (shared across every trainer, every plan, every workout):
 
 | Entity | Package | What it represents | Why it's not merged into another entity |
 |---|---|---|---|
-| `TrainingPlan` | `com.vertice.api.plan` | A trainer's overall program for a student (e.g. a 12-week plan). | Owns the trainer relationship and the plan-level name/description; a plan has many workouts. |
+| `TrainingPlan` | `com.vertice.api.plan` | A trainer's overall program for a client (e.g. a 12-week plan). | Owns the trainer relationship and the plan-level name/description; a plan has many workouts. |
 | `Workout` | `com.vertice.api.plan.workout` | One specific training day inside a plan (e.g. "Day 1: Push"). | A plan isn't one flat list of exercises — it's organized into days, each with its own set of exercises. |
 | `Exercise` | `com.vertice.api.plan.exercise` | The *definition* of a movement (e.g. "Bench Press") — name, description. | Reusable catalog entry, independent of any plan/workout. Without this split, every workout would duplicate the exercise's name/description as plain strings instead of referencing one canonical row — no easy rename/fix-a-typo, no "pick from a list" catalog UI, no querying "which workouts use Squat" via a real foreign key. |
 | `WorkoutExercise` | `com.vertice.api.plan.workout` | "In *this* workout, do *this* catalog exercise, in *this* order, with *this* rest between sets." | The join between `Workout` and `Exercise` — carries workout-specific placement data (`order`, `restSecondsBetweenSets`, `notes`) that doesn't belong on either side alone. |
@@ -48,7 +48,7 @@ Exercise catalog (shared across every trainer, every plan, every workout):
 
 ## Worked example, end to end
 
-A trainer builds `TrainingPlan` "12-Week Strength Program" for a student. Its first `Workout` is
+A trainer builds `TrainingPlan` "12-Week Strength Program" for a client. Its first `Workout` is
 "Week 1 – Day 1: Push". In that workout, the trainer adds the catalog `Exercise` "Bench Press" as
 a `WorkoutExercise` (1st in order, 90s rest between sets), then records three `ExerciseSet` rows
 for it: a 15-rep warm-up at 40kg, then two straight sets at 12 and 10 reps with increasing weight.
