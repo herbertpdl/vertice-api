@@ -1,7 +1,9 @@
 package com.vertice.api.plan.session;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.ProgressPoint;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
 import com.vertice.api.generated.grpc.session.v1.SetLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
@@ -19,11 +21,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 @Service
 @RequiredArgsConstructor
@@ -90,6 +95,29 @@ public class WorkoutSessionService {
                 .findFirstByClientIdAndWorkoutIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(clientId, workoutId)
                 .map(log -> setLogRepository.findByWorkoutLogId(log.getId()).stream().map(setLogMapper::toResponse).toList())
                 .orElse(List.of());
+    }
+
+    /**
+     * One point per ISO week, {@code MAX(weight)} that week — the natural "progress" signal for
+     * strength work, per {@code exercise-progress/spec.md} §0. {@link TreeMap} keeps the merge
+     * sorted oldest-to-newest by key regardless of the query's own row order.
+     */
+    @Transactional(readOnly = true)
+    public GetExerciseProgressResponse getExerciseProgress(Long clientId, Long exerciseId) {
+        Map<LocalDate, BigDecimal> maxWeightByWeek = new TreeMap<>();
+        for (SetLog setLog : setLogRepository.findCompletedSetLogsForClientAndExercise(clientId, exerciseId)) {
+            if (setLog.getWeight() == null) {
+                continue;
+            }
+            maxWeightByWeek.merge(setLog.getWorkoutLog().getWeekStartDate(), setLog.getWeight(), BigDecimal::max);
+        }
+
+        GetExerciseProgressResponse.Builder response = GetExerciseProgressResponse.newBuilder();
+        maxWeightByWeek.forEach((week, weight) -> response.addPoints(ProgressPoint.newBuilder()
+                .setWeekStartDate(ProtoDates.dateToString(week))
+                .setWeight(ProtoDecimals.decimalToString(weight))
+                .build()));
+        return response.build();
     }
 
     private WorkoutLog startWorkoutLog(Long workoutId, Long clientId, LocalDate weekStartDate) {

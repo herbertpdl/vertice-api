@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -308,5 +309,51 @@ class WorkoutSessionServiceTest {
         var responses = service.getLastSetLogs(2L, 1L);
 
         assertThat(responses).isEmpty();
+    }
+
+    private static SetLog completedSetLog(LocalDate weekStartDate, java.math.BigDecimal weight) {
+        WorkoutLog log = new WorkoutLog();
+        log.setWeekStartDate(weekStartDate);
+        log.setCompletedAt(Instant.now());
+        SetLog setLog = new SetLog();
+        setLog.setWorkoutLog(log);
+        setLog.setWeight(weight);
+        return setLog;
+    }
+
+    @Test
+    void getExerciseProgress_returnsOnePointPerWeekWithMaxWeight() {
+        List<SetLog> setLogs = List.of(
+                completedSetLog(LocalDate.parse("2026-08-03"), java.math.BigDecimal.valueOf(55)),
+                completedSetLog(LocalDate.parse("2026-08-03"), java.math.BigDecimal.valueOf(60)),
+                completedSetLog(LocalDate.parse("2026-08-10"), java.math.BigDecimal.valueOf(62.5)));
+        when(setLogRepository.findCompletedSetLogsForClientAndExercise(2L, 10L)).thenReturn(setLogs);
+
+        var response = service.getExerciseProgress(2L, 10L);
+
+        assertThat(response.getPointsList()).hasSize(2);
+        assertThat(response.getPoints(0).getWeekStartDate()).isEqualTo("2026-08-03");
+        assertThat(response.getPoints(0).getWeight()).isEqualTo("60");
+        assertThat(response.getPoints(1).getWeekStartDate()).isEqualTo("2026-08-10");
+        assertThat(response.getPoints(1).getWeight()).isEqualTo("62.5");
+    }
+
+    @Test
+    void getExerciseProgress_skipsSetLogsWithNoWeight() {
+        SetLog durationOnly = completedSetLog(LocalDate.parse("2026-08-03"), null);
+        when(setLogRepository.findCompletedSetLogsForClientAndExercise(2L, 10L)).thenReturn(List.of(durationOnly));
+
+        var response = service.getExerciseProgress(2L, 10L);
+
+        assertThat(response.getPointsList()).isEmpty();
+    }
+
+    @Test
+    void getExerciseProgress_returnsEmptyWhenNoHistory() {
+        when(setLogRepository.findCompletedSetLogsForClientAndExercise(2L, 99L)).thenReturn(List.of());
+
+        var response = service.getExerciseProgress(2L, 99L);
+
+        assertThat(response.getPointsList()).isEmpty();
     }
 }
