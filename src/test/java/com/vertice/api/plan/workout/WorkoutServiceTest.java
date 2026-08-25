@@ -1,6 +1,7 @@
 package com.vertice.api.plan.workout;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutRequest;
 import com.vertice.api.plan.TrainingPlan;
@@ -48,12 +49,14 @@ class WorkoutServiceTest {
         WorkoutCreateRequest request = WorkoutCreateRequest.newBuilder()
                 .setName("Day 1 - Push")
                 .setTrainingPlanId(1L)
+                .setDayOfWeek(DayOfWeek.MONDAY)
                 .build();
 
         var response = service.createWorkout(request);
 
         assertThat(response.getName()).isEqualTo("Day 1 - Push");
         assertThat(response.getTrainingPlanId()).isEqualTo(1L);
+        assertThat(response.getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
     }
 
     @Test
@@ -63,6 +66,7 @@ class WorkoutServiceTest {
         WorkoutCreateRequest request = WorkoutCreateRequest.newBuilder()
                 .setName("Day 1")
                 .setTrainingPlanId(99L)
+                .setDayOfWeek(DayOfWeek.MONDAY)
                 .build();
 
         assertThatThrownBy(() -> service.createWorkout(request))
@@ -71,30 +75,32 @@ class WorkoutServiceTest {
     }
 
     @Test
-    void updateWorkout_updatesNameOnly() {
+    void updateWorkout_updatesNameAndDayOfWeek() {
         TrainingPlan trainingPlan = new TrainingPlan();
         trainingPlan.setId(1L);
         Workout existing = new Workout();
         existing.setId(1L);
         existing.setName("Old Name");
+        existing.setDayOfWeek(com.vertice.api.plan.workout.DayOfWeek.MONDAY);
         existing.setTrainingPlan(trainingPlan);
 
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(existing));
         when(workoutRepository.save(any(Workout.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        WorkoutRequest request = WorkoutRequest.newBuilder().setName("New Name").build();
+        WorkoutRequest request = WorkoutRequest.newBuilder().setName("New Name").setDayOfWeek(DayOfWeek.WEDNESDAY).build();
 
         var response = service.updateWorkout(1L, request);
 
         assertThat(response.getName()).isEqualTo("New Name");
         assertThat(response.getTrainingPlanId()).isEqualTo(1L);
+        assertThat(response.getDayOfWeek()).isEqualTo(DayOfWeek.WEDNESDAY);
     }
 
     @Test
     void updateWorkout_throwsWhenMissing() {
         when(workoutRepository.findById(99L)).thenReturn(Optional.empty());
 
-        WorkoutRequest request = WorkoutRequest.newBuilder().setName("Name").build();
+        WorkoutRequest request = WorkoutRequest.newBuilder().setName("Name").setDayOfWeek(DayOfWeek.MONDAY).build();
 
         assertThatThrownBy(() -> service.updateWorkout(99L, request))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -107,6 +113,7 @@ class WorkoutServiceTest {
         Workout workout = new Workout();
         workout.setId(1L);
         workout.setName("Day 1");
+        workout.setDayOfWeek(com.vertice.api.plan.workout.DayOfWeek.MONDAY);
         workout.setTrainingPlan(trainingPlan);
 
         when(workoutRepository.findByTrainingPlanId(1L)).thenReturn(List.of(workout));
@@ -115,6 +122,7 @@ class WorkoutServiceTest {
 
         assertThat(responses).hasSize(1);
         assertThat(responses.getFirst().getTrainingPlanId()).isEqualTo(1L);
+        assertThat(responses.getFirst().getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
     }
 
     @Test

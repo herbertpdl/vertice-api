@@ -2,6 +2,7 @@ package com.vertice.api.plan.workout;
 
 import com.google.protobuf.Empty;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.DeleteWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.GetWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListWorkoutsRequest;
@@ -55,7 +56,7 @@ class WorkoutControllerTest {
 
     @Test
     void listWorkouts_returnsWorkoutsForTrainingPlan() {
-        WorkoutResponse workout = WorkoutResponse.newBuilder().setId(1L).setName("Day 1").setTrainingPlanId(1L).build();
+        WorkoutResponse workout = WorkoutResponse.newBuilder().setId(1L).setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY).build();
         when(workoutService.listWorkouts(1L)).thenReturn(java.util.List.of(workout));
 
         ListWorkoutsResponse response = stub.listWorkouts(ListWorkoutsRequest.newBuilder().setTrainingPlanId(1L).build());
@@ -65,7 +66,7 @@ class WorkoutControllerTest {
 
     @Test
     void getWorkout_whenExists_returnsWorkout() {
-        WorkoutResponse workout = WorkoutResponse.newBuilder().setId(1L).setName("Day 1").setTrainingPlanId(1L).build();
+        WorkoutResponse workout = WorkoutResponse.newBuilder().setId(1L).setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY).build();
         when(workoutService.getWorkout(1L)).thenReturn(workout);
 
         WorkoutResponse response = stub.getWorkout(GetWorkoutRequest.newBuilder().setId(1L).build());
@@ -85,11 +86,11 @@ class WorkoutControllerTest {
 
     @Test
     void createWorkout_withValidRequest_returnsCreated() {
-        WorkoutResponse created = WorkoutResponse.newBuilder().setId(1L).setName("Day 1").setTrainingPlanId(1L).build();
+        WorkoutResponse created = WorkoutResponse.newBuilder().setId(1L).setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY).build();
         when(workoutService.createWorkout(any())).thenReturn(created);
 
         WorkoutResponse response = stub.createWorkout(WorkoutCreateRequest.newBuilder()
-                .setName("Day 1").setTrainingPlanId(1L).build());
+                .setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY).build());
 
         assertThat(response).isEqualTo(created);
     }
@@ -97,7 +98,16 @@ class WorkoutControllerTest {
     @Test
     void createWorkout_withBlankName_throwsInvalidArgument() {
         assertThatThrownBy(() -> stub.createWorkout(WorkoutCreateRequest.newBuilder()
-                .setName("").setTrainingPlanId(1L).build()))
+                .setName("").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createWorkout_withUnsetDayOfWeek_throwsInvalidArgument() {
+        assertThatThrownBy(() -> stub.createWorkout(WorkoutCreateRequest.newBuilder()
+                .setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.DAY_OF_WEEK_UNSPECIFIED).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
@@ -108,7 +118,7 @@ class WorkoutControllerTest {
         when(workoutService.createWorkout(any())).thenThrow(new ResourceNotFoundException("TrainingPlan", 99L));
 
         assertThatThrownBy(() -> stub.createWorkout(WorkoutCreateRequest.newBuilder()
-                .setName("Day 1").setTrainingPlanId(99L).build()))
+                .setName("Day 1").setTrainingPlanId(99L).setDayOfWeek(DayOfWeek.MONDAY).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
@@ -116,15 +126,26 @@ class WorkoutControllerTest {
 
     @Test
     void updateWorkout_whenExists_returnsUpdated() {
-        WorkoutResponse updated = WorkoutResponse.newBuilder().setId(1L).setName("New Name").setTrainingPlanId(1L).build();
+        WorkoutResponse updated = WorkoutResponse.newBuilder().setId(1L).setName("New Name").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.FRIDAY).build();
         when(workoutService.updateWorkout(eq(1L), any())).thenReturn(updated);
 
         WorkoutResponse response = stub.updateWorkout(UpdateWorkoutRequest.newBuilder()
                 .setId(1L)
-                .setWorkout(WorkoutRequest.newBuilder().setName("New Name").build())
+                .setWorkout(WorkoutRequest.newBuilder().setName("New Name").setDayOfWeek(DayOfWeek.FRIDAY).build())
                 .build());
 
         assertThat(response.getName()).isEqualTo("New Name");
+    }
+
+    @Test
+    void updateWorkout_withUnsetDayOfWeek_throwsInvalidArgument() {
+        assertThatThrownBy(() -> stub.updateWorkout(UpdateWorkoutRequest.newBuilder()
+                .setId(1L)
+                .setWorkout(WorkoutRequest.newBuilder().setName("Name").setDayOfWeek(DayOfWeek.DAY_OF_WEEK_UNSPECIFIED).build())
+                .build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
     }
 
     @Test
@@ -133,7 +154,7 @@ class WorkoutControllerTest {
 
         assertThatThrownBy(() -> stub.updateWorkout(UpdateWorkoutRequest.newBuilder()
                 .setId(99L)
-                .setWorkout(WorkoutRequest.newBuilder().setName("Name").build())
+                .setWorkout(WorkoutRequest.newBuilder().setName("Name").setDayOfWeek(DayOfWeek.MONDAY).build())
                 .build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
