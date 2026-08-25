@@ -12,6 +12,7 @@ import com.vertice.api.generated.grpc.exercise.v1.UpdateExerciseRequest;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -38,14 +39,14 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
 
     @Override
     public void createExercise(ExerciseRequest request, StreamObserver<ExerciseResponse> responseObserver) {
-        validator.validate(new ExerciseValidation(request.getName()));
+        validator.validate(new ExerciseValidation(request.getName(), request.getVideoUrl()));
         responseObserver.onNext(exerciseService.createExercise(request));
         responseObserver.onCompleted();
     }
 
     @Override
     public void updateExercise(UpdateExerciseRequest request, StreamObserver<ExerciseResponse> responseObserver) {
-        validator.validate(new ExerciseValidation(request.getExercise().getName()));
+        validator.validate(new ExerciseValidation(request.getExercise().getName(), request.getExercise().getVideoUrl()));
         responseObserver.onNext(exerciseService.updateExercise(request.getId(), request.getExercise()));
         responseObserver.onCompleted();
     }
@@ -57,6 +58,8 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
         responseObserver.onCompleted();
     }
 
-    private record ExerciseValidation(@NotBlank String name) {
+    private record ExerciseValidation(
+            @NotBlank String name,
+            @Pattern(regexp = "^$|^https?://\\S+$", message = "must be a valid http(s) URL") String videoUrl) {
     }
 }

@@ -36,12 +36,28 @@ class ExerciseServiceTest {
         ExerciseRequest request = ExerciseRequest.newBuilder()
                 .setName("Bench Press")
                 .setDescription("Barbell flat bench press")
+                .setVideoUrl("https://youtube.com/watch?v=abc123")
                 .build();
 
         var response = service.createExercise(request);
 
         assertThat(response.getName()).isEqualTo("Bench Press");
         assertThat(response.getDescription()).isEqualTo("Barbell flat bench press");
+        assertThat(response.getVideoUrl()).isEqualTo("https://youtube.com/watch?v=abc123");
+    }
+
+    @Test
+    void getExercise_withNullVideoUrl_returnsEmptyStringNotNull() {
+        Exercise existing = new Exercise();
+        existing.setId(1L);
+        existing.setName("Squat");
+        existing.setVideoUrl(null);
+
+        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        var response = service.getExercise(1L);
+
+        assertThat(response.getVideoUrl()).isEmpty();
     }
 
     @Test
