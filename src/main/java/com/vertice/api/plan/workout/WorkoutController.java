@@ -1,6 +1,7 @@
 package com.vertice.api.plan.workout;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.DeleteWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.GetWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListWorkoutsRequest;
@@ -11,9 +12,12 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutResponse;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
+
+import java.util.Set;
 
 @GrpcService
 @RequiredArgsConstructor
@@ -39,6 +43,7 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
     @Override
     public void createWorkout(WorkoutCreateRequest request, StreamObserver<WorkoutResponse> responseObserver) {
         validator.validate(new WorkoutValidation(request.getName()));
+        requireDayOfWeek(request.getDayOfWeek());
         responseObserver.onNext(workoutService.createWorkout(request));
         responseObserver.onCompleted();
     }
@@ -46,6 +51,7 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
     @Override
     public void updateWorkout(UpdateWorkoutRequest request, StreamObserver<WorkoutResponse> responseObserver) {
         validator.validate(new WorkoutValidation(request.getWorkout().getName()));
+        requireDayOfWeek(request.getWorkout().getDayOfWeek());
         responseObserver.onNext(workoutService.updateWorkout(request.getId(), request.getWorkout()));
         responseObserver.onCompleted();
     }
@@ -55,6 +61,17 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
         workoutService.deleteWorkout(request.getId());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
+    }
+
+    /**
+     * Same reasoning as {@code UserController#requireRole}/{@code TrainingPlanController#requireLevel}:
+     * proto3 enums always carry a zero value ({@code DAY_OF_WEEK_UNSPECIFIED}), so "omitted"
+     * can't be a {@code @NotNull} on the validation record — it's checked directly instead.
+     */
+    private void requireDayOfWeek(DayOfWeek dayOfWeek) {
+        if (dayOfWeek == DayOfWeek.DAY_OF_WEEK_UNSPECIFIED) {
+            throw new ConstraintViolationException("dayOfWeek: must be set", Set.of());
+        }
     }
 
     private record WorkoutValidation(@NotBlank String name) {
