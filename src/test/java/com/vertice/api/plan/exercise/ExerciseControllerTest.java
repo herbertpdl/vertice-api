@@ -103,6 +103,46 @@ class ExerciseControllerTest {
     }
 
     @Test
+    void createExercise_withBlankVideoUrl_isAllowed() {
+        ExerciseResponse created = ExerciseResponse.newBuilder().setId(1L).setName("Squat").build();
+        when(exerciseService.createExercise(any())).thenReturn(created);
+
+        ExerciseResponse response = stub.createExercise(ExerciseRequest.newBuilder().setName("Squat").build());
+
+        assertThat(response).isEqualTo(created);
+    }
+
+    @Test
+    void createExercise_withValidVideoUrl_returnsCreated() {
+        ExerciseResponse created = ExerciseResponse.newBuilder().setId(1L).setName("Squat")
+                .setVideoUrl("https://youtube.com/watch?v=abc123").build();
+        when(exerciseService.createExercise(any())).thenReturn(created);
+
+        ExerciseResponse response = stub.createExercise(ExerciseRequest.newBuilder()
+                .setName("Squat").setVideoUrl("https://youtube.com/watch?v=abc123").build());
+
+        assertThat(response.getVideoUrl()).isEqualTo("https://youtube.com/watch?v=abc123");
+    }
+
+    @Test
+    void createExercise_withMalformedVideoUrl_throwsInvalidArgument() {
+        assertThatThrownBy(() -> stub.createExercise(ExerciseRequest.newBuilder()
+                .setName("Squat").setVideoUrl("not-a-url").build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createExercise_withNonHttpVideoUrl_throwsInvalidArgument() {
+        assertThatThrownBy(() -> stub.createExercise(ExerciseRequest.newBuilder()
+                .setName("Squat").setVideoUrl("ftp://example.com/video.mp4").build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    @Test
     void updateExercise_whenExists_returnsUpdated() {
         ExerciseResponse updated = ExerciseResponse.newBuilder().setId(1L).setName("New Name").setDescription("New description").build();
         when(exerciseService.updateExercise(eq(1L), any())).thenReturn(updated);

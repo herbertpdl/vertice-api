@@ -19,11 +19,13 @@ message ExerciseResponse {
   int64 id = 1;
   string name = 2;
   string description = 3;
+  string video_url = 4;
 }
 
 message ExerciseRequest {
   string name = 1;
   string description = 2;
+  string video_url = 3;
 }
 
 message ListExercisesRequest {

@@ -14,6 +14,7 @@ public interface ExerciseMapper {
     Exercise toEntity(ExerciseRequest request);
 
     @Mapping(target = "description", qualifiedByName = "nullToEmpty")
+    @Mapping(target = "videoUrl", qualifiedByName = "nullToEmpty")
     ExerciseResponse toResponse(Exercise exercise);
 
     @Mapping(target = "id", ignore = true)
