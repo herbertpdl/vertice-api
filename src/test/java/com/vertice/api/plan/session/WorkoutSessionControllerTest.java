@@ -2,11 +2,14 @@ package com.vertice.api.plan.session;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressRequest;
+import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsResponse;
+import com.vertice.api.generated.grpc.session.v1.ProgressPoint;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
 import com.vertice.api.generated.grpc.session.v1.SetLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
@@ -183,5 +186,27 @@ class WorkoutSessionControllerTest {
                 .setClientId(2L).setWorkoutId(1L).build());
 
         assertThat(response.getSetLogsList()).isEmpty();
+    }
+
+    @Test
+    void getExerciseProgress_returnsPoints() {
+        GetExerciseProgressResponse progress = GetExerciseProgressResponse.newBuilder()
+                .addPoints(ProgressPoint.newBuilder().setWeekStartDate("2026-08-03").setWeight("60").build())
+                .build();
+        when(workoutSessionService.getExerciseProgress(2L, 10L)).thenReturn(progress);
+
+        GetExerciseProgressResponse response = stub.getExerciseProgress(GetExerciseProgressRequest.newBuilder()
+                .setClientId(2L).setExerciseId(10L).build());
+
+        assertThat(response).isEqualTo(progress);
+    }
+
+    @Test
+    void getExerciseProgress_withZeroExerciseId_throwsInvalidArgument() {
+        assertThatThrownBy(() -> stub.getExerciseProgress(GetExerciseProgressRequest.newBuilder()
+                .setClientId(2L).setExerciseId(0).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
     }
 }

@@ -1,6 +1,8 @@
 package com.vertice.api.plan.session;
 
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressRequest;
+import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
@@ -63,7 +65,17 @@ public class WorkoutSessionController extends WorkoutSessionServiceGrpc.WorkoutS
         responseObserver.onCompleted();
     }
 
+    @Override
+    public void getExerciseProgress(GetExerciseProgressRequest request, StreamObserver<GetExerciseProgressResponse> responseObserver) {
+        validator.validate(new GetExerciseProgressValidation(request.getClientId(), request.getExerciseId()));
+        responseObserver.onNext(workoutSessionService.getExerciseProgress(request.getClientId(), request.getExerciseId()));
+        responseObserver.onCompleted();
+    }
+
     private record GetOrStartValidation(@Min(1) long workoutId, @Min(1) long clientId, @NotBlank String weekStartDate) {
+    }
+
+    private record GetExerciseProgressValidation(@Min(1) long clientId, @Min(1) long exerciseId) {
     }
 
     private record RecordSetLogValidation(@Min(1) long workoutLogId, @Min(1) long exerciseSetId, @Min(0) int reps) {
