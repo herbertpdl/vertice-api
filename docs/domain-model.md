@@ -58,6 +58,7 @@ per placement.
 
 ## Current status
 
-Entity/migration layer only (`docs/specs/workout-exercise-sets/spec.md`) — no DTOs, services,
-controllers, or `.proto` contracts exist for any of this yet. `TrainingPlanController`/
-`TrainingPlanService` are still empty stubs.
+`TrainingPlan`, `Workout`, `Exercise`, and `WorkoutExercise` all have full gRPC CRUD
+(`docs/specs/grpc-training-plan/spec.md`, `grpc-workout/spec.md`, `grpc-exercise-catalog/spec.md`,
+`workout-exercise-crud/spec.md`). `ExerciseSet` is still entity/repository only — no gRPC surface
+yet (see `docs/specs/exercise-set-crud/spec.md`, the direct follow-up that closes this).
