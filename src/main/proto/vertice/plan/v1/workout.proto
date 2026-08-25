@@ -13,6 +13,7 @@ service WorkoutService {
   rpc CreateWorkout(WorkoutCreateRequest) returns (WorkoutResponse);
   rpc UpdateWorkout(UpdateWorkoutRequest) returns (WorkoutResponse);
   rpc DeleteWorkout(DeleteWorkoutRequest) returns (google.protobuf.Empty);
+  rpc CloneWorkout(CloneWorkoutRequest) returns (WorkoutResponse);
 }
 
 enum DayOfWeek {
@@ -63,4 +64,11 @@ message UpdateWorkoutRequest {
 
 message DeleteWorkoutRequest {
   int64 id = 1;
+}
+
+message CloneWorkoutRequest {
+  int64 source_workout_id = 1;
+  int64 target_training_plan_id = 2;
+  string name = 3;
+  DayOfWeek day_of_week = 4;
 }
