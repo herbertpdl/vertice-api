@@ -1,6 +1,7 @@
 package com.vertice.api.plan.workout;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.DeleteWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.GetWorkoutRequest;
@@ -60,6 +61,14 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
     public void deleteWorkout(DeleteWorkoutRequest request, StreamObserver<Empty> responseObserver) {
         workoutService.deleteWorkout(request.getId());
         responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void cloneWorkout(CloneWorkoutRequest request, StreamObserver<WorkoutResponse> responseObserver) {
+        validator.validate(new WorkoutValidation(request.getName()));
+        requireDayOfWeek(request.getDayOfWeek());
+        responseObserver.onNext(workoutService.cloneWorkout(request));
         responseObserver.onCompleted();
     }
 

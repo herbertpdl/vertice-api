@@ -1,11 +1,13 @@
 package com.vertice.api.plan.workout;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutRequest;
 import com.vertice.api.plan.TrainingPlan;
 import com.vertice.api.plan.TrainingPlanRepository;
+import com.vertice.api.plan.exercise.Exercise;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -139,5 +141,127 @@ class WorkoutServiceTest {
 
         assertThatThrownBy(() -> service.deleteWorkout(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void cloneWorkout_deepCopiesWorkoutExercisesAndSets() {
+        TrainingPlan sourcePlan = new TrainingPlan();
+        sourcePlan.setId(1L);
+        Workout source = new Workout();
+        source.setId(1L);
+        source.setName("Week 1 - Push");
+        source.setDayOfWeek(com.vertice.api.plan.workout.DayOfWeek.MONDAY);
+        source.setTrainingPlan(sourcePlan);
+
+        Exercise benchPress = new Exercise();
+        benchPress.setId(10L);
+
+        WorkoutExercise sourceWorkoutExercise = new WorkoutExercise();
+        sourceWorkoutExercise.setId(100L);
+        sourceWorkoutExercise.setWorkout(source);
+        sourceWorkoutExercise.setExercise(benchPress);
+        sourceWorkoutExercise.setOrder(1);
+        sourceWorkoutExercise.setRestSecondsBetweenSets(90);
+        sourceWorkoutExercise.setNotes("First movement");
+
+        ExerciseSet sourceSet = new ExerciseSet();
+        sourceSet.setId(1000L);
+        sourceSet.setWorkoutExercise(sourceWorkoutExercise);
+        sourceSet.setSetNumber(1);
+        sourceSet.setReps(10);
+        sourceSet.setWeight(java.math.BigDecimal.valueOf(60));
+        sourceSet.setStrategy(com.vertice.api.plan.workout.SetStrategy.STRAIGHT);
+        sourceWorkoutExercise.getExerciseSets().add(sourceSet);
+        source.getWorkoutExercises().add(sourceWorkoutExercise);
+
+        TrainingPlan targetPlan = new TrainingPlan();
+        targetPlan.setId(2L);
+
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(trainingPlanRepository.findById(2L)).thenReturn(Optional.of(targetPlan));
+        when(workoutRepository.save(any(Workout.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CloneWorkoutRequest request = CloneWorkoutRequest.newBuilder()
+                .setSourceWorkoutId(1L).setTargetTrainingPlanId(2L)
+                .setName("Week 2 - Push").setDayOfWeek(DayOfWeek.WEDNESDAY)
+                .build();
+
+        var response = service.cloneWorkout(request);
+
+        assertThat(response.getName()).isEqualTo("Week 2 - Push");
+        assertThat(response.getDayOfWeek()).isEqualTo(DayOfWeek.WEDNESDAY);
+        assertThat(response.getTrainingPlanId()).isEqualTo(2L);
+
+        var savedWorkoutCaptor = org.mockito.ArgumentCaptor.forClass(Workout.class);
+        verify(workoutRepository).save(savedWorkoutCaptor.capture());
+        Workout saved = savedWorkoutCaptor.getValue();
+        assertThat(saved.getWorkoutExercises()).hasSize(1);
+        WorkoutExercise savedWorkoutExercise = saved.getWorkoutExercises().getFirst();
+        assertThat(savedWorkoutExercise).isNotSameAs(sourceWorkoutExercise);
+        assertThat(savedWorkoutExercise.getExercise()).isSameAs(benchPress);
+        assertThat(savedWorkoutExercise.getOrder()).isEqualTo(1);
+        assertThat(savedWorkoutExercise.getRestSecondsBetweenSets()).isEqualTo(90);
+        assertThat(savedWorkoutExercise.getExerciseSets()).hasSize(1);
+        ExerciseSet savedSet = savedWorkoutExercise.getExerciseSets().getFirst();
+        assertThat(savedSet).isNotSameAs(sourceSet);
+        assertThat(savedSet.getReps()).isEqualTo(10);
+        assertThat(savedSet.getWeight()).isEqualByComparingTo("60");
+    }
+
+    @Test
+    void cloneWorkout_allowsCloningWorkoutWithNoExercises() {
+        TrainingPlan sourcePlan = new TrainingPlan();
+        sourcePlan.setId(1L);
+        Workout source = new Workout();
+        source.setId(1L);
+        source.setName("Empty Day");
+        source.setDayOfWeek(com.vertice.api.plan.workout.DayOfWeek.MONDAY);
+        source.setTrainingPlan(sourcePlan);
+
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(sourcePlan));
+        when(workoutRepository.save(any(Workout.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CloneWorkoutRequest request = CloneWorkoutRequest.newBuilder()
+                .setSourceWorkoutId(1L).setTargetTrainingPlanId(1L)
+                .setName("Empty Day Copy").setDayOfWeek(DayOfWeek.TUESDAY)
+                .build();
+
+        var response = service.cloneWorkout(request);
+
+        assertThat(response.getName()).isEqualTo("Empty Day Copy");
+        assertThat(response.getTrainingPlanId()).isEqualTo(1L);
+    }
+
+    @Test
+    void cloneWorkout_throwsWhenSourceMissing() {
+        when(workoutRepository.findById(99L)).thenReturn(Optional.empty());
+
+        CloneWorkoutRequest request = CloneWorkoutRequest.newBuilder()
+                .setSourceWorkoutId(99L).setTargetTrainingPlanId(1L)
+                .setName("Copy").setDayOfWeek(DayOfWeek.MONDAY)
+                .build();
+
+        assertThatThrownBy(() -> service.cloneWorkout(request))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(workoutRepository, never()).save(any());
+    }
+
+    @Test
+    void cloneWorkout_throwsWhenTargetPlanMissing() {
+        Workout source = new Workout();
+        source.setId(1L);
+        source.setTrainingPlan(new TrainingPlan());
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(trainingPlanRepository.findById(99L)).thenReturn(Optional.empty());
+
+        CloneWorkoutRequest request = CloneWorkoutRequest.newBuilder()
+                .setSourceWorkoutId(1L).setTargetTrainingPlanId(99L)
+                .setName("Copy").setDayOfWeek(DayOfWeek.MONDAY)
+                .build();
+
+        assertThatThrownBy(() -> service.cloneWorkout(request))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(workoutRepository, never()).save(any());
     }
 }
