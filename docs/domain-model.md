@@ -58,7 +58,6 @@ per placement.
 
 ## Current status
 
-`TrainingPlan`, `Workout`, `Exercise`, and `WorkoutExercise` all have full gRPC CRUD
-(`docs/specs/grpc-training-plan/spec.md`, `grpc-workout/spec.md`, `grpc-exercise-catalog/spec.md`,
-`workout-exercise-crud/spec.md`). `ExerciseSet` is still entity/repository only — no gRPC surface
-yet (see `docs/specs/exercise-set-crud/spec.md`, the direct follow-up that closes this).
+All five entities (`TrainingPlan`, `Workout`, `Exercise`, `WorkoutExercise`, `ExerciseSet`) have
+full gRPC CRUD (`docs/specs/grpc-training-plan/spec.md`, `grpc-workout/spec.md`,
+`grpc-exercise-catalog/spec.md`, `workout-exercise-crud/spec.md`, `exercise-set-crud/spec.md`).
