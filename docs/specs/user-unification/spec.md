@@ -1,6 +1,8 @@
 # Spec: Unify Trainer and Student into User + Role
 
-Status: Draft
+Status: Implemented — current architecture (`User` + `role`); supersedes `trainer-crud`,
+`student-crud`, `grpc-trainer`, `grpc-student`, `cpf-field`, `trainer-cref`, and `password-storage`
+(all now Deprecated).
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md`, `docs/specs/student-crud/spec.md`,
 `docs/specs/cpf-field/spec.md`, `docs/specs/trainer-cref/spec.md`,

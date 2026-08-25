@@ -1,6 +1,8 @@
 # Spec: Trainer gRPC conversion
 
-Status: Draft
+Status: Deprecated — superseded by `docs/specs/user-unification/spec.md`, which removed the
+`Trainer` entity/`TrainerService` entirely in favor of a unified `User` entity + `role`. No
+`trainer.proto`/`TrainerService` remains in the codebase.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md`, `docs/specs/password-storage/spec.md` (the REST surface
 this spec replaces), `docs/specs/grpc-foundation/spec.md`, `docs/specs/grpc-cross-cutting/spec.md`

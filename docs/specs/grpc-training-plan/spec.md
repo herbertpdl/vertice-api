@@ -1,6 +1,6 @@
 # Spec: TrainingPlan gRPC CRUD
 
-Status: Draft
+Status: Implemented — current; TrainingPlan is unrelated to the Trainer/Student → User rework.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/grpc-trainer/spec.md` (pattern), `docs/specs/grpc-exercise-catalog/spec.md`
 (PR 1 of this same plan), `docs/domain-model.md`

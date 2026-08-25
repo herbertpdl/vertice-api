@@ -1,6 +1,9 @@
 # Spec: CREF field on Trainer
 
-Status: Draft
+Status: Deprecated — described `cref` on the standalone Trainer entity, which
+`docs/specs/user-unification/spec.md` removed. The field itself survives on the unified `User`
+entity (carried forward by that spec, restricted to `role = TRAINER`), but this spec's Trainer-
+specific design no longer matches the codebase.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md`, `docs/specs/cpf-field/spec.md`
 

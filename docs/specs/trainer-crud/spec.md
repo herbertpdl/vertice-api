@@ -1,6 +1,8 @@
 # Spec: Trainer CRUD
 
-Status: Draft
+Status: Deprecated — superseded by `docs/specs/grpc-trainer/spec.md` (REST → gRPC), then by
+`docs/specs/user-unification/spec.md` (Trainer entity itself removed, merged into `User`). The
+REST endpoints and `TrainerController` described below no longer exist.
 Owner: hebertpdl@gmail.com
 Related: `src/main/resources/openapi/api.yaml` (Trainers paths already defined)
 
