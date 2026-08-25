@@ -38,7 +38,7 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
  * built directly from the {@code google.protobuf.Empty}/{@code StringValue} well-known types,
  * which ship inside {@code protobuf-java} with no codegen required.
  */
-@SpringBootTest(properties = "spring.grpc.server.port=19092")
+@SpringBootTest(properties = {"spring.grpc.server.port=19092", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 @Import(GrpcExceptionMappingTest.FailingServiceConfig.class)
 class GrpcExceptionMappingTest {

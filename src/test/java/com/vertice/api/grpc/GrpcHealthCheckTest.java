@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * the standard health service, and enforcing auth by default, without grpc-cross-cutting having
  * written a single line of interceptor code yet.
  */
-@SpringBootTest(properties = "spring.grpc.server.port=19090")
+@SpringBootTest(properties = {"spring.grpc.server.port=19090", "spring.datasource.hikari.maximum-pool-size=3"})
 class GrpcHealthCheckTest {
 
     private ManagedChannel channel;

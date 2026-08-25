@@ -37,7 +37,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest(properties = "spring.grpc.server.port=19094")
+@SpringBootTest(properties = {"spring.grpc.server.port=19094", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class UserControllerTest {
 

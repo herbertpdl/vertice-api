@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * require a JWT — mirrors {@code LocalSecurityConfig}'s REST bypass, now implemented in
  * {@link GrpcSecurityConfig}.
  */
-@SpringBootTest(properties = "spring.grpc.server.port=19091")
+@SpringBootTest(properties = {"spring.grpc.server.port=19091", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class GrpcHealthCheckLocalProfileTest {
 
