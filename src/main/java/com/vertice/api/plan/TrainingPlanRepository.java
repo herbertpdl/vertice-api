@@ -7,4 +7,6 @@ import java.util.List;
 public interface TrainingPlanRepository extends JpaRepository<TrainingPlan, Long> {
 
     List<TrainingPlan> findByTrainerId(Long trainerId);
+
+    List<TrainingPlan> findByClientId(Long clientId);
 }
