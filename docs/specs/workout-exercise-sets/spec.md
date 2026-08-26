@@ -1,6 +1,7 @@
 # Spec: Workout / WorkoutExercise / ExerciseSet entities
 
-Status: Draft
+Status: Implemented — current; Workout/WorkoutExercise/ExerciseSet are unrelated to the
+Trainer/Student → User rework.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md` (entity/repository conventions this follows)
 

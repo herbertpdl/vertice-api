@@ -1,6 +1,7 @@
 # Spec: Remove the now-unused REST/OpenAPI toolchain
 
-Status: Draft
+Status: Implemented — one-time removal, still true today: no REST/OpenAPI toolchain exists in the
+codebase.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/grpc-trainer/spec.md` §8, `docs/specs/grpc-student/spec.md` §4/§6 (both
 flagged this as a follow-up, not decided until now)

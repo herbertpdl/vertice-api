@@ -1,6 +1,6 @@
 # Spec: Exercise catalog gRPC CRUD
 
-Status: Draft
+Status: Implemented — current; Exercise catalog is unrelated to the Trainer/Student → User rework.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/grpc-trainer/spec.md` (the pattern this mirrors),
 `docs/specs/workout-exercise-sets/spec.md` (the entity this exposes), `docs/domain-model.md`
