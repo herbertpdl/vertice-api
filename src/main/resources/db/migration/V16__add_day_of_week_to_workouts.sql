@@ -1,0 +1,1 @@
+ALTER TABLE workouts ADD COLUMN day_of_week VARCHAR(10) NOT NULL;

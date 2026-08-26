@@ -1,6 +1,7 @@
 package com.vertice.api.plan.workout;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutResponse;
@@ -50,6 +51,52 @@ public class WorkoutService {
     public void deleteWorkout(Long id) {
         Workout workout = findByIdOrThrow(id);
         workoutRepository.delete(workout);
+    }
+
+    /**
+     * Deep-copies the source {@link Workout}'s full {@link WorkoutExercise}/{@link ExerciseSet}
+     * tree (new ids throughout, same catalog {@code Exercise} references) into a new
+     * {@code Workout} under the target plan. Builds the whole graph in memory and saves once —
+     * {@code cascade = CascadeType.ALL} on both {@code Workout#workoutExercises} and
+     * {@code WorkoutExercise#exerciseSets} (already there for {@code workout-exercise-sets})
+     * persists everything transitively.
+     */
+    public WorkoutResponse cloneWorkout(CloneWorkoutRequest request) {
+        Workout source = findByIdOrThrow(request.getSourceWorkoutId());
+        TrainingPlan targetPlan = trainingPlanRepository.findById(request.getTargetTrainingPlanId())
+                .orElseThrow(() -> new ResourceNotFoundException("TrainingPlan", request.getTargetTrainingPlanId()));
+
+        Workout clone = new Workout();
+        clone.setName(request.getName());
+        clone.setDayOfWeek(workoutMapper.mapDayOfWeek(request.getDayOfWeek()));
+        clone.setTrainingPlan(targetPlan);
+
+        for (WorkoutExercise sourceWorkoutExercise : source.getWorkoutExercises()) {
+            WorkoutExercise cloneWorkoutExercise = new WorkoutExercise();
+            cloneWorkoutExercise.setWorkout(clone);
+            cloneWorkoutExercise.setExercise(sourceWorkoutExercise.getExercise());
+            cloneWorkoutExercise.setOrder(sourceWorkoutExercise.getOrder());
+            cloneWorkoutExercise.setRestSecondsBetweenSets(sourceWorkoutExercise.getRestSecondsBetweenSets());
+            cloneWorkoutExercise.setNotes(sourceWorkoutExercise.getNotes());
+
+            for (ExerciseSet sourceSet : sourceWorkoutExercise.getExerciseSets()) {
+                ExerciseSet cloneSet = new ExerciseSet();
+                cloneSet.setWorkoutExercise(cloneWorkoutExercise);
+                cloneSet.setSetNumber(sourceSet.getSetNumber());
+                cloneSet.setReps(sourceSet.getReps());
+                cloneSet.setDurationSeconds(sourceSet.getDurationSeconds());
+                cloneSet.setWeight(sourceSet.getWeight());
+                cloneSet.setLoadPercentage(sourceSet.getLoadPercentage());
+                cloneSet.setStrategy(sourceSet.getStrategy());
+                cloneSet.setRestSeconds(sourceSet.getRestSeconds());
+                cloneSet.setNotes(sourceSet.getNotes());
+                cloneWorkoutExercise.getExerciseSets().add(cloneSet);
+            }
+
+            clone.getWorkoutExercises().add(cloneWorkoutExercise);
+        }
+
+        return workoutMapper.toResponse(workoutRepository.save(clone));
     }
 
     private Workout findByIdOrThrow(Long id) {
