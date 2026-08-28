@@ -1,6 +1,7 @@
 # Spec: gRPC cross-cutting concerns (auth + error/validation mapping)
 
-Status: Draft
+Status: Implemented — auth bypass + exception mapping infra is still current and unrelated to the
+later Trainer/Student → User rework.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/grpc-foundation/spec.md` (discoveries this spec builds on)
 

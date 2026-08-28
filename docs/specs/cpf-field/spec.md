@@ -1,6 +1,9 @@
 # Spec: CPF field for Trainer and Student
 
-Status: Draft
+Status: Deprecated — described `cpf` on the separate Trainer/Student entities, which
+`docs/specs/user-unification/spec.md` removed. The field itself survives on the unified `User`
+entity (carried forward by that spec), but this spec's Trainer/Student-specific design no longer
+matches the codebase.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md`, `docs/specs/student-crud/spec.md`,
 `docs/specs/password-storage/spec.md` (same "one spec, one PR, covers both entities" shape as this

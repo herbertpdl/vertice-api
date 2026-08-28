@@ -1,6 +1,8 @@
 # Spec: Student CRUD
 
-Status: Draft
+Status: Deprecated — superseded by `docs/specs/grpc-student/spec.md` (REST → gRPC), then by
+`docs/specs/user-unification/spec.md` (Student entity itself removed, merged into `User`). The
+REST endpoints and `StudentController` described below no longer exist.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md` (same shape, mirrored here)
 

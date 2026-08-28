@@ -2,6 +2,8 @@ package com.vertice.api.plan.exercise;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -24,4 +26,8 @@ public class Exercise {
 
     @Column(name = "video_url")
     private String videoUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "muscle_group", nullable = false)
+    private MuscleGroup muscleGroup;
 }

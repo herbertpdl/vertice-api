@@ -1,6 +1,9 @@
 # Spec: Password storage for Trainer and Student
 
-Status: Draft
+Status: Deprecated — described password storage on the separate Trainer/Student entities, which
+`docs/specs/user-unification/spec.md` removed. The `passwordHash` design survives on the unified
+`User` entity (carried forward by that spec), but this spec's Trainer/Student-specific design no
+longer matches the codebase.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md`, `docs/specs/student-crud/spec.md`
 

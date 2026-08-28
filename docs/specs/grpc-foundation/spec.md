@@ -1,6 +1,7 @@
 # Spec: gRPC server foundation
 
-Status: Draft
+Status: Implemented — gRPC server infra is still current and unrelated to the later
+Trainer/Student → User rework.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/trainer-crud/spec.md`, `docs/specs/student-crud/spec.md` (the REST endpoints
 this and later specs replace)

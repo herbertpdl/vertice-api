@@ -1,6 +1,8 @@
 # Spec: Student gRPC conversion
 
-Status: Draft
+Status: Deprecated — superseded by `docs/specs/user-unification/spec.md`, which removed the
+`Student` entity/`StudentService` entirely in favor of a unified `User` entity + `role`. No
+`student.proto`/`StudentService` remains in the codebase.
 Owner: hebertpdl@gmail.com
 Related: `docs/specs/grpc-trainer/spec.md` (identical shape, mirrored here — same relationship
 `student-crud/spec.md` has to `trainer-crud/spec.md`)
