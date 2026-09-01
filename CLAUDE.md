@@ -42,8 +42,20 @@ plan/session/        WorkoutLog, SetLog, WorkoutFeedback (client-facing logging/
 trainerclient/        Trainer↔client relationship (join between two Users)
 user/                  User (trainer/client, unified by Role)
 grpc/                  Cross-cutting: exception mapping, health, request validation, proto conversion helpers
+config/                Spring Security wiring (JWT resource server, local-profile auth bypass)
 common/                Shared exceptions and Bean Validation constraints (e.g. @Cpf)
 ```
+
+### Authentication: JWT, wired separately for REST and gRPC
+
+Auth is JWT via OAuth2 resource server (`spring.security.oauth2.resourceserver.jwt.issuer-uri`),
+flat "any authenticated caller may do anything" — no role/scope differentiation yet. Under the
+`local` profile it's disabled entirely (`config/LocalSecurityConfig` for REST,
+`grpc/GrpcSecurityConfig`'s `local`-profile bean for gRPC) so endpoints can be exercised manually
+without a running JWT issuer. The two transports need separate wiring: Spring Boot's default gRPC
+OAuth2 auto-config is `@ConditionalOnMissingBean(AuthenticationProcessInterceptor.class)`, so
+`GrpcSecurityConfig` defining its own bean is what makes the local-profile bypass exist for gRPC
+at all — it doesn't inherit anything from the REST-side `SecurityConfig`/`LocalSecurityConfig`.
 
 `docs/domain-model.md` is the map for how `TrainingPlan → Workout → WorkoutExercise → ExerciseSet`
 nest and how the `Exercise` catalog fits in — read it before touching that hierarchy, the entity
