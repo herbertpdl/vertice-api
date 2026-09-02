@@ -1,6 +1,6 @@
 ---
-name: prd
-description: Turn a feature description into a Product Requirements Document (PRD) at docs/prds/<feature-slug>/prd.md by interviewing the owner in rounds until every rule and edge case is pinned down, then writing a product-only document (no technical design) that a later docs/specs/<feature-slug>/spec.md is derived from. Use this whenever the user describes a new feature or behavior change and wants it defined, scoped, or "written up" before implementation, asks for a PRD, product requirements, requirements doc, feature definition, or "let's define the rules for X", or invokes /prd — even if they don't say the word PRD. Do not use it to write the implementation spec itself (that is the docs/specs workflow in CLAUDE.md); a PRD comes before the spec.
+name: prd-creator
+description: Turn a feature description into a Product Requirements Document (PRD) at docs/prds/<feature-slug>/prd.md by interviewing the owner in rounds until every rule and edge case is pinned down, then writing a product-only document (no technical design) that a later docs/specs/<feature-slug>/spec.md is derived from. Use this whenever the user describes a new feature or behavior change and wants it defined, scoped, or "written up" before implementation, asks for a PRD, product requirements, requirements doc, feature definition, or "let's define the rules for X", or invokes /prd-creator — even if they don't say the word PRD. Do not use it to write the implementation spec itself (that is the docs/specs workflow in CLAUDE.md); a PRD comes before the spec.
 argument-hint: <feature description>
 ---
 

@@ -125,8 +125,8 @@ product requirements those specs trace back to. When implementing a feature that
 have a spec, write one first in this format rather than jumping straight to code.
 
 Specs are the *technical* design. The *product* definition a spec is derived from is a PRD under
-`docs/prds/<feature-name>/prd.md` (same slug as the spec folder), produced with the `/prd` skill
-(`.claude/skills/prd/`): it interviews the owner until the rules and edge cases are exhausted and
+`docs/prds/<feature-name>/prd.md` (same slug as the spec folder), produced with the `/prd-creator` skill
+(`.claude/skills/prd-creator/`): it interviews the owner until the rules and edge cases are exhausted and
 contains no technical design. When a PRD exists for a feature, the spec's `Related` line must
 point at it and every spec decision must trace to a PRD rule, edge case, or decision.
 
