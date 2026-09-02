@@ -92,8 +92,9 @@ Mechanics:
 - Use `AskUserQuestion` for closed questions with a clear set of options (it renders choices the
   owner can click), up to four per call. Put open-ended questions in plain numbered text. Mixing
   both in one round is fine.
-- Keep a ledger in a scratch file (the session scratchpad directory when there is one): decided rules, edge cases with their outcomes, open
-  questions, and questions you plan to ask next. Update it after every round. Answers spawn new
+- Keep a ledger in a scratch file (the session scratchpad directory when there is one):
+  decided rules, edge cases with their outcomes, open questions, and questions you plan to ask
+  next. Update it after every round. Answers spawn new
   questions ("if the second attempt is a separate session, which one does the progress graph
   use?"), and the ledger is how those do not get lost.
 - Draw the next round from two sources: follow-ups the previous answers opened, and the
