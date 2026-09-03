@@ -130,6 +130,13 @@ Specs are the *technical* design. The *product* definition a spec is derived fro
 contains no technical design. When a PRD exists for a feature, the spec's `Related` line must
 point at it and every spec decision must trace to a PRD rule, edge case, or decision.
 
+Between the PRD and the spec sits a technical assessment under
+`docs/assessments/<feature-name>/assessment.md` (same slug), produced with the
+`/technical-assessment` skill (`.claude/skills/technical-assessment/`): it maps every PRD rule
+onto the codebase and records evidence-backed findings on security, data model, compatibility,
+performance, logging, metrics, testing, and rollout. When one exists, the spec's `Related` line
+also points at it and its `## 0. Scope decisions` must resolve every Blocker and High finding.
+
 ## Branching
 
 Always branch from an up-to-date `main` (check and pull/update `main` before creating a new
