@@ -149,6 +149,7 @@ instead of editing exercises and sets individually.
 | Does an empty started session (no logs yet) block a bulk edit? | No, only actual recorded data blocks it | Owner's explicit choice; avoids blocking on sessions with nothing to protect yet. (proposed, accepted) |
 | Can the same exercise appear twice in one workout? | Yes | Matches existing single-add behavior; not a new restriction. (proposed, accepted) |
 | Extend nesting to TrainingPlan → Workout level? | No, out of scope | Owner's explicit choice; not asked for. (proposed, accepted) |
+| Does R6's default-strategy rule change the existing single-set-create rule (which rejects an unset strategy outright)? | No — the two rules coexist unchanged. The nested create/replace path gets its own default-to-plain-working-set logic; the existing one-exercise/one-set-at-a-time flow keeps rejecting an unset strategy exactly as it does today. | Technical assessment (F1) flagged that R6 is the literal opposite of the existing rule; reusing the existing validation/mapping for both would break one or the other. Keeping them separate satisfies R6 for the new path and R15 ("existing actions continue to work exactly as they do today") for the old one. (proposed, accepted) |
 
 ## 8. Open questions
 
