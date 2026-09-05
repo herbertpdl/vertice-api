@@ -3,6 +3,7 @@ package com.vertice.api.grpc;
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.exception.WorkoutExerciseHasRecordedDataException;
 import io.grpc.Status;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.grpc.server.advice.GrpcAdvice;
@@ -33,6 +34,11 @@ public class GrpcExceptionAdvice {
     @GrpcExceptionHandler(DuplicateCpfException.class)
     public Status handleDuplicateCpf(DuplicateCpfException ex) {
         return Status.ALREADY_EXISTS.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(WorkoutExerciseHasRecordedDataException.class)
+    public Status handleWorkoutExerciseHasRecordedData(WorkoutExerciseHasRecordedDataException ex) {
+        return Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
     }
 
     @GrpcExceptionHandler(ConstraintViolationException.class)

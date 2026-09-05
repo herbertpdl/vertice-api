@@ -1,6 +1,6 @@
 # Spec: Create Workout With Exercises
 
-Status: Draft
+Status: Implemented
 Owner: hebertpdl@gmail.com
 Related: `docs/prds/create-workout-with-exercises/prd.md`,
 `docs/assessments/create-workout-with-exercises/assessment.md`,

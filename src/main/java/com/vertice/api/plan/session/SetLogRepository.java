@@ -23,4 +23,8 @@ public interface SetLogRepository extends JpaRepository<SetLog, Long> {
             + "AND sl.workoutLog.completedAt IS NOT NULL "
             + "ORDER BY sl.workoutLog.weekStartDate ASC")
     List<SetLog> findCompletedSetLogsForClientAndExercise(@Param("clientId") Long clientId, @Param("exerciseId") Long exerciseId);
+
+    @Query("SELECT sl FROM SetLog sl "
+            + "WHERE sl.exerciseSet.workoutExercise.workout.id = :workoutId")
+    List<SetLog> findByWorkoutId(@Param("workoutId") Long workoutId);
 }
