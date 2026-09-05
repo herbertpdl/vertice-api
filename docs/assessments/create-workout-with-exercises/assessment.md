@@ -109,6 +109,10 @@ is the *opposite* of the existing single-set-create rule.
   `SET_STRATEGY_UNSPECIFIED` as `STRAIGHT` (the enum's "plain working set" per
   `plan/workout/SetStrategy.java`), separate from the existing controller's reject-on-unset
   behavior. Don't extend `requireStrategy`/the existing `@ValueMapping` to serve both meanings.
+- **Resolved:** recommendation accepted as-is. The nested path gets its own default-to-`STRAIGHT`
+  mapping; `ExerciseSetController.requireStrategy` and `ExerciseSetMapper.mapStrategy` are left
+  untouched for the existing one-at-a-time flow. Recorded in `prd.md` §7's Decisions table so the
+  PRD itself states the two rules coexist rather than one superseding the other.
 
 **F4 — High.** The PRD is silent on whether "create a workout with a nested exercise list" is a new
 RPC or an extension of the existing `CreateWorkout`, and whether "bulk-replace" is a new RPC or an
