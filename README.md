@@ -88,33 +88,36 @@ issuer.
 Flyway runs the migrations under [`src/main/resources/db/migration`](src/main/resources/db/migration)
 automatically on startup.
 
-### Full stack (with the web app and BFF)
-
-If you also have the `vertice-web` and `vertice-bff` repos checked out as siblings of this one,
-use the [`vertice-local`](../vertice-local) repo to run the whole stack (Postgres, this API, the
-BFF, and the web app) together via Docker Compose, with source bind-mounted for hot reload:
+For hot reload without Docker, run a continuous compile in a second terminal alongside
+`bootRun` — `spring-boot-devtools` restarts the app whenever the compiled classes change:
 
 ```sh
+./gradlew build --continuous -x test
+```
+
+(Native filesystem events work reliably here since there's no Docker Desktop virtiofs bind mount
+involved, unlike the container setup described below.)
+
+### Full stack (with the BFF and web app)
+
+If you also have `vertice-bff` and `vertice-web-react` checked out as siblings of this one, run
+each natively in its own terminal:
+
+```
 Workspace/
-├── vertice-local/   (run docker compose from here)
-├── vertice-web/
+├── vertice-api/         (this repo)
 ├── vertice-bff/
-└── vertice-api/     (this repo)
+└── vertice-web-react/
 ```
 
-```sh
-cd ../vertice-local
-cp .env.example .env   # first time only
-docker compose up --build
-```
+1. This repo — as above (`docker compose up -d` + `./gradlew bootRun --args='--spring.profiles.active=local'`).
+2. `vertice-bff` — `cp .env.example .env && npm install && npm run dev` (REST on `:3000`).
+3. `vertice-web-react` — `npm install && npm run dev` (`:5173`).
 
-In that setup, this API's `Dockerfile` builds a `dev` image (JDK 25 + the Gradle wrapper); the
-container entrypoint ([`docker/dev-entrypoint.sh`](docker/dev-entrypoint.sh)) polls `src/` for
-changes and triggers an incremental Gradle recompile, which `spring-boot-devtools` then picks up
-to restart the app — needed because Gradle's native `--continuous` file watching doesn't reliably
-see changes through Docker Desktop's virtiofs bind mounts on macOS.
-
-See `vertice-local`'s README for full details, including the full list of service URLs.
+This avoids Docker image-cache/rebuild pain, especially for the frontend. A `vertice-local`
+repo with a `docker-compose.yml` also exists to run all of the above (plus Postgres) together
+with one command — see its README — but native runs are the faster inner loop for day-to-day
+development.
 
 ## Running tests
 
