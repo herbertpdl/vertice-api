@@ -123,9 +123,11 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 
 - **R38** Every exercise that existed before the starter set is removed from the catalog.
 - **R39** When an exercise that existed before the starter set is removed, every workout entry
-  referring to it is removed with it, discarding any logged sets or feedback attached to that
-  entry. This is a one-time migration cleanup, not a standing exception a trainer can invoke
-  afterward — R23 keeps protecting exercises trainers create from then on.
+  referring to it is removed with it, discarding the logged weights and reps recorded against
+  that entry. The session it belonged to keeps its own record — its written feedback and its
+  other exercises are unaffected, since those aren't tied to any one exercise. This is a
+  one-time migration cleanup, not a standing exception a trainer can invoke afterward — R23
+  keeps protecting exercises trainers create from then on.
 
 ## 5. Edge cases
 
@@ -142,7 +144,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 | E9 | A trainer wants a video on a starter-set exercise | Not possible; the trainer creates their own exercise with a video instead | R5, R30 |
 | E10 | A trainer wants to prescribe a treadmill session | Cardio is one of the fourteen groups and has starter-set exercises | R8 |
 | E11 | A group such as Panturrilhas has far fewer than twenty exercises | Expected; the starter set is not padded to reach a count | R10 |
-| E12 | An exercise predating the starter set is used by a workout when it is removed | The workout entry referring to it is removed as well, discarding any logged sets or feedback tied to it | R39 |
+| E12 | An exercise predating the starter set is used by a workout when it is removed | The workout entry referring to it is removed as well, discarding the logged weights and reps recorded against it; the session's feedback and its other exercises are unaffected | R39 |
 | E13 | A trainer creates an exercise without choosing a muscle group | Refused | R28 |
 | E14 | A trainer searches for a name that exists only in another trainer's exercises | Nothing is found | R15 |
 | E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R34 |
