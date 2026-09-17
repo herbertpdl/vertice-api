@@ -78,7 +78,9 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 ### Visibility
 
 - **R13** Every trainer sees every starter-set exercise.
-- **R14** An exercise created by a trainer is visible only to the trainer who created it.
+- **R14** In the catalog, an exercise created by a trainer is visible only to the trainer who
+  created it. R16 defines the separate exception: a client sees such an exercise inside their
+  own workout.
 - **R15** A trainer cannot see an exercise created by another trainer.
 - **R16** A client sees every exercise that appears in their own workouts, including exercises
   their trainer created.
