@@ -85,14 +85,15 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
   created it. R16 defines the separate exception: a client sees such an exercise inside their
   own workout.
 - **R15** A trainer cannot see an exercise created by another trainer. This is refused, not just
-  absent from their list — the trainer cannot fetch it by id, cannot add it to a workout, and
-  cannot reach it by cloning a workout, even knowing its id. Cloning a workout is refused unless
+  absent from their list — the trainer cannot fetch it by identifier, cannot add it to a
+  workout, and cannot reach it by cloning a workout, even knowing its identifier. Cloning a
+  workout is refused unless
   both the source workout and the target training plan belong to the trainer making the request,
   since the clone otherwise carries the source's private exercises with it.
 - **R16** A client sees every exercise that appears in their own workouts, including exercises
-  their trainer created. A client cannot browse the catalog or fetch an exercise by id outside
-  those workouts — such a request is refused, not merely unoffered by the app, so a private
-  exercise of another trainer's client cannot be reached by guessing its id.
+  their trainer created. A client cannot browse the catalog or fetch an exercise by identifier
+  outside those workouts — such a request is refused, not merely unoffered by the app, so a
+  private exercise of another trainer's client cannot be reached by guessing its identifier.
 - **R17** No administrator sees an exercise created by a trainer.
 
 ### Changing exercises
@@ -102,12 +103,12 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - **R20** The trainer's app does not offer the rename or delete action for a starter-set
   exercise.
 - **R21** A trainer can rename an exercise they created. A trainer who did not create it cannot
-  rename it, even knowing its id — refused, the same as fetching or cloning it (R15).
+  rename it, even knowing its identifier — refused, the same as fetching or cloning it (R15).
 - **R22** When a trainer renames an exercise they created, the new name appears in every workout
   using it, including workouts already completed.
 - **R23** A trainer cannot delete an exercise they created while any workout uses it.
 - **R24** A trainer can delete an exercise they created when no workout uses it. A trainer who
-  did not create it cannot delete it, even knowing its id — refused, the same as R21.
+  did not create it cannot delete it, even knowing its identifier — refused, the same as R21.
 - **R25** Only the platform team can add an exercise to the starter set.
 - **R26** Only the platform team can add, rename or remove a muscle group.
 
@@ -165,10 +166,10 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 | E13 | A trainer creates an exercise without choosing a muscle group | Refused | R28 |
 | E14 | A trainer searches for a name that exists only in another trainer's exercises | Nothing is found | R15 |
 | E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R34 |
-| E16 | A client requests the catalog directly, or an exercise by id, outside their own workouts, even though the app does not offer it | Refused | R16 |
-| E17 | A trainer who learns another trainer's private exercise id fetches it directly, or adds it to their own workout | Refused | R15 |
+| E16 | A client requests the catalog directly, or an exercise by identifier, outside their own workouts, even though the app does not offer it | Refused | R16 |
+| E17 | A trainer who learns another trainer's private exercise identifier fetches it directly, or adds it to their own workout | Refused | R15 |
 | E18 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R15 |
-| E19 | A trainer who learns another trainer's private exercise id attempts to rename or delete it | Refused | R21, R24 |
+| E19 | A trainer who learns another trainer's private exercise identifier attempts to rename or delete it | Refused | R21, R24 |
 
 ## 6. Out of scope
 
