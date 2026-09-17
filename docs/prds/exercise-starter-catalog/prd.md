@@ -39,7 +39,9 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 2. The trainer chooses to add an exercise.
 3. The trainer narrows the list to a muscle group, types part of a name, or both.
 4. The list shows the trainer's own matching exercises first, then the matching starter-set
-   exercises with the most commonly prescribed first.
+   exercises. Among those primarily filed under the narrowed group, the most commonly prescribed
+   comes first — an exercise matching only through a secondary group can appear among them
+   without a specified position.
 5. The trainer picks one and it is added to the workout.
 
 **Trainer creates an exercise that is not in the catalog.**
@@ -99,11 +101,13 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - **R19** A trainer cannot delete a starter-set exercise.
 - **R20** The trainer's app does not offer the rename or delete action for a starter-set
   exercise.
-- **R21** A trainer can rename an exercise they created.
+- **R21** A trainer can rename an exercise they created. A trainer who did not create it cannot
+  rename it, even knowing its id — refused, the same as fetching or cloning it (R15).
 - **R22** When a trainer renames an exercise they created, the new name appears in every workout
   using it, including workouts already completed.
 - **R23** A trainer cannot delete an exercise they created while any workout uses it.
-- **R24** A trainer can delete an exercise they created when no workout uses it.
+- **R24** A trainer can delete an exercise they created when no workout uses it. A trainer who
+  did not create it cannot delete it, even knowing its id — refused, the same as R21.
 - **R25** Only the platform team can add an exercise to the starter set.
 - **R26** Only the platform team can add, rename or remove a muscle group.
 
@@ -164,6 +168,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 | E16 | A client requests the catalog directly, or an exercise by id, outside their own workouts, even though the app does not offer it | Refused | R16 |
 | E17 | A trainer who learns another trainer's private exercise id fetches it directly, or adds it to their own workout | Refused | R15 |
 | E18 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R15 |
+| E19 | A trainer who learns another trainer's private exercise id attempts to rename or delete it | Refused | R21, R24 |
 
 ## 6. Out of scope
 
