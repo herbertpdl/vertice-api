@@ -224,8 +224,10 @@ Two constraints were stated explicitly by the owner and are recorded verbatim.
 
 199 exercises. Each exercise is listed once, under the group it trains most, and every group it
 carries is named beside it. An exercise appears under each of its groups when a trainer narrows
-the list, so one listed here under Costas and also carrying Lombar appears under Lombar too. Within each group the order below is the order a trainer sees, most commonly prescribed
-first.
+the list, so one listed here under Costas and also carrying Lombar appears under Lombar too.
+Within the group an exercise is listed under here, the order below is the order a trainer sees,
+most commonly prescribed first; when an exercise instead appears under one of its other groups,
+its position there is not specified (R37).
 
 ### Peito
 
