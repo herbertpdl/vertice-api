@@ -87,12 +87,12 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - **R15** A trainer cannot see an exercise created by another trainer. This is refused, not just
   absent from their list — the trainer cannot fetch it by identifier, cannot add it to a
   workout, and cannot reach it by cloning a workout, even knowing its identifier. Cloning a
-  workout is refused unless
-  both the source workout and the target training plan belong to the trainer making the request,
-  since the clone otherwise carries the source's private exercises with it.
+  workout is refused unless both the source workout and the target training plan belong to the
+  trainer attempting it, since the clone otherwise carries the source's private exercises with
+  it.
 - **R16** A client sees every exercise that appears in their own workouts, including exercises
   their trainer created. A client cannot browse the catalog or fetch an exercise by identifier
-  outside those workouts — such a request is refused, not merely unoffered by the app, so a
+  outside those workouts — such an attempt is refused, not merely unoffered by the app, so a
   private exercise of another trainer's client cannot be reached by guessing its identifier.
 - **R17** No administrator sees an exercise created by a trainer.
 
