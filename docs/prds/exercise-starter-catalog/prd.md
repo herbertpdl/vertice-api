@@ -59,7 +59,10 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - **R3** Every starter-set exercise carries at least one muscle group.
 - **R4** No starter-set exercise carries a description.
 - **R5** No starter-set exercise carries a video link.
-- **R6** Every starter-set exercise name is written in Brazilian Portuguese.
+- **R6** Every starter-set exercise name is written in Brazilian Portuguese, except for an
+  established loanword Brazilian gyms commonly use untranslated for a specific piece of
+  equipment or movement (for example "Smith", "Leg press", "Superman", "Sissy squat",
+  "Bird dog", or "Assault bike").
 - **R7** Every starter-set exercise name states the equipment used, where the equipment
   distinguishes it from another exercise.
 - **R8** The starter set covers exactly these fourteen muscle groups: Peito, Costas, Ombros,
