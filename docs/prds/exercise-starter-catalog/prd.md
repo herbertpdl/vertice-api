@@ -73,7 +73,8 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
   minimum number per group.
 - **R11** An exercise that trains more than one muscle group carries every muscle group it
   trains.
-- **R12** The starter set is the list in section 10 of this document.
+- **R12** At launch, the starter set is the list in section 10 of this document. R25 lets the
+  platform team add to it afterward.
 
 ### Visibility
 
@@ -123,7 +124,10 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - **R36** Within a muscle group, the exercises the trainer created appear before the starter-set
   exercises.
 - **R37** Within a muscle group, starter-set exercises appear with the most commonly prescribed
-  first.
+  first — this is the order given in section 10, scoped to the group each exercise is listed
+  under there. When an exercise is shown for one of its other groups instead (per R35), it is
+  included, but its position relative to the exercises primarily listed under that group is not
+  specified.
 
 ### Exercises that predate the starter set
 
@@ -288,7 +292,7 @@ first.
 | 13 | Elevação lateral na máquina | Ombros |
 | 14 | Desenvolvimento Arnold com halteres | Ombros, Tríceps |
 | 15 | Elevação frontal na polia | Ombros |
-| 16 | Elevação lateral inclinado com halter | Ombros |
+| 16 | Elevação lateral inclinada com halter | Ombros |
 | 17 | Desenvolvimento no Smith | Ombros, Tríceps |
 | 18 | Remada alta com halteres | Ombros, Trapézio |
 | 19 | Elevação posterior na polia | Ombros |
@@ -417,7 +421,7 @@ first.
 | # | Exercise | Groups |
 |---|---|---|
 | 1 | Panturrilha em pé na máquina | Panturrilhas |
-| 2 | Panturrilha sentado na máquina | Panturrilhas |
+| 2 | Panturrilha sentada na máquina | Panturrilhas |
 | 3 | Panturrilha no leg press | Panturrilhas |
 | 4 | Panturrilha em pé com halteres | Panturrilhas |
 | 5 | Panturrilha no Smith | Panturrilhas |
