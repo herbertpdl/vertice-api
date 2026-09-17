@@ -65,9 +65,9 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
   "Bird dog", or "Assault bike").
 - **R7** Every starter-set exercise name states the equipment used, where the equipment
   distinguishes it from another exercise.
-- **R8** The starter set covers exactly these fourteen muscle groups: Peito, Costas, Ombros,
-  Bíceps, Tríceps, Antebraço, Quadríceps, Posteriores de coxa, Glúteos, Panturrilhas, Abdômen,
-  Lombar, Trapézio, Cardio.
+- **R8** At launch, the starter set covers exactly these fourteen muscle groups: Peito, Costas,
+  Ombros, Bíceps, Tríceps, Antebraço, Quadríceps, Posteriores de coxa, Glúteos, Panturrilhas,
+  Abdômen, Lombar, Trapézio, Cardio. R26 lets the platform team change this list afterward.
 - **R9** Every muscle group name is written in Brazilian Portuguese.
 - **R10** The starter set contains only exercises a trainer would genuinely prescribe, with no
   minimum number per group.
@@ -157,6 +157,9 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - Trainers creating or renaming muscle groups. The group list is fixed for trainers so the
   filter stays meaningful across the platform.
 - Sharing exercises between two trainers. Not asked for.
+- Redefining the muscle-group list after launch, and what happens to an exercise carrying a
+  group the platform team later renames or removes. R26 grants that ability; the remapping
+  behavior for affected exercises is deferred until the platform team needs it.
 
 ## 7. Decisions
 
