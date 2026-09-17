@@ -82,8 +82,10 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
   created it. R16 defines the separate exception: a client sees such an exercise inside their
   own workout.
 - **R15** A trainer cannot see an exercise created by another trainer. This is refused, not just
-  absent from their list — the trainer cannot fetch it by id, and cannot add it to a workout,
-  even knowing its id.
+  absent from their list — the trainer cannot fetch it by id, cannot add it to a workout, and
+  cannot reach it by cloning a workout, even knowing its id. Cloning a workout is refused unless
+  both the source workout and the target training plan belong to the trainer making the request,
+  since the clone otherwise carries the source's private exercises with it.
 - **R16** A client sees every exercise that appears in their own workouts, including exercises
   their trainer created. A client cannot browse the catalog or fetch an exercise by id outside
   those workouts — such a request is refused, not merely unoffered by the app, so a private
@@ -157,6 +159,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 | E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R34 |
 | E16 | A client requests the catalog directly, or an exercise by id, outside their own workouts, even though the app does not offer it | Refused | R16 |
 | E17 | A trainer who learns another trainer's private exercise id fetches it directly, or adds it to their own workout | Refused | R15 |
+| E18 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R15 |
 
 ## 6. Out of scope
 
