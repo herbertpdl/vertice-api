@@ -83,7 +83,9 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
   own workout.
 - **R15** A trainer cannot see an exercise created by another trainer.
 - **R16** A client sees every exercise that appears in their own workouts, including exercises
-  their trainer created.
+  their trainer created. A client cannot browse the catalog or fetch an exercise by id outside
+  those workouts — such a request is refused, not merely unoffered by the app, so a private
+  exercise of another trainer's client cannot be reached by guessing its id.
 - **R17** No administrator sees an exercise created by a trainer.
 
 ### Changing exercises
@@ -148,6 +150,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 | E13 | A trainer creates an exercise without choosing a muscle group | Refused | R28 |
 | E14 | A trainer searches for a name that exists only in another trainer's exercises | Nothing is found | R15 |
 | E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R34 |
+| E16 | A client requests the catalog directly, or an exercise by id, outside their own workouts, even though the app does not offer it | Refused | R16 |
 
 ## 6. Out of scope
 
