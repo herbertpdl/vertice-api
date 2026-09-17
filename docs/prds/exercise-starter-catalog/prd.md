@@ -22,7 +22,7 @@ more than one muscle group.
 **Trainer.** Sees the whole starter set and their own exercises. Can create their own exercises,
 rename them, and delete them while no workout uses them. Can filter the list by muscle group and
 search it by name. Cannot rename or delete any starter-set exercise, cannot see another
-trainer's exercises, and cannot add or rename a muscle group.
+trainer's exercises, and cannot add, rename, or remove a muscle group.
 
 **Client.** Takes no action in this feature. Sees every exercise that appears in their own
 workouts, including ones their trainer created privately. Cannot browse the catalog, cannot
