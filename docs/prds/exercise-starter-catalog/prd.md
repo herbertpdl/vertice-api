@@ -94,7 +94,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
   their trainer created. A client cannot browse the catalog or fetch an exercise by identifier
   outside those workouts — such an attempt is refused, not merely unoffered by the app, so a
   private exercise of another trainer's client cannot be reached by guessing its identifier.
-- **R17** No administrator sees an exercise created by a trainer.
+- **R17** The platform team cannot see an exercise created by a trainer.
 
 ### Changing exercises
 
@@ -178,8 +178,8 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - Descriptions on starter-set exercises. The owner specified name and muscle group only.
 - A trainer proposing that one of their exercises join the starter set. A review flow was
   considered and rejected as far beyond this feature.
-- Any administrator surface for managing exercises or trainers' private exercises. No
-  administrator surface exists in the product.
+- Any surface for the platform team to manage exercises or browse trainers' private exercises.
+  No such surface exists in the product.
 - Trainers creating or renaming muscle groups. The group list is fixed for trainers so the
   filter stays meaningful across the platform.
 - Sharing exercises between two trainers. Not asked for.
