@@ -149,7 +149,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 
 ## 5. Edge cases
 
-| Id | Scenario | Expected outcome | Rule |
+| # | Scenario | Expected outcome | Rule |
 |---|---|---|---|
 | E1 | A trainer attempts to rename a starter-set exercise even though the app does not offer it | Refused, and the trainer is told the exercise belongs to the shared starter set | R18, R20 |
 | E2 | A trainer attempts to delete a starter-set exercise even though the app does not offer it | Refused, and the trainer is told the exercise belongs to the shared starter set | R19, R20 |
