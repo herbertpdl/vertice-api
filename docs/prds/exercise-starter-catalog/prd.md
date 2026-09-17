@@ -81,7 +81,9 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 - **R14** In the catalog, an exercise created by a trainer is visible only to the trainer who
   created it. R16 defines the separate exception: a client sees such an exercise inside their
   own workout.
-- **R15** A trainer cannot see an exercise created by another trainer.
+- **R15** A trainer cannot see an exercise created by another trainer. This is refused, not just
+  absent from their list — the trainer cannot fetch it by id, and cannot add it to a workout,
+  even knowing its id.
 - **R16** A client sees every exercise that appears in their own workouts, including exercises
   their trainer created. A client cannot browse the catalog or fetch an exercise by id outside
   those workouts — such a request is refused, not merely unoffered by the app, so a private
@@ -129,7 +131,10 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
   that entry. The session it belonged to keeps its own record — its written feedback and its
   other exercises are unaffected, since those aren't tied to any one exercise. This is a
   one-time migration cleanup, not a standing exception a trainer can invoke afterward — R23
-  keeps protecting exercises trainers create from then on.
+  keeps protecting exercises trainers create from then on. R38/R39 run on the premise that these
+  rows are test data, not genuine trainer/client history; whoever runs the migration confirms
+  that against the target environment first, and any row that turns out to carry real logged
+  history is pulled out of the migration and handled individually rather than removed by it.
 
 ## 5. Edge cases
 
@@ -151,6 +156,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 | E14 | A trainer searches for a name that exists only in another trainer's exercises | Nothing is found | R15 |
 | E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R34 |
 | E16 | A client requests the catalog directly, or an exercise by id, outside their own workouts, even though the app does not offer it | Refused | R16 |
+| E17 | A trainer who learns another trainer's private exercise id fetches it directly, or adds it to their own workout | Refused | R15 |
 
 ## 6. Out of scope
 
