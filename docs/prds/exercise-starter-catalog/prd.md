@@ -3,8 +3,9 @@
 Status: Draft
 Owner: hebertpdl@gmail.com
 Related: `docs/requirements.md` (source requirement: "Create new excercises if they don't find
-the one they want"), `docs/specs/grpc-exercise-catalog/spec.md`,
-`docs/specs/exercise-video-url/spec.md`, `docs/specs/workout-exercise-crud/spec.md`,
+the one they want"), `docs/prds/create-workout-with-exercises/prd.md`,
+`docs/specs/grpc-exercise-catalog/spec.md`, `docs/specs/exercise-video-url/spec.md`,
+`docs/specs/workout-exercise-crud/spec.md`, `docs/specs/clone-workout/spec.md`,
 `docs/domain-model.md`
 Spec: not yet written (will be `docs/specs/exercise-starter-catalog/spec.md`)
 
