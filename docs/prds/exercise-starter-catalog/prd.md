@@ -204,7 +204,7 @@ trainer's private exercises.
 |---|---|---|
 | Are exercises shared or private? | The starter set is shared with every trainer; an exercise a trainer creates is private to them | The catalog is fully shared today, so this introduces trainer ownership deliberately, matching the owner's framing of "the ones they have added by themselves" |
 | How specific are muscle groups? | Fourteen specific groups, splitting the current Braços and Pernas | The owner named biceps as a group, which the current seven do not provide; a precise filter is the point of having groups |
-| Is Cardio a muscle group? | Yes, kept and seeded | Dropping it left no home for treadmill or bike work, so a trainer could not catalogue cardio at all |
+| Is Cardio a muscle group? | Yes, kept and given starter-set exercises | Dropping it left no home for treadmill or bike work, so a trainer could not catalogue cardio at all |
 | Can a starter-set exercise be changed? | No trainer can rename or delete one, and the app does not offer the action | One trainer's edit would otherwise change the shared list for everyone |
 | What happens to exercises created before this? | Removed, along with any workout entry referring to them | They are a few test entries carrying groups that no longer exist; keeping them would leave ownerless exercises in a shared list |
 | A trainer creates a name that already exists | Allowed, both exist (proposed, accepted) | The catalog already tolerates near-duplicates by design, and a trainer's copy only clutters their own list |
