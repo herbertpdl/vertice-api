@@ -31,8 +31,8 @@ create an exercise, and cannot change one.
 
 **Platform team.** The only party that can add an exercise to the starter set, or add, rename or
 remove a muscle group. Confirms, before the starter set arrives, that the exercises predating it
-carry only test data, and keeps any that carries genuine history. Has no ability to see a
-trainer's private exercises.
+carry only test data, and keeps any that carries genuine history, handing it to the trainer it
+belongs to under the launch muscle groups. Has no ability to see a trainer's private exercises.
 
 ## 3. Flows
 
@@ -165,6 +165,11 @@ trainer's private exercises.
   trainer or client history rather than test data is kept, together with every workout entry
   referring to it and every weight and rep logged against those entries, instead of being
   removed.
+- **R54** An exercise kept under R53 becomes the private exercise of the trainer whose workouts
+  use it, and from then on behaves exactly like one that trainer created (R14, R27–R33).
+- **R55** Before the starter set arrives, the platform team files an exercise kept under R53
+  under one or more of the fourteen launch muscle groups (R8), since the group it carried until
+  then is no longer offered.
 
 ## 5. Edge cases
 
@@ -191,6 +196,7 @@ trainer's private exercises.
 | E19 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R19 |
 | E20 | A trainer who learns another trainer's private exercise identifier attempts to change or delete it | Refused | R29, R33 |
 | E21 | A trainer removes every muscle group from an exercise they created | Refused, the same as creating one without a group | R28, R36 |
+| E22 | An exercise kept under R53 is used by workouts of more than one trainer | Each of those trainers receives their own private copy, and every workout entry and its logs follow the copy of the trainer whose plan it belongs to | R53, R54 |
 
 ## 6. Out of scope
 
@@ -217,6 +223,7 @@ trainer's private exercises.
 | Is Cardio a muscle group? | Yes, kept and given starter-set exercises | Dropping it left no home for treadmill or bike work, so a trainer could not catalogue cardio at all |
 | Can a starter-set exercise be changed? | No trainer can change any part of one or delete it, and the app does not offer the action | One trainer's edit would otherwise change the shared list for everyone, and a description or video added to one would break R4/R5 for everyone |
 | What happens to exercises created before this? | Removed, along with any workout entry referring to them | They are a few test entries carrying groups that no longer exist; keeping them would leave ownerless exercises in a shared list |
+| What becomes of a pre-starter exercise the platform team keeps? | It becomes the private exercise of the trainer whose workouts use it, filed under the launch groups the platform team assigns (proposed in review) | The only two kinds of exercise are shared starter-set and private trainer-created; the reason for removing the rest was that an ownerless exercise in the shared list is wrong, so a kept one must take the private form |
 | A trainer creates a name that already exists | Allowed, both exist (proposed, accepted) | The catalog already tolerates near-duplicates by design, and a trainer's copy only clutters their own list |
 | Deleting an exercise already used in a workout | Refused while any workout uses it (proposed, accepted) | A client would otherwise lose an exercise from their logged history |
 | Renaming an exercise already used in a workout | Applies everywhere, past workouts included (proposed, accepted) | It is the same exercise being corrected, not a different one |
