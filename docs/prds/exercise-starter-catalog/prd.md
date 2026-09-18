@@ -157,7 +157,8 @@ trainer's private exercises.
   trainer creates afterward is never removed this way while a workout uses it (R29).
 - **R51** An exercise predating the starter set that the platform team finds to carry genuine
   trainer or client history rather than test data is kept, together with every workout entry
-  and logged weight referring to it, instead of being removed.
+  referring to it and every weight and rep logged against those entries, instead of being
+  removed.
 
 ## 5. Edge cases
 
