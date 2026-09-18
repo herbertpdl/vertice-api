@@ -133,7 +133,7 @@ trainer's private exercises.
 
 - **R40** A trainer can narrow the exercise list to one muscle group.
 - **R41** A trainer can search the exercise list by name.
-- **R42** Narrowing to a muscle group shows every exercise carrying that group.
+- **R42** Narrowing to a muscle group shows every exercise visible to that trainer that carries that group.
 - **R43** Within a muscle group, the exercises the trainer created appear before the starter-set
   exercises.
 - **R44** Within a muscle group, the starter-set exercises listed under that group in section 10
