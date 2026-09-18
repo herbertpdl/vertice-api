@@ -29,7 +29,9 @@ workouts, including ones their trainer created privately. Cannot browse the cata
 create an exercise, and cannot change one.
 
 **Platform team.** The only party that can add an exercise to the starter set, or add, rename or
-remove a muscle group. Has no ability to see a trainer's private exercises.
+remove a muscle group. Confirms, before the starter set arrives, that the exercises predating it
+carry only test data, and sets aside any that carries genuine history. Has no ability to see a
+trainer's private exercises.
 
 ## 3. Flows
 
@@ -136,16 +138,18 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 
 ### Exercises that predate the starter set
 
-- **R38** Every exercise that existed before the starter set is removed from the catalog.
+- **R38** Every exercise that existed before the starter set is removed from the catalog when
+  the starter set arrives, unless the platform team has set it aside under R39 for carrying
+  genuine trainer or client history.
 - **R39** When an exercise that existed before the starter set is removed, every workout entry
   referring to it is removed with it, discarding the logged weights and reps recorded against
   that entry. The session it belonged to keeps its own record — its written feedback and its
-  other exercises are unaffected, since those aren't tied to any one exercise. This is a
-  one-time migration cleanup, not a standing exception a trainer can invoke afterward — R23
-  keeps protecting exercises trainers create from then on. R38/R39 run on the premise that these
-  rows are test data, not genuine trainer/client history; whoever runs the migration confirms
-  that against the target environment first, and any row that turns out to carry real logged
-  history is pulled out of the migration and handled individually rather than removed by it.
+  other exercises are unaffected, since those aren't tied to any one exercise. This removal
+  happens once, when the starter set arrives, and does not weaken R23 for any exercise a
+  trainer creates afterward. It presumes the exercises predating the starter set carry only
+  test data, not genuine trainer or client history: the platform team confirms this before the
+  starter set arrives, and any exercise that turns out to carry genuine logged history is set
+  aside and handled individually rather than removed.
 
 ## 5. Edge cases
 
