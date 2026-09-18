@@ -188,7 +188,7 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
 | E5 | A trainer deletes an exercise they created that a client has already logged weights against | Refused, because a workout uses it | R32 |
 | E6 | A trainer renames an exercise they created after a client logged weights against it | The new name appears on the past session; the logged weights are unchanged | R31 |
 | E7 | A client opens a workout containing an exercise their trainer created privately | The client sees the exercise like any other | R20 |
-| E8 | A trainer narrows the list to Lombar and sees "Levantamento terra com barra" | Expected, because that exercise carries both Costas and Lombar | R11, R45 |
+| E8 | A trainer narrows the list to Lombar and sees "Levantamento terra com barra" | Expected, because that exercise carries Lombar as well as Costas and Posteriores de coxa | R11, R45 |
 | E9 | A trainer wants a video on a starter-set exercise | Not possible; the trainer creates their own exercise with a video instead | R5, R40 |
 | E10 | A trainer wants to prescribe a treadmill session | Cardio is one of the fourteen groups and has starter-set exercises | R8 |
 | E11 | A group such as Panturrilhas has far fewer than twenty exercises | Expected; the starter set is not padded to reach a count | R10 |
