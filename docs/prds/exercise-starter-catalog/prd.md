@@ -177,7 +177,7 @@ trainer's private exercises.
 | E13 | A trainer creates an exercise without choosing a muscle group | Refused | R35 |
 | E14 | A trainer searches for a name that exists only in another trainer's exercises | Nothing is found | R15 |
 | E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R41 |
-| E16 | A client requests the catalog directly, or an exercise by identifier, outside their own workouts, even though the app does not offer it | Refused | R20, R21 |
+| E16 | A client tries to open the catalog directly, or to fetch an exercise by identifier, outside their own workouts, even though the app does not offer it | Refused | R20, R21 |
 | E17 | A trainer who learns another trainer's private exercise identifier fetches it directly, or adds it to their own workout | Refused | R16, R17 |
 | E18 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R18 |
 | E19 | A trainer who learns another trainer's private exercise identifier attempts to rename or delete it | Refused | R27, R31 |
