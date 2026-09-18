@@ -22,7 +22,7 @@ more than one muscle group.
 
 **Trainer.** Sees the whole starter set and their own exercises. Can create their own exercises,
 rename them, and delete them while no workout uses them. Can filter the list by muscle group and
-search it by name. Cannot rename or delete any starter-set exercise, cannot see another
+search it by name. Cannot change or delete any starter-set exercise, cannot see another
 trainer's exercises, and cannot add, rename, or remove a muscle group.
 
 **Client.** Takes no action in this feature. Sees every exercise that appears in their own
@@ -107,12 +107,13 @@ trainer's private exercises.
 
 ### Changing exercises
 
-- **R24** A trainer cannot rename a starter-set exercise.
+- **R24** A trainer cannot change any part of a starter-set exercise: its name, its muscle
+  groups, its description, or its video link.
 - **R25** A trainer cannot delete a starter-set exercise.
-- **R26** The trainer's app does not offer the rename or delete action for a starter-set
+- **R26** The trainer's app does not offer the change or delete action for a starter-set
   exercise.
 - **R27** A trainer can rename an exercise they created.
-- **R28** A trainer's attempt to rename an exercise they did not create is refused, even when
+- **R28** A trainer's attempt to change an exercise they did not create is refused, even when
   they know its identifier, the same as fetching it (R16).
 - **R29** When a trainer renames an exercise they created, the new name appears in every workout
   using it, including workouts already completed.
@@ -167,7 +168,7 @@ trainer's private exercises.
 
 | # | Scenario | Expected outcome | Rule |
 |---|---|---|---|
-| E1 | A trainer attempts to rename a starter-set exercise even though the app does not offer it | Refused, and the trainer is told the exercise belongs to the shared starter set | R24, R26 |
+| E1 | A trainer attempts to change a starter-set exercise — renaming it, or giving it a description, a video link, or another muscle group — even though the app does not offer it | Refused, and the trainer is told the exercise belongs to the shared starter set | R24, R26 |
 | E2 | A trainer attempts to delete a starter-set exercise even though the app does not offer it | Refused, and the trainer is told the exercise belongs to the shared starter set | R25, R26 |
 | E3 | A trainer creates an exercise named "Supino reto com barra", which is already in the starter set | Allowed; both exist, and the trainer's own copy is visible only to them | R40, R14 |
 | E4 | Two trainers each create an exercise with the same name | Both exist, and each trainer sees only their own | R14, R40 |
@@ -186,7 +187,7 @@ trainer's private exercises.
 | E17 | A trainer who learns another trainer's private exercise identifier fetches it directly, or adds it to their own workout | Refused | R16, R17 |
 | E18 | A trainer adds an exercise, whether their own or from the starter set, to a workout in another trainer's training plan | Refused | R18 |
 | E19 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R19 |
-| E20 | A trainer who learns another trainer's private exercise identifier attempts to rename or delete it | Refused | R28, R32 |
+| E20 | A trainer who learns another trainer's private exercise identifier attempts to change or delete it | Refused | R28, R32 |
 
 ## 6. Out of scope
 
@@ -211,7 +212,7 @@ trainer's private exercises.
 | Are exercises shared or private? | The starter set is shared with every trainer; an exercise a trainer creates is private to them | The catalog is fully shared today, so this introduces trainer ownership deliberately, matching the owner's framing of "the ones they have added by themselves" |
 | How specific are muscle groups? | Fourteen specific groups, splitting the current Braços and Pernas | The owner named biceps as a group, which the current seven do not provide; a precise filter is the point of having groups |
 | Is Cardio a muscle group? | Yes, kept and given starter-set exercises | Dropping it left no home for treadmill or bike work, so a trainer could not catalogue cardio at all |
-| Can a starter-set exercise be changed? | No trainer can rename or delete one, and the app does not offer the action | One trainer's edit would otherwise change the shared list for everyone |
+| Can a starter-set exercise be changed? | No trainer can change any part of one or delete it, and the app does not offer the action | One trainer's edit would otherwise change the shared list for everyone, and a description or video added to one would break R4/R5 for everyone |
 | What happens to exercises created before this? | Removed, along with any workout entry referring to them | They are a few test entries carrying groups that no longer exist; keeping them would leave ownerless exercises in a shared list |
 | A trainer creates a name that already exists | Allowed, both exist (proposed, accepted) | The catalog already tolerates near-duplicates by design, and a trainer's copy only clutters their own list |
 | Deleting an exercise already used in a workout | Refused while any workout uses it (proposed, accepted) | A client would otherwise lose an exercise from their logged history |
