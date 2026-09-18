@@ -213,7 +213,7 @@ trainer's private exercises.
 | Renaming an exercise already used in a workout | Applies everywhere, past workouts included (proposed, accepted) | It is the same exercise being corrected, not a different one |
 | Minimum exercises per group | No minimum; only exercises a trainer would genuinely prescribe | Padding thin groups such as Antebraço with contrived variations would make the list worse, not better |
 | How are exercise names written? | Naming the equipment, for example "Supino reto com barra" (proposed, accepted) | Barbell and dumbbell versions differ in how a trainer prescribes load, and this is how they are known in a Brazilian gym |
-| Where an exercise trains two groups | It carries both, rather than being filed under one | The owner chose a list of groups per exercise over picking a primary group |
+| Where an exercise trains two groups | It carries both, rather than being filed under one | The owner chose a list of groups per exercise over a single group; the group an exercise is listed under in section 10 only fixes its ordering there (R44), it is not the only group the exercise carries |
 | Who maintains the starter set and the groups | The platform team only | Trainers changing either would make the shared list and the filter drift |
 | Ordering within a group | The trainer's own first, then the starter set with the most commonly prescribed first | The owner asked for the most popular exercises, and a trainer's own are few and deliberately created |
 | Where the exercise list lives | In this document, section 10 | Which exercises ship is a product decision the owner wanted to review before implementation |
