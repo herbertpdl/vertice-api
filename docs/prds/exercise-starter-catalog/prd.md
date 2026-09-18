@@ -30,7 +30,7 @@ create an exercise, and cannot change one.
 
 **Platform team.** The only party that can add an exercise to the starter set, or add, rename or
 remove a muscle group. Confirms, before the starter set arrives, that the exercises predating it
-carry only test data, and sets aside any that carries genuine history. Has no ability to see a
+carry only test data, and keeps any that carries genuine history. Has no ability to see a
 trainer's private exercises.
 
 ## 3. Flows
@@ -144,7 +144,7 @@ trainer's private exercises.
 ### Exercises that predate the starter set
 
 - **R46** Every exercise that existed before the starter set is removed from the catalog when
-  the starter set arrives, unless the platform team has set it aside under R51.
+  the starter set arrives, unless the platform team keeps it under R51.
 - **R47** When an exercise that existed before the starter set is removed, every workout entry
   referring to it is removed with it.
 - **R48** Removing a workout entry under R47 discards the logged weights and reps recorded
@@ -155,8 +155,8 @@ trainer's private exercises.
 - **R50** The removal under R46 happens once, when the starter set arrives, so an exercise a
   trainer creates afterward is never removed this way while a workout uses it (R29).
 - **R51** An exercise predating the starter set that the platform team finds to carry genuine
-  trainer or client history rather than test data is set aside before the starter set arrives
-  and handled individually instead of being removed.
+  trainer or client history rather than test data is kept, together with every workout entry
+  and logged weight referring to it, instead of being removed.
 
 ## 5. Edge cases
 
