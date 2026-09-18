@@ -206,7 +206,7 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
 | E20 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R19 |
 | E21 | A trainer who learns another trainer's private exercise identifier attempts to change or delete it | Refused | R32, R36 |
 | E22 | A trainer removes every muscle group from an exercise they created | Refused, the same as creating one without a group | R31, R40 |
-| E23 | An exercise kept under R56 is used by workouts of more than one trainer | Each of those trainers receives their own private copy; every workout entry, with the weights and reps logged against it, follows the copy of the trainer whose plan it belongs to, while each session's written feedback stays with that session | R57, R58, R54 |
+| E23 | An exercise kept under R56 is used by workouts of more than one trainer | Each of those trainers receives their own private copy; every workout entry, with the weights and reps logged against it, follows the copy of the trainer whose plan it belongs to, while each session's written feedback stays with that session, since nothing about the session itself changes | R56, R57, R58 |
 
 ## 6. Out of scope
 
