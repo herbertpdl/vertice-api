@@ -97,8 +97,8 @@ trainer's private exercises.
   their trainer created.
 - **R20** A client's attempt to browse the catalog is refused, not merely unoffered by the app.
 - **R21** A client's attempt to fetch an exercise by identifier outside their own workouts is
-  refused, not merely unoffered by the app, so a private exercise of another trainer's client
-  cannot be reached by guessing its identifier.
+  refused, not merely unoffered by the app, so another trainer's private exercise cannot be
+  reached by guessing its identifier.
 - **R22** The platform team cannot see an exercise created by a trainer.
 
 ### Changing exercises
