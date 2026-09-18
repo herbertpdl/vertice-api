@@ -21,7 +21,8 @@ more than one muscle group.
 ## 2. Actors
 
 **Trainer.** Sees the whole starter set and their own exercises. Can create their own exercises,
-rename them, and delete them while no workout uses them. Can filter the list by muscle group and
+rename them, change their muscle groups, description and video link, and delete them while no
+workout uses them. Can filter the list by muscle group and
 search it by name. Cannot change or delete any starter-set exercise, cannot see another
 trainer's exercises, and cannot add, rename, or remove a muscle group.
 
@@ -70,7 +71,7 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
   "Bird dog", or "Assault bike").
 - **R7** Every starter-set exercise name states the equipment used, where the equipment
   distinguishes it from another exercise.
-- **R8** At launch, before any change the platform team makes under R35, the starter set covers
+- **R8** At launch, before any change the platform team makes under R36, the starter set covers
   exactly these fourteen muscle groups: Peito, Costas, Ombros, Bíceps, Tríceps, Antebraço,
   Quadríceps, Posteriores de coxa, Glúteos, Panturrilhas, Abdômen, Lombar, Trapézio, Cardio.
 - **R9** Every muscle group name is written in Brazilian Portuguese.
@@ -78,7 +79,7 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
   minimum number per group.
 - **R11** An exercise that trains more than one muscle group carries every muscle group it
   trains.
-- **R12** At launch, before any addition the platform team makes under R34, the starter set is
+- **R12** At launch, before any addition the platform team makes under R35, the starter set is
   the list in section 10 of this document.
 
 ### Visibility
@@ -114,60 +115,61 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
   exercise.
 - **R27** A trainer can rename an exercise they created.
 - **R28** A trainer can change the muscle groups, description, and video link of an exercise
-  they created, provided it keeps at least one muscle group.
-- **R29** A trainer's attempt to change an exercise they did not create is refused, even when
+  they created.
+- **R29** A trainer cannot remove every muscle group from an exercise they created.
+- **R30** A trainer's attempt to change an exercise they did not create is refused, even when
   they know its identifier, the same as fetching it (R16).
-- **R30** When a trainer changes an exercise they created, the change appears in every workout
+- **R31** When a trainer changes an exercise they created, the change appears in every workout
   using it, including workouts already completed.
-- **R31** A trainer cannot delete an exercise they created while any workout uses it.
-- **R32** A trainer can delete an exercise they created when no workout uses it.
-- **R33** A trainer's attempt to delete an exercise they did not create is refused, even when
-  they know its identifier, the same as R29.
-- **R34** Only the platform team can add an exercise to the starter set.
-- **R35** Only the platform team can add, rename or remove a muscle group.
+- **R32** A trainer cannot delete an exercise they created while any workout uses it.
+- **R33** A trainer can delete an exercise they created when no workout uses it.
+- **R34** A trainer's attempt to delete an exercise they did not create is refused, even when
+  they know its identifier, the same as R30.
+- **R35** Only the platform team can add an exercise to the starter set.
+- **R36** Only the platform team can add, rename or remove a muscle group.
 
 ### Creating exercises
 
-- **R36** A trainer can create an exercise by giving it a name and at least one muscle group.
-- **R37** A trainer cannot create an exercise with no muscle group.
-- **R38** A trainer can give an exercise they create a description.
-- **R39** A trainer can give an exercise they create a video link.
-- **R40** A trainer can give an exercise they create more than one muscle group.
-- **R41** A trainer can create an exercise whose name already exists in the catalog.
+- **R37** A trainer can create an exercise by giving it a name and at least one muscle group.
+- **R38** A trainer cannot create an exercise with no muscle group.
+- **R39** A trainer can give an exercise they create a description.
+- **R40** A trainer can give an exercise they create a video link.
+- **R41** A trainer can give an exercise they create more than one muscle group.
+- **R42** A trainer can create an exercise whose name already exists in the catalog.
 
 ### Finding exercises
 
-- **R42** A trainer can narrow the exercise list to one muscle group.
-- **R43** A trainer can search the exercise list by name.
-- **R44** Narrowing to a muscle group shows every exercise visible to that trainer that carries that group.
-- **R45** Within a muscle group, the exercises the trainer created appear before the starter-set
+- **R43** A trainer can narrow the exercise list to one muscle group.
+- **R44** A trainer can search the exercise list by name.
+- **R45** Narrowing to a muscle group shows every exercise visible to that trainer that carries that group.
+- **R46** Within a muscle group, the exercises the trainer created appear before the starter-set
   exercises.
-- **R46** Within a muscle group, the starter-set exercises listed under that group in section 10
+- **R47** Within a muscle group, the starter-set exercises listed under that group in section 10
   appear in the order given there, most commonly prescribed first.
-- **R47** When an exercise is shown for one of its other groups instead (per R44), it is
+- **R48** When an exercise is shown for one of its other groups instead (per R45), it is
   included, but its position relative to the exercises listed under that group in section 10 is
   not specified.
 
 ### Exercises that predate the starter set
 
-- **R48** Every exercise that existed before the starter set is removed from the catalog when
-  the starter set arrives, unless the platform team keeps it under R53.
-- **R49** When an exercise that existed before the starter set is removed, every workout entry
+- **R49** Every exercise that existed before the starter set is removed from the catalog when
+  the starter set arrives, unless the platform team keeps it under R54.
+- **R50** When an exercise that existed before the starter set is removed, every workout entry
   referring to it is removed with it.
-- **R50** Removing a workout entry under R49 discards the logged weights and reps recorded
+- **R51** Removing a workout entry under R50 discards the logged weights and reps recorded
   against that entry.
-- **R51** The session a workout entry removed under R49 belonged to keeps its own record, with
+- **R52** The session a workout entry removed under R50 belonged to keeps its own record, with
   its written feedback and its other exercises unaffected, since those aren't tied to any one
   exercise.
-- **R52** The removal under R48 happens once, when the starter set arrives, so an exercise a
-  trainer creates afterward is never removed this way while a workout uses it (R31).
-- **R53** An exercise predating the starter set that the platform team finds to carry genuine
+- **R53** The removal under R49 happens once, when the starter set arrives, so an exercise a
+  trainer creates afterward is never removed this way while a workout uses it (R32).
+- **R54** An exercise predating the starter set that the platform team finds to carry genuine
   trainer or client history rather than test data is kept, together with every workout entry
   referring to it and every weight and rep logged against those entries, instead of being
   removed.
-- **R54** An exercise kept under R53 becomes the private exercise of the trainer whose workouts
-  use it, and from then on behaves exactly like one that trainer created (R14, R27–R33).
-- **R55** Before the starter set arrives, the platform team files an exercise kept under R53
+- **R55** An exercise kept under R54 becomes the private exercise of the trainer whose workouts
+  use it, and from then on behaves exactly like one that trainer created (R14, R27–R34).
+- **R56** Before the starter set arrives, the platform team files an exercise kept under R54
   under one or more of the fourteen launch muscle groups (R8), since the group it carried until
   then is no longer offered.
 
@@ -177,26 +179,26 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
 |---|---|---|---|
 | E1 | A trainer attempts to change a starter-set exercise — renaming it, or giving it a description, a video link, or another muscle group — even though the app does not offer it | Refused, and the trainer is told the exercise belongs to the shared starter set | R24, R26 |
 | E2 | A trainer attempts to delete a starter-set exercise even though the app does not offer it | Refused, and the trainer is told the exercise belongs to the shared starter set | R25, R26 |
-| E3 | A trainer creates an exercise named "Supino reto com barra", which is already in the starter set | Allowed; both exist, and the trainer's own copy is visible only to them | R41, R14 |
-| E4 | Two trainers each create an exercise with the same name | Both exist, and each trainer sees only their own | R14, R41 |
-| E5 | A trainer deletes an exercise they created that a client has already logged weights against | Refused, because a workout uses it | R31 |
-| E6 | A trainer renames an exercise they created after a client logged weights against it | The new name appears on the past session; the logged weights are unchanged | R30 |
+| E3 | A trainer creates an exercise named "Supino reto com barra", which is already in the starter set | Allowed; both exist, and the trainer's own copy is visible only to them | R42, R14 |
+| E4 | Two trainers each create an exercise with the same name | Both exist, and each trainer sees only their own | R14, R42 |
+| E5 | A trainer deletes an exercise they created that a client has already logged weights against | Refused, because a workout uses it | R32 |
+| E6 | A trainer renames an exercise they created after a client logged weights against it | The new name appears on the past session; the logged weights are unchanged | R31 |
 | E7 | A client opens a workout containing an exercise their trainer created privately | The client sees the exercise like any other | R20 |
-| E8 | A trainer narrows the list to Lombar and sees "Levantamento terra com barra" | Expected, because that exercise carries both Costas and Lombar | R11, R44 |
-| E9 | A trainer wants a video on a starter-set exercise | Not possible; the trainer creates their own exercise with a video instead | R5, R39 |
+| E8 | A trainer narrows the list to Lombar and sees "Levantamento terra com barra" | Expected, because that exercise carries both Costas and Lombar | R11, R45 |
+| E9 | A trainer wants a video on a starter-set exercise | Not possible; the trainer creates their own exercise with a video instead | R5, R40 |
 | E10 | A trainer wants to prescribe a treadmill session | Cardio is one of the fourteen groups and has starter-set exercises | R8 |
 | E11 | A group such as Panturrilhas has far fewer than twenty exercises | Expected; the starter set is not padded to reach a count | R10 |
-| E12 | An exercise predating the starter set is used by a workout when it is removed | The workout entry referring to it is removed as well, discarding the logged weights and reps recorded against it; the session's feedback and its other exercises are unaffected | R49, R50, R51 |
-| E13 | A trainer creates an exercise without choosing a muscle group | Refused | R37 |
+| E12 | An exercise predating the starter set is used by a workout when it is removed | The workout entry referring to it is removed as well, discarding the logged weights and reps recorded against it; the session's feedback and its other exercises are unaffected | R50, R51, R52 |
+| E13 | A trainer creates an exercise without choosing a muscle group | Refused | R38 |
 | E14 | A trainer searches for a name that exists only in another trainer's exercises | Nothing is found | R15 |
-| E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R43 |
+| E15 | A trainer searches for an exercise whose group they guessed wrong | The name search finds it regardless of group | R44 |
 | E16 | A client tries to open the catalog directly, or to fetch an exercise by identifier, outside their own workouts, even though the app does not offer it | Refused | R21, R22 |
 | E17 | A trainer who learns another trainer's private exercise identifier fetches it directly, or adds it to their own workout | Refused | R16, R17 |
 | E18 | A trainer adds an exercise, whether their own or from the starter set, to a workout in another trainer's training plan | Refused | R18 |
 | E19 | A trainer clones a workout that belongs to another trainer, or clones their own workout into another trainer's training plan | Refused | R19 |
-| E20 | A trainer who learns another trainer's private exercise identifier attempts to change or delete it | Refused | R29, R33 |
-| E21 | A trainer removes every muscle group from an exercise they created | Refused, the same as creating one without a group | R28, R36 |
-| E22 | An exercise kept under R53 is used by workouts of more than one trainer | Each of those trainers receives their own private copy, and every workout entry and its logs follow the copy of the trainer whose plan it belongs to | R53, R54 |
+| E20 | A trainer who learns another trainer's private exercise identifier attempts to change or delete it | Refused | R30, R34 |
+| E21 | A trainer removes every muscle group from an exercise they created | Refused, the same as creating one without a group | R29, R38 |
+| E22 | An exercise kept under R54 is used by workouts of more than one trainer | Each of those trainers receives their own private copy, and every workout entry and its logs follow the copy of the trainer whose plan it belongs to | R54, R55 |
 
 ## 6. Out of scope
 
@@ -211,7 +213,7 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
   filter stays meaningful across the platform.
 - Sharing exercises between two trainers. Not asked for.
 - Redefining the muscle-group list after launch, and what happens to an exercise carrying a
-  group the platform team later renames or removes. R35 grants that ability; the remapping
+  group the platform team later renames or removes. R36 grants that ability; the remapping
   behavior for affected exercises is deferred until the platform team needs it.
 
 ## 7. Decisions
@@ -227,10 +229,10 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
 | A trainer creates a name that already exists | Allowed, both exist (proposed, accepted) | The catalog already tolerates near-duplicates by design, and a trainer's copy only clutters their own list |
 | Deleting an exercise already used in a workout | Refused while any workout uses it (proposed, accepted) | A client would otherwise lose an exercise from their logged history |
 | Renaming an exercise already used in a workout | Applies everywhere, past workouts included (proposed, accepted) | It is the same exercise being corrected, not a different one |
-| Can a trainer change their own exercise beyond its name? | Yes: muscle groups, description and video link, keeping at least one group (proposed in review) | A trainer can already change every part of an exercise today; ownership scopes that to their own exercises rather than removing it, and the same-exercise reasoning behind R30 applies |
+| Can a trainer change their own exercise beyond its name? | Yes: muscle groups, description and video link, keeping at least one group (proposed in review) | A trainer can already change every part of an exercise today; ownership scopes that to their own exercises rather than removing it, and the same-exercise reasoning behind R31 applies |
 | Minimum exercises per group | No minimum; only exercises a trainer would genuinely prescribe | Padding thin groups such as Antebraço with contrived variations would make the list worse, not better |
 | How are exercise names written? | Naming the equipment, for example "Supino reto com barra" (proposed, accepted) | Barbell and dumbbell versions differ in how a trainer prescribes load, and this is how they are known in a Brazilian gym |
-| Where an exercise trains two groups | It carries both, rather than being filed under one | The owner chose a list of groups per exercise over a single group; the group an exercise is listed under in section 10 only fixes its ordering there (R46), it is not the only group the exercise carries |
+| Where an exercise trains two groups | It carries both, rather than being filed under one | The owner chose a list of groups per exercise over a single group; the group an exercise is listed under in section 10 only fixes its ordering there (R47), it is not the only group the exercise carries |
 | Who maintains the starter set and the groups | The platform team only | Trainers changing either would make the shared list and the filter drift |
 | Ordering within a group | The trainer's own first, then the starter set with the most commonly prescribed first | The owner asked for the most popular exercises, and a trainer's own are few and deliberately created |
 | Where the exercise list lives | In this document, section 10 | Which exercises ship is a product decision the owner wanted to review before implementation |
@@ -256,7 +258,7 @@ carries is named beside it. An exercise appears under each of its groups when a 
 the list, so one listed here under Costas and also carrying Lombar appears under Lombar too.
 Within the group an exercise is listed under here, the order below is the order a trainer sees,
 most commonly prescribed first; when an exercise instead appears under one of its other groups,
-its position there is not specified (R47).
+its position there is not specified (R48).
 
 ### Peito
 
