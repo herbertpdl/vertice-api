@@ -213,8 +213,8 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
   considered and rejected as far beyond this feature.
 - Any surface for the platform team to manage exercises or browse trainers' private exercises.
   No such surface exists in the product.
-- Trainers creating or renaming muscle groups. The group list is fixed for trainers so the
-  filter stays meaningful across the platform.
+- Trainers creating, renaming or removing muscle groups. The group list is fixed for trainers
+  so the filter stays meaningful across the platform.
 - Sharing exercises between two trainers. Not asked for.
 - Redefining the muscle-group list after launch, and what happens to an exercise carrying a
   group the platform team later renames or removes. R36 grants that ability; the remapping
