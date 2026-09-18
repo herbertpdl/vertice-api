@@ -82,7 +82,7 @@ remove a muscle group. Has no ability to see a trainer's private exercises.
 
 - **R13** Every trainer sees every starter-set exercise.
 - **R14** In the catalog, an exercise created by a trainer is visible only to the trainer who
-  created it. R16 defines the separate exception: a client sees such an exercise inside their
+  created it. R16 defines the separate case: a client sees such an exercise inside their
   own workout.
 - **R15** A trainer cannot see an exercise created by another trainer. This is refused, not just
   absent from their list — the trainer cannot fetch it by identifier, cannot add it to a
