@@ -247,7 +247,16 @@ belongs to under the launch muscle groups. Has no ability to see a trainer's pri
 
 ## 8. Open questions
 
-None.
+Two decisions were proposed during review rather than in the interview and await the owner's
+confirmation; their rows in section 7 are marked "(proposed in review)".
+
+1. **Can a trainer change their own exercise beyond its name?** R30, R31 and E22 say yes,
+   keeping at least one group. Deferred because the interview only covered renaming. Until
+   confirmed, the spec author assumes R30 and R31 as written.
+2. **What becomes of a pre-starter exercise the platform team keeps?** R57–R59 and E23 give it
+   to the trainer whose workouts use it, one copy per trainer, filed under the launch groups.
+   Deferred because the interview treated every pre-starter exercise as test data. Until
+   confirmed, the spec author assumes R57–R59 as written.
 
 ## 9. Technical constraints (stated by the owner)
 
