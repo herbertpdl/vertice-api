@@ -169,7 +169,7 @@ trainer's private exercises.
 | E5 | A trainer deletes an exercise they created that a client has already logged weights against | Refused, because a workout uses it | R29 |
 | E6 | A trainer renames an exercise they created after a client logged weights against it | The new name appears on the past session; the logged weights are unchanged | R28 |
 | E7 | A client opens a workout containing an exercise their trainer created privately | The client sees the exercise like any other | R19 |
-| E8 | A trainer narrows the list to Lombar and sees levantamento terra | Expected, because that exercise carries both Costas and Lombar | R11, R42 |
+| E8 | A trainer narrows the list to Lombar and sees "Levantamento terra com barra" | Expected, because that exercise carries both Costas and Lombar | R11, R42 |
 | E9 | A trainer wants a video on a starter-set exercise | Not possible; the trainer creates their own exercise with a video instead | R5, R37 |
 | E10 | A trainer wants to prescribe a treadmill session | Cardio is one of the fourteen groups and has starter-set exercises | R8 |
 | E11 | A group such as Panturrilhas has far fewer than twenty exercises | Expected; the starter set is not padded to reach a count | R10 |
