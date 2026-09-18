@@ -152,8 +152,8 @@ trainer's private exercises.
 - **R49** The session a workout entry removed under R47 belonged to keeps its own record, with
   its written feedback and its other exercises unaffected, since those aren't tied to any one
   exercise.
-- **R50** The removal under R46 happens once, when the starter set arrives, and does not weaken
-  R29 for any exercise a trainer creates afterward.
+- **R50** The removal under R46 happens once, when the starter set arrives, so an exercise a
+  trainer creates afterward is never removed this way while a workout uses it (R29).
 - **R51** An exercise predating the starter set that the platform team finds to carry genuine
   trainer or client history rather than test data is set aside before the starter set arrives
   and handled individually instead of being removed.
