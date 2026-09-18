@@ -109,7 +109,7 @@ trainer's private exercises.
   exercise.
 - **R26** A trainer can rename an exercise they created.
 - **R27** A trainer's attempt to rename an exercise they did not create is refused, even when
-  they know its identifier, the same as fetching or cloning it (R16, R18).
+  they know its identifier, the same as fetching it (R16).
 - **R28** When a trainer renames an exercise they created, the new name appears in every workout
   using it, including workouts already completed.
 - **R29** A trainer cannot delete an exercise they created while any workout uses it.
