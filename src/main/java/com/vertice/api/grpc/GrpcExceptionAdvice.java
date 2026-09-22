@@ -2,7 +2,9 @@ package com.vertice.api.grpc;
 
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.exception.UnauthenticatedException;
 import com.vertice.api.common.exception.WorkoutExerciseHasRecordedDataException;
 import io.grpc.Status;
 import jakarta.validation.ConstraintViolationException;
@@ -39,6 +41,16 @@ public class GrpcExceptionAdvice {
     @GrpcExceptionHandler(WorkoutExerciseHasRecordedDataException.class)
     public Status handleWorkoutExerciseHasRecordedData(WorkoutExerciseHasRecordedDataException ex) {
         return Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(UnauthenticatedException.class)
+    public Status handleUnauthenticated(UnauthenticatedException ex) {
+        return Status.UNAUTHENTICATED.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(PermissionDeniedException.class)
+    public Status handlePermissionDenied(PermissionDeniedException ex) {
+        return Status.PERMISSION_DENIED.withDescription(ex.getMessage());
     }
 
     @GrpcExceptionHandler(ConstraintViolationException.class)
