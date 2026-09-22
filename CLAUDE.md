@@ -42,17 +42,23 @@ plan/session/        WorkoutLog, SetLog, WorkoutFeedback (client-facing logging/
 trainerclient/        Trainer↔client relationship (join between two Users)
 user/                  User (trainer/client, unified by Role)
 grpc/                  Cross-cutting: exception mapping, health, request validation, proto conversion helpers
-config/                Spring Security wiring (JWT resource server, local-profile auth bypass)
+config/                Spring Security wiring (shared-secret JWT decoder, local-profile auth bypass)
 common/                Shared exceptions and Bean Validation constraints (e.g. @Cpf)
 ```
 
 ### Authentication: JWT, wired separately for REST and gRPC
 
-Auth is JWT via OAuth2 resource server (`spring.security.oauth2.resourceserver.jwt.issuer-uri`),
-flat "any authenticated caller may do anything" — no role/scope differentiation yet. Under the
-`local` profile it's disabled entirely (`config/LocalSecurityConfig` for REST,
-`grpc/GrpcSecurityConfig`'s `local`-profile bean for gRPC) so endpoints can be exercised manually
-without a running JWT issuer. The two transports need separate wiring: Spring Boot's default gRPC
+Auth is JWT via OAuth2 resource server: the caller (vertice-bff) sends its own HS256 JWT as
+`authorization: Bearer <token>`, verified with the shared secret `vertice.jwt.secret`
+(`JWT_SECRET`, same value on both sides) by `config/HmacJwtDecoder` — a hand-rolled decoder
+because Nimbus refuses secrets under 32 bytes and the local defaults are shorter;
+`config/JwtSecretGuard` refuses to boot on such a secret outside `local`. Non-local requires a
+valid token on every call. Under the `local` profile REST auth is disabled entirely
+(`config/LocalSecurityConfig`), and gRPC (`grpc/GrpcSecurityConfig`'s `local`-profile bean)
+permits every call but still decodes a bearer token when one is present — an absent token is
+anonymous, a present but invalid one is `UNAUTHENTICATED`. Tests mint tokens with
+`src/test/.../grpc/TestJwts`. Non-local test contexts must set a ≥32-byte `vertice.jwt.secret`.
+The two transports need separate wiring: Spring Boot's default gRPC
 OAuth2 auto-config is `@ConditionalOnMissingBean(AuthenticationProcessInterceptor.class)`, so
 `GrpcSecurityConfig` defining its own bean is what makes the local-profile bypass exist for gRPC
 at all — it doesn't inherit anything from the REST-side `SecurityConfig`/`LocalSecurityConfig`.
