@@ -1,6 +1,7 @@
 package com.vertice.api.plan.exercise;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.common.exception.ExerciseInUseException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.DeleteExerciseRequest;
@@ -142,6 +143,18 @@ class ExerciseControllerTest {
 
         assertPermissionDenied(() -> stub.deleteExercise(DeleteExerciseRequest.newBuilder().setId(6L).build()),
                 "You do not have access to exercise 6");
+    }
+
+    @Test
+    void deleteExercise_inUse_failedPreconditionWithMessage() {
+        doThrow(new ExerciseInUseException(7L)).when(exerciseService).deleteExercise(any(), eq(7L));
+
+        assertThatThrownBy(() -> stub.deleteExercise(DeleteExerciseRequest.newBuilder().setId(7L).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("Exercise 7 is used by a workout and cannot be deleted");
+                });
     }
 
     @Test

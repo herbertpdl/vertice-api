@@ -1,5 +1,6 @@
 package com.vertice.api.plan.exercise;
 
+import com.vertice.api.common.exception.ExerciseInUseException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
@@ -88,6 +89,10 @@ public class ExerciseService {
     public void deleteExercise(CallerIdentity caller, Long id) {
         caller.requireRole("delete exercises", Role.TRAINER);
         Exercise exercise = findOwnedOrThrow(caller, id, "deleted");
+        // Checked up front so the workout_exercises FK never surfaces as a raw UNKNOWN error.
+        if (workoutExerciseRepository.existsByExerciseId(id)) {
+            throw new ExerciseInUseException(id);
+        }
         exerciseRepository.delete(exercise);
     }
 
