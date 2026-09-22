@@ -29,6 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -167,7 +169,7 @@ class ExerciseServiceTest {
 
     @Test
     void listExercises_clientRefused() {
-        assertThatThrownBy(() -> service.listExercises(CLIENT))
+        assertThatThrownBy(() -> service.listExercises(CLIENT, 0, ""))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessage("Role CLIENT is not allowed to list exercises");
         verifyNoInteractions(exerciseRepository);
@@ -175,13 +177,42 @@ class ExerciseServiceTest {
 
     @Test
     void listExercises_trainerPassesOwnId_adminPassesOwnId() {
-        when(exerciseRepository.findByOwnerIdIsNullOrOwnerId(any())).thenReturn(List.of());
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString())).thenReturn(List.of());
 
-        service.listExercises(TRAINER);
-        service.listExercises(ADMIN);
+        service.listExercises(TRAINER, 0, "");
+        service.listExercises(ADMIN, 0, "");
 
-        verify(exerciseRepository).findByOwnerIdIsNullOrOwnerId(TRAINER.userId());
-        verify(exerciseRepository).findByOwnerIdIsNullOrOwnerId(ADMIN.userId());
+        verify(exerciseRepository).findVisible(TRAINER.userId(), 0, "");
+        verify(exerciseRepository).findVisible(ADMIN.userId(), 0, "");
+    }
+
+    @Test
+    void listExercises_unknownGroup_notFound() {
+        when(muscleGroupRepository.existsById(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.listExercises(TRAINER, 99L, ""))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("MuscleGroup with id 99 not found");
+        verifyNoInteractions(exerciseRepository);
+    }
+
+    @Test
+    void listExercises_escapesLikeWildcards() {
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString())).thenReturn(List.of());
+
+        service.listExercises(TRAINER, 0, "50%_a\\b");
+
+        verify(exerciseRepository).findVisible(TRAINER.userId(), 0, "50\\%\\_a\\\\b");
+    }
+
+    @Test
+    void listExercises_trimsSearch() {
+        when(muscleGroupRepository.existsById(1L)).thenReturn(true);
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString())).thenReturn(List.of());
+
+        service.listExercises(TRAINER, 1L, "  supino  ");
+
+        verify(exerciseRepository).findVisible(TRAINER.userId(), 1L, "supino");
     }
 
     // --- GetExercise ---

@@ -42,8 +42,11 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
 
     @Override
     public void listExercises(ListExercisesRequest request, StreamObserver<ListExercisesResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.require();
+        String search = request.getSearch().strip();
+        validator.validate(new ListExercisesValidation(search));
         responseObserver.onNext(ListExercisesResponse.newBuilder()
-                .addAllExercises(exerciseService.listExercises(callerIdentityResolver.require()))
+                .addAllExercises(exerciseService.listExercises(caller, request.getMuscleGroupId(), search))
                 .build());
         responseObserver.onCompleted();
     }
@@ -87,6 +90,9 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
         if (request.getMuscleGroupIdsCount() == 0) {
             throw new ConstraintViolationException("muscleGroupIds: must contain at least one muscle group", Set.of());
         }
+    }
+
+    private record ListExercisesValidation(@Size(max = 100) String search) {
     }
 
     private record ExerciseValidation(
