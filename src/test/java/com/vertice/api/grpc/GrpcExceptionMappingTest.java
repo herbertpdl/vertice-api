@@ -3,6 +3,7 @@ package com.vertice.api.grpc;
 import com.google.protobuf.Empty;
 import com.google.protobuf.StringValue;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.ExerciseInUseException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.exception.UnauthenticatedException;
@@ -103,6 +104,16 @@ class GrpcExceptionMappingTest {
     }
 
     @Test
+    void exerciseInUseException_mapsToFailedPrecondition() {
+        assertThatThrownBy(() -> trigger("in-use"))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("Exercise 3 is used by a workout and cannot be deleted");
+                });
+    }
+
+    @Test
     void unauthenticatedException_mapsToUnauthenticated() {
         assertThatThrownBy(() -> trigger("unauthenticated"))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
@@ -140,6 +151,7 @@ class GrpcExceptionMappingTest {
                     case "validation" -> validator.validate(new ValidationProbe(""));
                     case "validation-message" ->
                             throw new ConstraintViolationException("muscleGroupIds: unknown muscle group 99", Set.of());
+                    case "in-use" -> throw new ExerciseInUseException(3L);
                     case "unauthenticated" -> throw new UnauthenticatedException();
                     case "permission-denied" -> throw PermissionDeniedException.noAccess("exercise", 7L);
                     default -> { }
