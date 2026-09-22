@@ -9,12 +9,15 @@ import com.vertice.api.generated.grpc.exercise.v1.ExerciseServiceGrpc;
 import com.vertice.api.generated.grpc.exercise.v1.GetExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ListExercisesRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ListExercisesResponse;
-import com.vertice.api.generated.grpc.exercise.v1.MuscleGroup;
+import com.vertice.api.generated.grpc.exercise.v1.ListMuscleGroupsRequest;
+import com.vertice.api.generated.grpc.exercise.v1.ListMuscleGroupsResponse;
+import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
 import com.vertice.api.generated.grpc.exercise.v1.UpdateExerciseRequest;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NettyChannelBuilder;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,11 +34,15 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = {"spring.grpc.server.port=19095", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class ExerciseControllerTest {
+
+    private static final MuscleGroupResponse PEITO = MuscleGroupResponse.newBuilder().setId(1L).setName("Peito").build();
+    private static final MuscleGroupResponse QUADRICEPS = MuscleGroupResponse.newBuilder().setId(7L).setName("Quadríceps").build();
 
     @MockitoBean
     private ExerciseService exerciseService;
@@ -54,9 +62,18 @@ class ExerciseControllerTest {
     }
 
     @Test
+    void listMuscleGroups_returnsGroups() {
+        when(exerciseService.listMuscleGroups()).thenReturn(List.of(PEITO, QUADRICEPS));
+
+        ListMuscleGroupsResponse response = stub.listMuscleGroups(ListMuscleGroupsRequest.getDefaultInstance());
+
+        assertThat(response.getMuscleGroupsList()).containsExactly(PEITO, QUADRICEPS);
+    }
+
+    @Test
     void listExercises_returnsAll() {
-        ExerciseResponse exercise = ExerciseResponse.newBuilder().setId(1L).setName("Squat").setDescription("Barbell back squat").build();
-        when(exerciseService.listExercises()).thenReturn(java.util.List.of(exercise));
+        ExerciseResponse exercise = squat();
+        when(exerciseService.listExercises()).thenReturn(List.of(exercise));
 
         ListExercisesResponse response = stub.listExercises(ListExercisesRequest.newBuilder().build());
 
@@ -65,7 +82,7 @@ class ExerciseControllerTest {
 
     @Test
     void getExercise_whenExists_returnsExercise() {
-        ExerciseResponse exercise = ExerciseResponse.newBuilder().setId(1L).setName("Squat").setDescription("Barbell back squat").build();
+        ExerciseResponse exercise = squat();
         when(exerciseService.getExercise(1L)).thenReturn(exercise);
 
         ExerciseResponse response = stub.getExercise(GetExerciseRequest.newBuilder().setId(1L).build());
@@ -77,117 +94,108 @@ class ExerciseControllerTest {
     void getExercise_whenMissing_throwsNotFound() {
         when(exerciseService.getExercise(99L)).thenThrow(new ResourceNotFoundException("Exercise", 99L));
 
-        assertThatThrownBy(() -> stub.getExercise(GetExerciseRequest.newBuilder().setId(99L).build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.NOT_FOUND);
+        assertStatus(() -> stub.getExercise(GetExerciseRequest.newBuilder().setId(99L).build()), Status.Code.NOT_FOUND);
     }
 
     @Test
     void createExercise_withValidRequest_returnsCreated() {
-        ExerciseResponse created = ExerciseResponse.newBuilder().setId(1L).setName("Squat").setDescription("Barbell back squat").setMuscleGroup(MuscleGroup.LEGS).build();
+        ExerciseResponse created = squat();
         when(exerciseService.createExercise(any())).thenReturn(created);
 
-        ExerciseResponse response = stub.createExercise(ExerciseRequest.newBuilder()
-                .setName("Squat").setDescription("Barbell back squat").setMuscleGroup(MuscleGroup.LEGS).build());
+        ExerciseResponse response = stub.createExercise(squatRequest().setDescription("Barbell back squat").build());
 
         assertThat(response).isEqualTo(created);
     }
 
     @Test
     void createExercise_withBlankName_throwsInvalidArgument() {
-        assertThatThrownBy(() -> stub.createExercise(ExerciseRequest.newBuilder()
-                .setName("").setDescription("Barbell back squat").setMuscleGroup(MuscleGroup.LEGS).build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+        assertInvalidArgument(() -> stub.createExercise(squatRequest().setName("").build()), "name: must not be blank");
     }
 
     @Test
-    void createExercise_withUnsetMuscleGroup_throwsInvalidArgument() {
-        assertThatThrownBy(() -> stub.createExercise(ExerciseRequest.newBuilder()
-                .setName("Squat").setMuscleGroup(MuscleGroup.MUSCLE_GROUP_UNSPECIFIED).build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    void createExercise_nameOver255_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createExercise(squatRequest().setName("a".repeat(256)).build()),
+                "name: size must be between 0 and 255");
     }
 
     @Test
-    void createExercise_withBlankVideoUrl_isAllowed() {
-        ExerciseResponse created = ExerciseResponse.newBuilder().setId(1L).setName("Squat").setMuscleGroup(MuscleGroup.LEGS).build();
+    void createExercise_withoutMuscleGroupIds_throwsInvalidArgumentWithMessage() {
+        assertInvalidArgument(() -> stub.createExercise(ExerciseRequest.newBuilder().setName("Squat").build()),
+                "muscleGroupIds: must contain at least one muscle group");
+        verifyNoInteractions(exerciseService);
+    }
+
+    @Test
+    void createExercise_withDuplicateGroupIds_isAllowed() {
+        ExerciseResponse created = squat();
         when(exerciseService.createExercise(any())).thenReturn(created);
 
-        ExerciseResponse response = stub.createExercise(ExerciseRequest.newBuilder()
-                .setName("Squat").setMuscleGroup(MuscleGroup.LEGS).build());
+        ExerciseResponse response = stub.createExercise(squatRequest().addMuscleGroupIds(7L).addMuscleGroupIds(7L).build());
 
         assertThat(response).isEqualTo(created);
     }
 
     @Test
-    void createExercise_withValidVideoUrl_returnsCreated() {
-        ExerciseResponse created = ExerciseResponse.newBuilder().setId(1L).setName("Squat")
-                .setMuscleGroup(MuscleGroup.LEGS).setVideoUrl("https://youtube.com/watch?v=abc123").build();
+    void createExercise_withBlankVideoUrl_isAllowed() {
+        ExerciseResponse created = squat();
         when(exerciseService.createExercise(any())).thenReturn(created);
 
-        ExerciseResponse response = stub.createExercise(ExerciseRequest.newBuilder()
-                .setName("Squat").setMuscleGroup(MuscleGroup.LEGS).setVideoUrl("https://youtube.com/watch?v=abc123").build());
+        assertThat(stub.createExercise(squatRequest().build())).isEqualTo(created);
+    }
+
+    @Test
+    void createExercise_withValidVideoUrl_returnsCreated() {
+        ExerciseResponse created = squat().toBuilder().setVideoUrl("https://youtube.com/watch?v=abc123").build();
+        when(exerciseService.createExercise(any())).thenReturn(created);
+
+        ExerciseResponse response = stub.createExercise(squatRequest().setVideoUrl("https://youtube.com/watch?v=abc123").build());
 
         assertThat(response.getVideoUrl()).isEqualTo("https://youtube.com/watch?v=abc123");
     }
 
     @Test
     void createExercise_withMalformedVideoUrl_throwsInvalidArgument() {
-        assertThatThrownBy(() -> stub.createExercise(ExerciseRequest.newBuilder()
-                .setName("Squat").setMuscleGroup(MuscleGroup.LEGS).setVideoUrl("not-a-url").build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+        assertInvalidArgument(() -> stub.createExercise(squatRequest().setVideoUrl("not-a-url").build()),
+                "videoUrl: must be a valid http(s) URL");
     }
 
     @Test
     void createExercise_withNonHttpVideoUrl_throwsInvalidArgument() {
-        assertThatThrownBy(() -> stub.createExercise(ExerciseRequest.newBuilder()
-                .setName("Squat").setMuscleGroup(MuscleGroup.LEGS).setVideoUrl("ftp://example.com/video.mp4").build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+        assertInvalidArgument(() -> stub.createExercise(squatRequest().setVideoUrl("ftp://example.com/video.mp4").build()),
+                "videoUrl: must be a valid http(s) URL");
     }
 
     @Test
     void updateExercise_whenExists_returnsUpdated() {
-        ExerciseResponse updated = ExerciseResponse.newBuilder().setId(1L).setName("New Name").setDescription("New description").setMuscleGroup(MuscleGroup.BACK).build();
+        ExerciseResponse updated = squat().toBuilder().setName("New Name").build();
         when(exerciseService.updateExercise(eq(1L), any())).thenReturn(updated);
 
         ExerciseResponse response = stub.updateExercise(UpdateExerciseRequest.newBuilder()
                 .setId(1L)
-                .setExercise(ExerciseRequest.newBuilder().setName("New Name").setDescription("New description").setMuscleGroup(MuscleGroup.BACK).build())
+                .setExercise(squatRequest().setName("New Name").build())
                 .build());
 
         assertThat(response.getName()).isEqualTo("New Name");
     }
 
     @Test
-    void updateExercise_withUnsetMuscleGroup_throwsInvalidArgument() {
-        assertThatThrownBy(() -> stub.updateExercise(UpdateExerciseRequest.newBuilder()
-                .setId(1L)
-                .setExercise(ExerciseRequest.newBuilder().setName("Name").setMuscleGroup(MuscleGroup.MUSCLE_GROUP_UNSPECIFIED).build())
-                .build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    void updateExercise_withoutMuscleGroupIds_throwsInvalidArgumentWithMessage() {
+        assertInvalidArgument(() -> stub.updateExercise(UpdateExerciseRequest.newBuilder()
+                        .setId(1L)
+                        .setExercise(ExerciseRequest.newBuilder().setName("Name").build())
+                        .build()),
+                "muscleGroupIds: must contain at least one muscle group");
+        verifyNoInteractions(exerciseService);
     }
 
     @Test
     void updateExercise_whenMissing_throwsNotFound() {
         when(exerciseService.updateExercise(eq(99L), any())).thenThrow(new ResourceNotFoundException("Exercise", 99L));
 
-        assertThatThrownBy(() -> stub.updateExercise(UpdateExerciseRequest.newBuilder()
+        assertStatus(() -> stub.updateExercise(UpdateExerciseRequest.newBuilder()
                 .setId(99L)
-                .setExercise(ExerciseRequest.newBuilder().setName("Name").setMuscleGroup(MuscleGroup.LEGS).build())
-                .build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.NOT_FOUND);
+                .setExercise(squatRequest().build())
+                .build()), Status.Code.NOT_FOUND);
     }
 
     @Test
@@ -201,9 +209,31 @@ class ExerciseControllerTest {
     void deleteExercise_whenMissing_throwsNotFound() {
         doThrow(new ResourceNotFoundException("Exercise", 99L)).when(exerciseService).deleteExercise(99L);
 
-        assertThatThrownBy(() -> stub.deleteExercise(DeleteExerciseRequest.newBuilder().setId(99L).build()))
+        assertStatus(() -> stub.deleteExercise(DeleteExerciseRequest.newBuilder().setId(99L).build()), Status.Code.NOT_FOUND);
+    }
+
+    private static ExerciseResponse squat() {
+        return ExerciseResponse.newBuilder().setId(1L).setName("Squat").setDescription("Barbell back squat")
+                .addMuscleGroups(QUADRICEPS).build();
+    }
+
+    private static ExerciseRequest.Builder squatRequest() {
+        return ExerciseRequest.newBuilder().setName("Squat").addMuscleGroupIds(7L);
+    }
+
+    private static void assertStatus(ThrowingCallable call, Status.Code code) {
+        assertThatThrownBy(call)
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.NOT_FOUND);
+                .isEqualTo(code);
+    }
+
+    private static void assertInvalidArgument(ThrowingCallable call, String description) {
+        assertThatThrownBy(call)
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo(description);
+                });
     }
 }
