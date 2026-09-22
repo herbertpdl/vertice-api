@@ -53,8 +53,15 @@ public class GrpcExceptionAdvice {
         return Status.PERMISSION_DENIED.withDescription(ex.getMessage());
     }
 
+    /**
+     * Hand-thrown {@code new ConstraintViolationException("field: message", Set.of())} carries its
+     * description in the message and no violations, so fall back to the message in that case.
+     */
     @GrpcExceptionHandler(ConstraintViolationException.class)
     public Status handleValidation(ConstraintViolationException ex) {
+        if (ex.getConstraintViolations() == null || ex.getConstraintViolations().isEmpty()) {
+            return Status.INVALID_ARGUMENT.withDescription(ex.getMessage());
+        }
         String detail = ex.getConstraintViolations().stream()
                 .map(violation -> "%s: %s".formatted(violation.getPropertyPath(), violation.getMessage()))
                 .collect(Collectors.joining("; "));

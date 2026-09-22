@@ -2,114 +2,160 @@ package com.vertice.api.plan.exercise;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
-import com.vertice.api.generated.grpc.exercise.v1.MuscleGroup;
+import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
+import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ExerciseServiceTest {
 
+    private static final MuscleGroup PEITO = muscleGroup(1L, "Peito");
+    private static final MuscleGroup OMBROS = muscleGroup(3L, "Ombros");
+    private static final MuscleGroup TRICEPS = muscleGroup(5L, "Tríceps");
+
     @Mock
     private ExerciseRepository exerciseRepository;
+    @Mock
+    private MuscleGroupRepository muscleGroupRepository;
 
     private ExerciseService service;
 
     @BeforeEach
     void setUp() {
-        service = new ExerciseService(exerciseRepository, Mappers.getMapper(ExerciseMapper.class));
+        service = new ExerciseService(exerciseRepository, muscleGroupRepository, Mappers.getMapper(ExerciseMapper.class));
     }
 
     @Test
-    void createExercise_savesAndReturnsResponse() {
+    void createExercise_savesGroupsFirstIdPrimary() {
+        stubGroups(PEITO, OMBROS, TRICEPS);
         when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        ExerciseRequest request = ExerciseRequest.newBuilder()
-                .setName("Bench Press")
-                .setDescription("Barbell flat bench press")
-                .setVideoUrl("https://youtube.com/watch?v=abc123")
-                .setMuscleGroup(MuscleGroup.CHEST)
-                .build();
+        var response = service.createExercise(request("Supino", 5L, 1L, 3L));
 
-        var response = service.createExercise(request);
+        Exercise saved = captureSaved();
+        assertThat(saved.getMuscleGroups())
+                .extracting(link -> link.getMuscleGroup().getId(), ExerciseMuscleGroup::isPrimary, ExerciseMuscleGroup::getCatalogOrder)
+                .containsExactly(
+                        tuple(5L, true, null),
+                        tuple(1L, false, null),
+                        tuple(3L, false, null));
+        assertThat(saved.getMuscleGroups()).allMatch(link -> link.getExercise() == saved);
+        // Response lists the primary first, then the rest by id.
+        assertThat(response.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(5L, 1L, 3L);
+        assertThat(response.getName()).isEqualTo("Supino");
+    }
 
-        assertThat(response.getName()).isEqualTo("Bench Press");
-        assertThat(response.getDescription()).isEqualTo("Barbell flat bench press");
-        assertThat(response.getVideoUrl()).isEqualTo("https://youtube.com/watch?v=abc123");
-        assertThat(response.getMuscleGroup()).isEqualTo(MuscleGroup.CHEST);
+    @Test
+    void createExercise_deduplicatesGroupIds() {
+        stubGroups(PEITO, TRICEPS);
+        when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.createExercise(request("Supino", 1L, 5L, 1L, 5L));
+
+        assertThat(captureSaved().getMuscleGroups())
+                .extracting(link -> link.getMuscleGroup().getId())
+                .containsExactly(1L, 5L);
+    }
+
+    @Test
+    void createExercise_unknownGroup_throwsInvalidArgumentNamingId() {
+        stubGroups(PEITO);
+
+        assertThatThrownBy(() -> service.createExercise(request("Supino", 1L, 99L, 42L)))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessage("muscleGroupIds: unknown muscle group 42");
+        verify(exerciseRepository, never()).save(any());
+    }
+
+    @Test
+    void updateExercise_replacesGroups() {
+        Exercise existing = exercise(1L, "Old name");
+        existing.addMuscleGroups(List.of(PEITO, OMBROS));
+        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(existing));
+        stubGroups(TRICEPS);
+        when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.updateExercise(1L, ExerciseRequest.newBuilder()
+                .setName("New name").setDescription("New description").addMuscleGroupIds(5L).build());
+
+        assertThat(existing.getMuscleGroups())
+                .extracting(link -> link.getMuscleGroup().getId(), ExerciseMuscleGroup::isPrimary)
+                .containsExactly(tuple(5L, true));
+        assertThat(response.getName()).isEqualTo("New name");
+        assertThat(response.getDescription()).isEqualTo("New description");
+    }
+
+    @Test
+    void getExercise_starterRow_isStarterTrueGroupsPrimaryFirst() {
+        Exercise starter = exercise(1L, "Mergulho nas paralelas");
+        starter.addMuscleGroups(List.of(TRICEPS, PEITO, OMBROS));
+        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(starter));
+
+        var response = service.getExercise(1L);
+
+        assertThat(response.getIsStarter()).isTrue();
+        assertThat(response.getMuscleGroupsList())
+                .extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
+                .containsExactly(
+                        tuple(5L, "Tríceps"),
+                        tuple(1L, "Peito"),
+                        tuple(3L, "Ombros"));
+    }
+
+    @Test
+    void listMuscleGroups_returnsIdOrder() {
+        when(muscleGroupRepository.findAllByOrderByIdAsc()).thenReturn(List.of(PEITO, OMBROS, TRICEPS));
+
+        assertThat(service.listMuscleGroups())
+                .extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
+                .containsExactly(
+                        tuple(1L, "Peito"),
+                        tuple(3L, "Ombros"),
+                        tuple(5L, "Tríceps"));
     }
 
     @Test
     void getExercise_withNullVideoUrl_returnsEmptyStringNotNull() {
-        Exercise existing = new Exercise();
-        existing.setId(1L);
-        existing.setName("Squat");
+        Exercise existing = exercise(1L, "Squat");
         existing.setVideoUrl(null);
-        existing.setMuscleGroup(com.vertice.api.plan.exercise.MuscleGroup.LEGS);
-
         when(exerciseRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-        var response = service.getExercise(1L);
-
-        assertThat(response.getVideoUrl()).isEmpty();
-    }
-
-    @Test
-    void updateExercise_updatesNameAndDescription() {
-        Exercise existing = new Exercise();
-        existing.setId(1L);
-        existing.setName("Old Name");
-        existing.setDescription("Old description");
-        existing.setMuscleGroup(com.vertice.api.plan.exercise.MuscleGroup.BACK);
-
-        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        ExerciseRequest request = ExerciseRequest.newBuilder()
-                .setName("New Name")
-                .setDescription("New description")
-                .setMuscleGroup(MuscleGroup.BACK)
-                .build();
-
-        var response = service.updateExercise(1L, request);
-
-        assertThat(response.getName()).isEqualTo("New Name");
-        assertThat(response.getDescription()).isEqualTo("New description");
-        assertThat(response.getMuscleGroup()).isEqualTo(MuscleGroup.BACK);
+        assertThat(service.getExercise(1L).getVideoUrl()).isEmpty();
     }
 
     @Test
     void getExercise_withNullDescription_returnsEmptyStringNotNull() {
-        Exercise existing = new Exercise();
-        existing.setId(1L);
-        existing.setName("Squat");
+        Exercise existing = exercise(1L, "Squat");
         existing.setDescription(null);
-        existing.setMuscleGroup(com.vertice.api.plan.exercise.MuscleGroup.LEGS);
-
         when(exerciseRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-        var response = service.getExercise(1L);
-
-        assertThat(response.getDescription()).isEmpty();
+        assertThat(service.getExercise(1L).getDescription()).isEmpty();
     }
 
     @Test
     void updateExercise_throwsWhenMissing() {
         when(exerciseRepository.findById(99L)).thenReturn(Optional.empty());
 
-        ExerciseRequest request = ExerciseRequest.newBuilder().setName("Name").setMuscleGroup(MuscleGroup.CORE).build();
-
-        assertThatThrownBy(() -> service.updateExercise(99L, request))
+        assertThatThrownBy(() -> service.updateExercise(99L, request("Name", 1L)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -127,5 +173,37 @@ class ExerciseServiceTest {
 
         assertThatThrownBy(() -> service.deleteExercise(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubGroups(MuscleGroup... groups) {
+        when(muscleGroupRepository.findAllById(anyIterable())).thenAnswer(inv -> {
+            Collection<Long> ids = (Collection<Long>) inv.getArgument(0, Iterable.class);
+            return java.util.Arrays.stream(groups).filter(group -> ids.contains(group.getId())).toList();
+        });
+    }
+
+    private Exercise captureSaved() {
+        ArgumentCaptor<Exercise> captor = ArgumentCaptor.forClass(Exercise.class);
+        verify(exerciseRepository).save(captor.capture());
+        return captor.getValue();
+    }
+
+    private static ExerciseRequest request(String name, Long... groupIds) {
+        return ExerciseRequest.newBuilder().setName(name).addAllMuscleGroupIds(List.of(groupIds)).build();
+    }
+
+    private static Exercise exercise(Long id, String name) {
+        Exercise exercise = new Exercise();
+        exercise.setId(id);
+        exercise.setName(name);
+        return exercise;
+    }
+
+    private static MuscleGroup muscleGroup(Long id, String name) {
+        MuscleGroup group = new MuscleGroup();
+        group.setId(id);
+        group.setName(name);
+        return group;
     }
 }

@@ -23,8 +23,9 @@ TrainingPlan          "12-Week Strength Program" (belongs to a Trainer)
 And separately, **not nested under any of the above**:
 
 ```
-Exercise catalog (shared across every trainer, every plan, every workout):
-  "Bench Press", "Overhead Press", "Barbell Row", "Squat", ...
+Exercise catalog (a shared starter set every trainer sees, plus each trainer's private exercises;
+each exercise filed under one or more MuscleGroups, one of them primary):
+  "Supino reto com barra", "Desenvolvimento com halteres", "Remada curvada", ...
 ```
 
 ## Two axes: "when" vs. "what"
@@ -52,9 +53,9 @@ A trainer builds `TrainingPlan` "12-Week Strength Program" for a client. Its fir
 "Week 1 – Day 1: Push". In that workout, the trainer adds the catalog `Exercise` "Bench Press" as
 a `WorkoutExercise` (1st in order, 90s rest between sets), then records three `ExerciseSet` rows
 for it: a 15-rep warm-up at 40kg, then two straight sets at 12 and 10 reps with increasing weight.
-The same "Bench Press" `Exercise` row is reused, unchanged, if this or any other trainer adds it
-to a different workout in a different plan — only the `WorkoutExercise`/`ExerciseSet` rows differ
-per placement.
+The same "Bench Press" `Exercise` row is reused, unchanged, if it is added to a different workout
+in a different plan (by any trainer for a starter-set row, only by its owner for a private one) —
+only the `WorkoutExercise`/`ExerciseSet` rows differ per placement.
 
 ## Current status
 
