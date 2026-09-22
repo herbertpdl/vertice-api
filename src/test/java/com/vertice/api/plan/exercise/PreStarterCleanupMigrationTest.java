@@ -2,6 +2,8 @@ package com.vertice.api.plan.exercise;
 
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.user.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -126,12 +128,14 @@ class PreStarterCleanupMigrationTest {
     void keptExercise_readThroughService_groupsInIdOrder_notStarter() {
         runWithFixture(f -> {
             // The keep-list names Tríceps (id 5) before Peito (id 1); with no primary the API lists by id.
-            ExerciseResponse kept = exerciseService.getExercise(f.kept.exerciseId);
+            // The lowest trainer (T1) keeps the original row, so it is T1's own exercise.
+            CallerIdentity owner = new CallerIdentity(f.t1.trainerId, Role.TRAINER);
+            ExerciseResponse kept = exerciseService.getExercise(owner, f.kept.exerciseId);
             assertThat(kept.getIsStarter()).isFalse();
             assertThat(kept.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
                     .containsExactly(tuple(1L, "Peito"), tuple(5L, "Tríceps"));
 
-            assertThat(exerciseService.listExercises())
+            assertThat(exerciseService.listExercises(owner))
                     .filteredOn(exercise -> exercise.getId() == f.kept.exerciseId)
                     .singleElement()
                     .satisfies(listed -> {
