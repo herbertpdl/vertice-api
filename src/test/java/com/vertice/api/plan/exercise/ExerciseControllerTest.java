@@ -38,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -119,7 +121,7 @@ class ExerciseControllerTest {
 
     @Test
     void listExercises_clientToken_permissionDenied() {
-        when(exerciseService.listExercises(new CallerIdentity(20L, Role.CLIENT)))
+        when(exerciseService.listExercises(new CallerIdentity(20L, Role.CLIENT), 0, ""))
                 .thenThrow(PermissionDeniedException.role(Role.CLIENT, "list exercises"));
 
         assertPermissionDenied(() -> TestJwts.asCaller(anonymousStub, 20L, Role.CLIENT)
@@ -171,11 +173,27 @@ class ExerciseControllerTest {
     @Test
     void listExercises_returnsAll() {
         ExerciseResponse exercise = squat();
-        when(exerciseService.listExercises(any())).thenReturn(List.of(exercise));
+        when(exerciseService.listExercises(any(), anyLong(), anyString())).thenReturn(List.of(exercise));
 
         ListExercisesResponse response = stub.listExercises(ListExercisesRequest.newBuilder().build());
 
         assertThat(response.getExercisesList()).containsExactly(exercise);
+    }
+
+    @Test
+    void listExercises_searchOver100_invalidArgument() {
+        assertInvalidArgument(() -> stub.listExercises(ListExercisesRequest.newBuilder().setSearch("a".repeat(101)).build()),
+                "search: size must be between 0 and 100");
+        verifyNoInteractions(exerciseService);
+    }
+
+    @Test
+    void listExercises_forwardsFilterAndSearch() {
+        when(exerciseService.listExercises(any(), anyLong(), anyString())).thenReturn(List.of(squat()));
+
+        stub.listExercises(ListExercisesRequest.newBuilder().setMuscleGroupId(7L).setSearch("  agacha  ").build());
+
+        verify(exerciseService).listExercises(new CallerIdentity(TRAINER_ID, Role.TRAINER), 7L, "agacha");
     }
 
     @Test

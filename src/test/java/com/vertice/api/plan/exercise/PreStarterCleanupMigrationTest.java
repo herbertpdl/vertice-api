@@ -135,7 +135,7 @@ class PreStarterCleanupMigrationTest {
             assertThat(kept.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
                     .containsExactly(tuple(1L, "Peito"), tuple(5L, "Tríceps"));
 
-            assertThat(exerciseService.listExercises(owner))
+            assertThat(exerciseService.listExercises(owner, 0, ""))
                     .filteredOn(exercise -> exercise.getId() == f.kept.exerciseId)
                     .singleElement()
                     .satisfies(listed -> {
