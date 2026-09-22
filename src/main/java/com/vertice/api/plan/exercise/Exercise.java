@@ -1,5 +1,7 @@
 package com.vertice.api.plan.exercise;
 
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.user.Role;
 import com.vertice.api.user.User;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -53,6 +55,15 @@ public class Exercise {
 
     public boolean isStarter() {
         return owner == null;
+    }
+
+    /** Starter rows are visible to everyone; a private row only to the trainer who owns it. */
+    public boolean isVisibleTo(CallerIdentity caller) {
+        return isStarter() || isOwnedBy(caller);
+    }
+
+    public boolean isOwnedBy(CallerIdentity caller) {
+        return owner != null && caller.role() == Role.TRAINER && owner.getId().equals(caller.userId());
     }
 
     /**

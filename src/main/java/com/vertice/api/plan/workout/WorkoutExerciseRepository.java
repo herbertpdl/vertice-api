@@ -10,6 +10,9 @@ public interface WorkoutExerciseRepository extends JpaRepository<WorkoutExercise
 
     List<WorkoutExercise> findByWorkoutId(Long workoutId);
 
+    /** Whether the exercise appears in any workout of a training plan assigned to {@code clientId}. */
+    boolean existsByExerciseIdAndWorkout_TrainingPlan_Client_Id(Long exerciseId, Long clientId);
+
     /**
      * Used by {@code WorkoutService#replaceWorkoutExercises} to load the current tree in one
      * batched fetch instead of {@code cloneWorkout}'s lazy per-association walk — this path

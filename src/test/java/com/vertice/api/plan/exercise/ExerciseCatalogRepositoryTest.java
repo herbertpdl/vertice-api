@@ -4,19 +4,16 @@ import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
 import com.vertice.api.grpc.CallerIdentity;
-import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.user.Role;
 import com.vertice.api.user.User;
 import com.vertice.api.user.UserRepository;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +22,6 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
-import static org.mockito.Mockito.when;
 
 /**
  * Runs the exercise catalog's queries and migrations against real Postgres — ordering, seed
@@ -51,25 +47,27 @@ class ExerciseCatalogRepositoryTest {
     private JdbcTemplate jdbc;
     @Autowired
     private UserRepository userRepository;
-    @MockitoBean
-    private CallerIdentityResolver callerIdentityResolver;
 
     private final List<Long> createdExerciseIds = new ArrayList<>();
     private final List<Long> createdUserIds = new ArrayList<>();
-
-    @BeforeEach
-    void setUp() {
-        long unique = System.nanoTime();
-        User trainer = user("trainer-%d@vertice.test".formatted(unique), "%011d".formatted(unique % 100_000_000_000L));
-        trainer = userRepository.save(trainer);
-        createdUserIds.add(trainer.getId());
-        when(callerIdentityResolver.require()).thenReturn(new CallerIdentity(trainer.getId(), Role.TRAINER));
-    }
 
     @AfterEach
     void tearDown() {
         exerciseRepository.deleteAllById(createdExerciseIds);
         userRepository.deleteAllById(createdUserIds);
+    }
+
+    private CallerIdentity newTrainer(String name) {
+        String unique = String.valueOf(System.nanoTime());
+        User user = new User();
+        user.setName(name);
+        user.setEmail(name.toLowerCase() + "-" + unique + "@example.com");
+        user.setCpf(unique.substring(unique.length() - 11));
+        user.setPasswordHash("hash");
+        user.setRole(Role.TRAINER);
+        user = userRepository.save(user);
+        createdUserIds.add(user.getId());
+        return new CallerIdentity(user.getId(), Role.TRAINER);
     }
 
     private int count(String sql) {
@@ -158,13 +156,29 @@ class ExerciseCatalogRepositoryTest {
     }
 
     @Test
+    void findByOwnerIdIsNullOrOwnerId_returnsStarterAndOwnOnly() {
+        CallerIdentity trainer = newTrainer("Trainer");
+        CallerIdentity other = newTrainer("Other");
+        Long own = exerciseService.createExercise(trainer, ExerciseRequest.newBuilder()
+                .setName("Own exercise").addMuscleGroupIds(1L).build()).getId();
+        Long theirs = exerciseService.createExercise(other, ExerciseRequest.newBuilder()
+                .setName("Their exercise").addMuscleGroupIds(1L).build()).getId();
+        createdExerciseIds.addAll(List.of(own, theirs));
+
+        List<Exercise> visible = exerciseRepository.findByOwnerIdIsNullOrOwnerId(trainer.userId());
+
+        assertThat(visible).hasSize(200).extracting(Exercise::getId).contains(own).doesNotContain(theirs);
+    }
+
+    @Test
     void createExercise_groupsSentOutOfOrder_comeBackByIdWithNoPrimary() {
-        ExerciseResponse created = exerciseService.createExercise(ExerciseRequest.newBuilder()
+        CallerIdentity trainer = newTrainer("Trainer");
+        ExerciseResponse created = exerciseService.createExercise(trainer, ExerciseRequest.newBuilder()
                 .setName("Test exercise").addMuscleGroupIds(5L).addMuscleGroupIds(2L).build());
         createdExerciseIds.add(created.getId());
 
         assertThat(created.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(2L, 5L);
-        assertThat(exerciseService.getExercise(created.getId()).getMuscleGroupsList())
+        assertThat(exerciseService.getExercise(trainer, created.getId()).getMuscleGroupsList())
                 .extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
                 .containsExactly(tuple(2L, "Costas"), tuple(5L, "Tríceps"));
         assertThat(storedLinks(created.getId()))
@@ -173,12 +187,13 @@ class ExerciseCatalogRepositoryTest {
 
     @Test
     void updateExercise_withOverlappingGroups_replacesLinksWithNoPrimary() {
-        ExerciseResponse created = exerciseService.createExercise(ExerciseRequest.newBuilder()
+        CallerIdentity trainer = newTrainer("Trainer");
+        ExerciseResponse created = exerciseService.createExercise(trainer, ExerciseRequest.newBuilder()
                 .setName("Test exercise").addMuscleGroupIds(1L).addMuscleGroupIds(3L).build());
         createdExerciseIds.add(created.getId());
 
         // Several non-primary links on one exercise never collide with the one-primary partial index.
-        ExerciseResponse updated = exerciseService.updateExercise(created.getId(), ExerciseRequest.newBuilder()
+        ExerciseResponse updated = exerciseService.updateExercise(trainer, created.getId(), ExerciseRequest.newBuilder()
                 .setName("Test exercise").addMuscleGroupIds(3L).addMuscleGroupIds(1L).addMuscleGroupIds(5L).build());
 
         assertThat(updated.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(1L, 3L, 5L);
@@ -188,7 +203,7 @@ class ExerciseCatalogRepositoryTest {
 
     @Test
     void onePrimaryIndex_stillRejectsASecondPrimary() {
-        ExerciseResponse created = exerciseService.createExercise(ExerciseRequest.newBuilder()
+        ExerciseResponse created = exerciseService.createExercise(newTrainer("Trainer"), ExerciseRequest.newBuilder()
                 .setName("Test exercise").addMuscleGroupIds(1L).addMuscleGroupIds(3L).build());
         createdExerciseIds.add(created.getId());
         jdbc.update("UPDATE exercise_muscle_groups SET is_primary = TRUE WHERE exercise_id = ? AND muscle_group_id = 1",
@@ -208,16 +223,5 @@ class ExerciseCatalogRepositoryTest {
                 WHERE exercise_id = ?
                 ORDER BY muscle_group_id
                 """, (rs, i) -> tuple(rs.getLong(1), rs.getBoolean(2), rs.getObject(3)), exerciseId);
-    }
-
-    private static User user(String email, String cpf) {
-        User user = new User();
-        user.setName("Trainer");
-        user.setEmail(email);
-        user.setCpf(cpf);
-        user.setPasswordHash("hash");
-        user.setCref("12345");
-        user.setRole(Role.TRAINER);
-        return user;
     }
 }
