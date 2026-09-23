@@ -1,5 +1,7 @@
 package com.vertice.api.plan.exercise;
 
+import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
+import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,6 +44,8 @@ class PreStarterCleanupMigrationTest {
     private JdbcTemplate jdbc;
     @Autowired
     private PlatformTransactionManager transactionManager;
+    @Autowired
+    private ExerciseService exerciseService;
 
     @Test
     void unkeptExercise_removedWithEntriesSetsAndLogs() {
@@ -100,7 +104,7 @@ class PreStarterCleanupMigrationTest {
     }
 
     @Test
-    void keptExerciseGroups_filedFromKeepList_primaryFlagged_orderNull() {
+    void keptExerciseGroups_filedFromKeepList_noPrimary_orderNull() {
         runWithFixture(f -> {
             Long copyId = jdbc.queryForObject(
                     "SELECT id FROM exercises WHERE name = 'X-kept' AND owner_id = ?", Long.class, f.t2.trainerId);
@@ -113,8 +117,27 @@ class PreStarterCleanupMigrationTest {
                                 ORDER BY mg.id
                                 """,
                         (rs, i) -> tuple(rs.getString(1), rs.getBoolean(2), rs.getObject(3)), exerciseId))
-                        .containsExactly(tuple("Peito", true, null), tuple("Tríceps", false, null));
+                        .containsExactly(tuple("Peito", false, null), tuple("Tríceps", false, null));
             }
+        });
+    }
+
+    @Test
+    void keptExercise_readThroughService_groupsInIdOrder_notStarter() {
+        runWithFixture(f -> {
+            // The keep-list names Tríceps (id 5) before Peito (id 1); with no primary the API lists by id.
+            ExerciseResponse kept = exerciseService.getExercise(f.kept.exerciseId);
+            assertThat(kept.getIsStarter()).isFalse();
+            assertThat(kept.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
+                    .containsExactly(tuple(1L, "Peito"), tuple(5L, "Tríceps"));
+
+            assertThat(exerciseService.listExercises())
+                    .filteredOn(exercise -> exercise.getId() == f.kept.exerciseId)
+                    .singleElement()
+                    .satisfies(listed -> {
+                        assertThat(listed.getIsStarter()).isFalse();
+                        assertThat(listed.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(1L, 5L);
+                    });
         });
     }
 
@@ -131,10 +154,23 @@ class PreStarterCleanupMigrationTest {
             status.setRollbackOnly();
             Fixture f = seedFixture();
             jdbc.execute(migrationWithKeepList(
-                    "INSERT INTO keep_list VALUES (%d, 'Chest', true);\n".formatted(f.kept.exerciseId)));
+                    "INSERT INTO keep_list VALUES (%d, 'Chest');\n".formatted(f.kept.exerciseId)));
         }))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("unknown muscle group name \"Chest\"");
+    }
+
+    @Test
+    void unknownExerciseIdInKeepList_failsMigration() {
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+
+        assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
+            status.setRollbackOnly();
+            seedFixture();
+            jdbc.execute(migrationWithKeepList("INSERT INTO keep_list VALUES (-1, 'Peito');\n"));
+        }))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("unknown exercise id -1");
     }
 
     @Test
@@ -161,10 +197,11 @@ class PreStarterCleanupMigrationTest {
             status.setRollbackOnly();
             Fixture f = seedFixture();
             jdbc.execute(migrationWithKeepList("""
-                    INSERT INTO keep_list VALUES (%1$d, 'Peito', true);
-                    INSERT INTO keep_list VALUES (%1$d, 'Tríceps', false);
-                    INSERT INTO keep_list VALUES (%2$d, 'Costas', true);
-                    INSERT INTO keep_list VALUES (%3$d, 'Lombar', true);
+                    INSERT INTO keep_list VALUES (%1$d, 'Tríceps');
+                    INSERT INTO keep_list VALUES (%1$d, 'Peito');
+                    INSERT INTO keep_list VALUES (%1$d, 'Peito');
+                    INSERT INTO keep_list VALUES (%2$d, 'Costas');
+                    INSERT INTO keep_list VALUES (%3$d, 'Lombar');
                     """.formatted(f.kept.exerciseId, f.solo.exerciseId, f.idleExerciseId)));
             assertions.accept(f);
         });
