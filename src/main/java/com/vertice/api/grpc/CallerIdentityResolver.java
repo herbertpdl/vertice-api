@@ -36,7 +36,13 @@ public class CallerIdentityResolver {
         return switch (claim) {
             // JSON numbers may surface as Long or Double depending on the parser; accept whole numbers only.
             case Number value when value.doubleValue() == value.longValue() -> Optional.of(value.longValue());
-            case String value when value.matches("\\d+") -> Optional.of(Long.parseLong(value));
+            case String value when value.matches("\\d+") -> {
+                try {
+                    yield Optional.of(Long.parseLong(value));
+                } catch (NumberFormatException ex) {
+                    yield Optional.empty();
+                }
+            }
             case null, default -> Optional.empty();
         };
     }
