@@ -9,16 +9,18 @@
 -- Runs after V22 (muscle groups exist) and before V24 (the starter seed), so every row in
 -- `exercises` at this point is pre-starter; that is how they are identified.
 
--- 1. The keep-list: one row per (kept exercise, launch group), exactly one is_primary per id.
+-- 1. The keep-list: one row per (kept exercise, launch group name). A kept exercise becomes a
+--    trainer's own exercise (R57), so, like every trainer-created exercise, none of its groups is
+--    primary. A repeated (exercise, group) row is collapsed. Group names must match
+--    muscle_groups.name exactly.
 --    Shipped empty: every pre-starter row is test data (assessment Q2).
 CREATE TEMP TABLE keep_list (
     exercise_id        BIGINT      NOT NULL,
-    muscle_group_name  VARCHAR(50) NOT NULL,
-    is_primary         BOOLEAN     NOT NULL
+    muscle_group_name  VARCHAR(50) NOT NULL
 ) ON COMMIT DROP;
 
 -- @keep-list
--- Example: INSERT INTO keep_list VALUES (42, 'Peito', true);
+-- Example: INSERT INTO keep_list VALUES (42, 'Peito');
 
 DO $$
 DECLARE
@@ -40,15 +42,6 @@ BEGIN
     LIMIT 1;
     IF offending IS NOT NULL THEN
         RAISE EXCEPTION 'V23 keep_list: unknown exercise id %', offending;
-    END IF;
-
-    SELECT exercise_id::TEXT INTO offending
-    FROM keep_list
-    GROUP BY exercise_id
-    HAVING count(*) FILTER (WHERE is_primary) <> 1
-    LIMIT 1;
-    IF offending IS NOT NULL THEN
-        RAISE EXCEPTION 'V23 keep_list: exercise % must have exactly one primary group', offending;
     END IF;
 END $$;
 
@@ -104,10 +97,10 @@ BEGIN
     END LOOP;
 END $$;
 
--- 4. Groups for kept rows and their copies (R59). catalog_order stays NULL: only starter rows are
---    ordered (R49).
+-- 4. Groups for kept rows and their copies (R59). Never primary and never ordered: only starter
+--    rows have a primary group and a catalog order (R49).
 INSERT INTO exercise_muscle_groups (exercise_id, muscle_group_id, is_primary, catalog_order)
-SELECT e.id, mg.id, k.is_primary, NULL
+SELECT DISTINCT e.id, mg.id, FALSE, NULL::INTEGER
 FROM keep_list k
 JOIN muscle_groups mg ON mg.name = k.muscle_group_name
 JOIN exercises e ON e.id = k.exercise_id
