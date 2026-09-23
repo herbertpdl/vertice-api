@@ -38,7 +38,8 @@ message ExerciseResponse {
   string name = 2;
   string description = 3;
   string video_url = 4;
-  // Primary group first, then the rest by id.
+  // Primary group first (starter exercises only), then the rest by id. Trainer-created exercises
+  // have no primary group, so theirs come out in id order.
   repeated MuscleGroupResponse muscle_groups = 6;
   // True for the shared starter set, which cannot be changed or deleted.
   bool is_starter = 7;
@@ -51,7 +52,7 @@ message ExerciseRequest {
   string name = 1;
   string description = 2;
   string video_url = 3;
-  // At least one; duplicates are collapsed; the first id becomes the primary group.
+  // At least one; duplicates are collapsed. None becomes a primary group.
   repeated int64 muscle_group_ids = 5;
 }
 

@@ -45,7 +45,7 @@ class ExerciseServiceTest {
     }
 
     @Test
-    void createExercise_savesGroupsFirstIdPrimary() {
+    void createExercise_savesGroupsInRequestOrderWithoutPrimary() {
         stubGroups(PEITO, OMBROS, TRICEPS);
         when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -55,12 +55,12 @@ class ExerciseServiceTest {
         assertThat(saved.getMuscleGroups())
                 .extracting(link -> link.getMuscleGroup().getId(), ExerciseMuscleGroup::isPrimary, ExerciseMuscleGroup::getCatalogOrder)
                 .containsExactly(
-                        tuple(5L, true, null),
+                        tuple(5L, false, null),
                         tuple(1L, false, null),
                         tuple(3L, false, null));
         assertThat(saved.getMuscleGroups()).allMatch(link -> link.getExercise() == saved);
-        // Response lists the primary first, then the rest by id.
-        assertThat(response.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(5L, 1L, 3L);
+        // No primary, so the response lists the groups by id.
+        assertThat(response.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(1L, 3L, 5L);
         assertThat(response.getName()).isEqualTo("Supino");
     }
 
@@ -87,19 +87,20 @@ class ExerciseServiceTest {
     }
 
     @Test
-    void updateExercise_replacesGroups() {
+    void updateExercise_replacesGroupsWithoutPrimary() {
         Exercise existing = exercise(1L, "Old name");
         existing.addMuscleGroups(List.of(PEITO, OMBROS));
         when(exerciseRepository.findById(1L)).thenReturn(Optional.of(existing));
-        stubGroups(TRICEPS);
+        stubGroups(OMBROS, TRICEPS);
         when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = service.updateExercise(1L, ExerciseRequest.newBuilder()
-                .setName("New name").setDescription("New description").addMuscleGroupIds(5L).build());
+                .setName("New name").setDescription("New description").addMuscleGroupIds(5L).addMuscleGroupIds(3L).build());
 
         assertThat(existing.getMuscleGroups())
-                .extracting(link -> link.getMuscleGroup().getId(), ExerciseMuscleGroup::isPrimary)
-                .containsExactly(tuple(5L, true));
+                .extracting(link -> link.getMuscleGroup().getId(), ExerciseMuscleGroup::isPrimary, ExerciseMuscleGroup::getCatalogOrder)
+                .containsExactly(tuple(5L, false, null), tuple(3L, false, null));
+        assertThat(response.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(3L, 5L);
         assertThat(response.getName()).isEqualTo("New name");
         assertThat(response.getDescription()).isEqualTo("New description");
     }
@@ -107,7 +108,7 @@ class ExerciseServiceTest {
     @Test
     void getExercise_starterRow_isStarterTrueGroupsPrimaryFirst() {
         Exercise starter = exercise(1L, "Mergulho nas paralelas");
-        starter.addMuscleGroups(List.of(TRICEPS, PEITO, OMBROS));
+        addStarterLinks(starter, TRICEPS, 4, PEITO, OMBROS);
         when(exerciseRepository.findById(1L)).thenReturn(Optional.of(starter));
 
         var response = service.getExercise(1L);
@@ -187,6 +188,23 @@ class ExerciseServiceTest {
         ArgumentCaptor<Exercise> captor = ArgumentCaptor.forClass(Exercise.class);
         verify(exerciseRepository).save(captor.capture());
         return captor.getValue();
+    }
+
+    /** Links shaped like V24's: one primary with a catalog order, the rest secondary. */
+    private static void addStarterLinks(Exercise exercise, MuscleGroup primary, int catalogOrder, MuscleGroup... secondary) {
+        exercise.getMuscleGroups().add(link(exercise, primary, true, catalogOrder));
+        for (MuscleGroup group : secondary) {
+            exercise.getMuscleGroups().add(link(exercise, group, false, null));
+        }
+    }
+
+    private static ExerciseMuscleGroup link(Exercise exercise, MuscleGroup group, boolean primary, Integer catalogOrder) {
+        ExerciseMuscleGroup link = new ExerciseMuscleGroup();
+        link.setExercise(exercise);
+        link.setMuscleGroup(group);
+        link.setPrimary(primary);
+        link.setCatalogOrder(catalogOrder);
+        return link;
     }
 
     private static ExerciseRequest request(String name, Long... groupIds) {

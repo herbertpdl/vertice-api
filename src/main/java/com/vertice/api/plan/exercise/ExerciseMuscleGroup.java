@@ -14,9 +14,9 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 /**
- * Files an {@link Exercise} under a {@link MuscleGroup}. Exactly one link per exercise is primary
- * (the group it is listed under); {@code catalogOrder} is its position there and is only set for
- * starter-set rows.
+ * Files an {@link Exercise} under a {@link MuscleGroup}. A starter-set exercise has exactly one
+ * primary link (the group it is listed under), whose {@code catalogOrder} is its position there.
+ * Links on trainer-created exercises are never primary and carry no order.
  */
 @Data
 @Entity
