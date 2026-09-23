@@ -3,6 +3,11 @@ package com.vertice.api.plan.exercise;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.grpc.CallerIdentityResolver;
+import com.vertice.api.user.Role;
+import com.vertice.api.user.User;
+import com.vertice.api.user.UserRepository;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,16 +41,22 @@ class ExerciseServiceTest {
     private ExerciseRepository exerciseRepository;
     @Mock
     private MuscleGroupRepository muscleGroupRepository;
+    @Mock
+    private CallerIdentityResolver callerIdentityResolver;
+    @Mock
+    private UserRepository userRepository;
 
     private ExerciseService service;
 
     @BeforeEach
     void setUp() {
-        service = new ExerciseService(exerciseRepository, muscleGroupRepository, Mappers.getMapper(ExerciseMapper.class));
+        service = new ExerciseService(
+                exerciseRepository, muscleGroupRepository, Mappers.getMapper(ExerciseMapper.class), callerIdentityResolver, userRepository);
     }
 
     @Test
     void createExercise_savesGroupsInRequestOrderWithoutPrimary() {
+        stubAuthenticatedTrainer();
         stubGroups(PEITO, OMBROS, TRICEPS);
         when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -58,6 +69,7 @@ class ExerciseServiceTest {
                         tuple(5L, false, null),
                         tuple(1L, false, null),
                         tuple(3L, false, null));
+        assertThat(saved.getOwner()).extracting(User::getId, User::getRole).containsExactly(10L, Role.TRAINER);
         assertThat(saved.getMuscleGroups()).allMatch(link -> link.getExercise() == saved);
         // No primary, so the response lists the groups by id.
         assertThat(response.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(1L, 3L, 5L);
@@ -66,6 +78,7 @@ class ExerciseServiceTest {
 
     @Test
     void createExercise_deduplicatesGroupIds() {
+        stubAuthenticatedTrainer();
         stubGroups(PEITO, TRICEPS);
         when(exerciseRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -78,11 +91,23 @@ class ExerciseServiceTest {
 
     @Test
     void createExercise_unknownGroup_throwsInvalidArgumentNamingId() {
+        stubAuthenticatedTrainer();
         stubGroups(PEITO);
 
         assertThatThrownBy(() -> service.createExercise(request("Supino", 1L, 99L, 42L)))
                 .isInstanceOf(ConstraintViolationException.class)
                 .hasMessage("muscleGroupIds: unknown muscle group 42");
+        verify(exerciseRepository, never()).save(any());
+    }
+
+    @Test
+    void createExercise_whenAuthenticatedUserIsNotTrainer_throwsNotFound() {
+        when(callerIdentityResolver.require()).thenReturn(new CallerIdentity(10L, Role.TRAINER));
+        when(userRepository.findById(10L)).thenReturn(Optional.of(user(10L, Role.CLIENT)));
+
+        assertThatThrownBy(() -> service.createExercise(request("Supino", 1L)))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Trainer with id 10 not found");
         verify(exerciseRepository, never()).save(any());
     }
 
@@ -223,5 +248,17 @@ class ExerciseServiceTest {
         group.setId(id);
         group.setName(name);
         return group;
+    }
+
+    private static User user(Long id, Role role) {
+        User user = new User();
+        user.setId(id);
+        user.setRole(role);
+        return user;
+    }
+
+    private void stubAuthenticatedTrainer() {
+        when(callerIdentityResolver.require()).thenReturn(new CallerIdentity(10L, Role.TRAINER));
+        when(userRepository.findById(10L)).thenReturn(Optional.of(user(10L, Role.TRAINER)));
     }
 }
