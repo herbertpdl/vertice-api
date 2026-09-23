@@ -3,7 +3,9 @@ package com.vertice.api.grpc;
 import com.google.protobuf.Empty;
 import com.google.protobuf.StringValue;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.exception.UnauthenticatedException;
 import io.grpc.BindableService;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
@@ -88,6 +90,26 @@ class GrpcExceptionMappingTest {
                 });
     }
 
+    @Test
+    void unauthenticatedException_mapsToUnauthenticated() {
+        assertThatThrownBy(() -> trigger("unauthenticated"))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("Caller identity required");
+                });
+    }
+
+    @Test
+    void permissionDeniedException_mapsToPermissionDenied() {
+        assertThatThrownBy(() -> trigger("permission-denied"))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.PERMISSION_DENIED);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("You do not have access to exercise 7");
+                });
+    }
+
     private Empty trigger(String selector) {
         channel = NettyChannelBuilder.forTarget("localhost:19092").usePlaintext().build();
         return ClientCalls.blockingUnaryCall(channel, TRIGGER_METHOD, CallOptions.DEFAULT,
@@ -104,6 +126,8 @@ class GrpcExceptionMappingTest {
                     case "not-found" -> throw new ResourceNotFoundException("Trainer", 1L);
                     case "duplicate" -> throw new DuplicateEmailException("a@b.com");
                     case "validation" -> validator.validate(new ValidationProbe(""));
+                    case "unauthenticated" -> throw new UnauthenticatedException();
+                    case "permission-denied" -> throw PermissionDeniedException.noAccess("exercise", 7L);
                     default -> { }
                 }
                 responseObserver.onNext(Empty.getDefaultInstance());
