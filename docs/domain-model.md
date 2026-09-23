@@ -24,7 +24,8 @@ And separately, **not nested under any of the above**:
 
 ```
 Exercise catalog (a shared starter set every trainer sees, plus each trainer's private exercises;
-each exercise filed under one or more MuscleGroups, one of them primary):
+each exercise filed under one or more MuscleGroups; a starter exercise has one primary group
+that places it in the catalog order, a trainer's own exercise has none):
   "Supino reto com barra", "Desenvolvimento com halteres", "Remada curvada", ...
 ```
 
