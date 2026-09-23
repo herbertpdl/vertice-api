@@ -56,15 +56,17 @@ public class Exercise {
     }
 
     /**
-     * Links {@code groups} in order; the first becomes the primary one. Expects the collection to
-     * be empty — on an update, clear it and flush first (see {@code ExerciseService}).
+     * Links {@code groups} as trainer-filed groups: none is primary and none has a catalog order
+     * (only starter rows seeded by V24 carry those). Expects the collection to be empty — on an
+     * update, clear it and flush first (see {@code ExerciseService}).
      */
     public void addMuscleGroups(List<MuscleGroup> groups) {
-        for (int i = 0; i < groups.size(); i++) {
+        for (MuscleGroup group : groups) {
             ExerciseMuscleGroup link = new ExerciseMuscleGroup();
             link.setExercise(this);
-            link.setMuscleGroup(groups.get(i));
-            link.setPrimary(i == 0);
+            link.setMuscleGroup(group);
+            link.setPrimary(false);
+            link.setCatalogOrder(null);
             muscleGroups.add(link);
         }
     }

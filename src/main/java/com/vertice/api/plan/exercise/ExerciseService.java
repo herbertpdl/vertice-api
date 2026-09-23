@@ -65,8 +65,8 @@ public class ExerciseService {
 
     /**
      * Hibernate flushes new inserts before orphan deletes, so re-linking a group the exercise
-     * already has would trip {@code uq_exercise_muscle_groups_exercise_group} (and moving the
-     * primary flag the one-primary index). Flushing the removal first avoids both.
+     * already has would trip {@code uq_exercise_muscle_groups_exercise_group}. Flushing the
+     * removal first avoids that.
      */
     private void replaceMuscleGroups(Exercise exercise, List<MuscleGroup> groups) {
         exercise.getMuscleGroups().clear();
@@ -80,8 +80,8 @@ public class ExerciseService {
     }
 
     /**
-     * De-duplicates {@code ids} keeping request order (the first becomes the primary group) and
-     * loads them; the lowest unknown id is reported. Emptiness is checked by the controller.
+     * De-duplicates {@code ids} keeping request order and loads them; the lowest unknown id is
+     * reported. Emptiness is checked by the controller.
      */
     private List<MuscleGroup> resolveMuscleGroups(List<Long> ids) {
         List<Long> distinctIds = ids.stream().distinct().toList();

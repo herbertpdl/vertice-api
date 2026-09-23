@@ -7,12 +7,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
@@ -35,6 +38,8 @@ class ExerciseCatalogRepositoryTest {
     private ExerciseRepository exerciseRepository;
     @Autowired
     private ExerciseService exerciseService;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private final List<Long> createdExerciseIds = new ArrayList<>();
 
@@ -53,17 +58,55 @@ class ExerciseCatalogRepositoryTest {
     }
 
     @Test
-    void updateExercise_withOverlappingGroups_replacesLinksAndMovesPrimary() {
+    void createExercise_groupsSentOutOfOrder_comeBackByIdWithNoPrimary() {
+        ExerciseResponse created = exerciseService.createExercise(ExerciseRequest.newBuilder()
+                .setName("Test exercise").addMuscleGroupIds(5L).addMuscleGroupIds(2L).build());
+        createdExerciseIds.add(created.getId());
+
+        assertThat(created.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(2L, 5L);
+        assertThat(exerciseService.getExercise(created.getId()).getMuscleGroupsList())
+                .extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
+                .containsExactly(tuple(2L, "Costas"), tuple(5L, "Tríceps"));
+        assertThat(storedLinks(created.getId()))
+                .containsExactly(tuple(2L, false, null), tuple(5L, false, null));
+    }
+
+    @Test
+    void updateExercise_withOverlappingGroups_replacesLinksWithNoPrimary() {
         ExerciseResponse created = exerciseService.createExercise(ExerciseRequest.newBuilder()
                 .setName("Test exercise").addMuscleGroupIds(1L).addMuscleGroupIds(3L).build());
         createdExerciseIds.add(created.getId());
 
+        // Several non-primary links on one exercise never collide with the one-primary partial index.
         ExerciseResponse updated = exerciseService.updateExercise(created.getId(), ExerciseRequest.newBuilder()
                 .setName("Test exercise").addMuscleGroupIds(3L).addMuscleGroupIds(1L).addMuscleGroupIds(5L).build());
 
-        assertThat(updated.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(3L, 1L, 5L);
-        assertThat(exerciseService.getExercise(created.getId()).getMuscleGroupsList())
-                .extracting(MuscleGroupResponse::getId, MuscleGroupResponse::getName)
-                .containsExactly(tuple(3L, "Ombros"), tuple(1L, "Peito"), tuple(5L, "Tríceps"));
+        assertThat(updated.getMuscleGroupsList()).extracting(MuscleGroupResponse::getId).containsExactly(1L, 3L, 5L);
+        assertThat(storedLinks(created.getId()))
+                .containsExactly(tuple(1L, false, null), tuple(3L, false, null), tuple(5L, false, null));
+    }
+
+    @Test
+    void onePrimaryIndex_stillRejectsASecondPrimary() {
+        ExerciseResponse created = exerciseService.createExercise(ExerciseRequest.newBuilder()
+                .setName("Test exercise").addMuscleGroupIds(1L).addMuscleGroupIds(3L).build());
+        createdExerciseIds.add(created.getId());
+        jdbc.update("UPDATE exercise_muscle_groups SET is_primary = TRUE WHERE exercise_id = ? AND muscle_group_id = 1",
+                created.getId());
+
+        assertThatThrownBy(() -> jdbc.update(
+                "UPDATE exercise_muscle_groups SET is_primary = TRUE WHERE exercise_id = ? AND muscle_group_id = 3",
+                created.getId()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_exercise_muscle_groups_one_primary");
+    }
+
+    private List<org.assertj.core.groups.Tuple> storedLinks(Long exerciseId) {
+        return jdbc.query("""
+                SELECT muscle_group_id, is_primary, catalog_order
+                FROM exercise_muscle_groups
+                WHERE exercise_id = ?
+                ORDER BY muscle_group_id
+                """, (rs, i) -> tuple(rs.getLong(1), rs.getBoolean(2), rs.getObject(3)), exerciseId);
     }
 }
