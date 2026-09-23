@@ -7,7 +7,8 @@ Related: `docs/prds/exercise-starter-catalog/prd.md`, `docs/specs/grpc-exercise-
 `docs/specs/clone-workout/spec.md`, `docs/specs/workout-session-logging/spec.md` (touched),
 `docs/specs/training-plan-fields/spec.md` (touched), `docs/specs/user-unification/spec.md`
 (touched), `docs/domain-model.md`
-Spec: not yet written (will be `docs/specs/exercise-starter-catalog/spec.md`)
+Spec: `docs/specs/exercise-starter-catalog/spec.md` (written after this assessment; its §0 resolves
+the Blocker and High findings below)
 
 ## 1. Summary
 
@@ -165,239 +166,364 @@ already-resolved identity across the BFF → API boundary today.
 
 ## 4. Findings by dimension
 
+Each finding has an id, a severity, and the four parts What, Where, Why it matters and
+Recommendation. Where a dimension (or part of one) turned up nothing, it reads "Nothing found.
+Checked: …". Four such results keep the ids they had in the first draft (F14, F18, F22, F24),
+because the spec cites them. They are not findings and carry no severity.
+
 ### PRD fit
 
-**F1** [High] — `Exercise.muscleGroup` is a single, non-repeatable enum column
-(`Exercise.java:30-32`), but the PRD requires an exercise to carry one *or more* of 14 groups
-(R3, R8, R11, R43). This isn't an incremental change to the existing field; it replaces it.
-*Recommendation:* model as two new tables (`muscle_groups`, and a join table), per the owner's own
-stated constraint (PRD §9).
+**F1** [High]
+- *What:* `Exercise.muscleGroup` is a single, non-repeatable enum column, but the PRD requires an
+  exercise to carry one *or more* of 14 groups. This is not an incremental change to the existing
+  field; it replaces it.
+- *Where:* `Exercise.java:30-32`; `V20`; R3, R8, R11, R43.
+- *Why it matters:* no amount of widening the enum gives an exercise two groups, so R11 (every
+  group it trains) and R47 (narrowing finds an exercise through any of its groups) cannot hold
+  on the current column.
+- *Recommendation:* model groups as two new tables (`muscle_groups`, and a join table between it
+  and `exercises`), per the owner's own stated constraint (PRD §9).
 
-**F2** [Info] — R33 (a rename appears in every workout, including completed ones) is already
-satisfied with zero code change: `WorkoutLogResponse`/`SetLogResponse`
-(`workout_session.proto:17-33`) carry only ids, never a denormalized exercise name. Nothing to
-build for this rule.
+**F2** [Info]
+- *What:* R33 (a rename appears in every workout, including completed ones) is already satisfied
+  with zero code change.
+- *Where:* `workout_session.proto:17-33` (`WorkoutLogResponse`/`SetLogResponse` carry only ids,
+  never a denormalized exercise name); R33, E6.
+- *Why it matters:* the spec author need not build or test anything for R33 beyond keeping it
+  that way.
+- *Recommendation:* none; the spec should not add a denormalized name anywhere.
 
-**F3** [Info] — R44/E3/E4 (duplicate names allowed, including matching the starter set) already
-hold: `exercises.name` has no `UNIQUE` constraint (`V4__create_exercises_table.sql`) and nothing
-else in the codebase derives identity from an exercise's name.
+**F3** [Info]
+- *What:* R44/E3/E4 (duplicate names allowed, including matching the starter set) already hold.
+- *Where:* `V4__create_exercises_table.sql` (`exercises.name` has no `UNIQUE` constraint); nothing
+  else in the codebase derives identity from an exercise's name; R44, E3, E4.
+- *Why it matters:* a uniqueness constraint added "for tidiness" would break R44.
+- *Recommendation:* none; the spec should not add a name constraint.
 
 ### Data model and migrations
 
-**F4** [High] — No cascade path, DB or JPA, exists from `Exercise` through
-`workout_exercises` → `exercise_sets` → `set_logs` for R51–R54's removal. None of
-`fk_workout_exercises_exercise` (`V10`), `fk_exercise_sets_workout_exercise` (`V11`), or
-`fk_set_logs_exercise_set` (`V18`) declare `ON DELETE CASCADE` — only `V21` uses `ON DELETE`
-anywhere in this codebase — and `Exercise` has no `@OneToMany` back-reference for JPA cascade to
-run through either. A plain `DELETE FROM exercises` for a row still referenced by
-`workout_exercises` fails on the FK constraint today. *Recommendation:* the removal migration must
-delete in explicit dependency order — `set_logs` → `exercise_sets` → `workout_exercises` →
-`exercises` — and must stop exactly there: `workout_feedback`/`workout_logs` key only to
-`workout_log_id` (`V18`, `V19`), so R54 (session and its feedback untouched) holds automatically
-as long as the script never reaches past `workout_exercises`.
+**F4** [High]
+- *What:* no cascade path, DB or JPA, exists from `Exercise` through `workout_exercises` →
+  `exercise_sets` → `set_logs` for the removal R51–R54 describe.
+- *Where:* `fk_workout_exercises_exercise` (`V10`), `fk_exercise_sets_workout_exercise` (`V11`),
+  `fk_set_logs_exercise_set` (`V18`), none with `ON DELETE CASCADE` (only `V21` uses `ON DELETE`
+  anywhere); `Exercise` has no `@OneToMany` back-reference for JPA cascade to run through; R51–R54.
+- *Why it matters:* a plain `DELETE FROM exercises` for a row still referenced by
+  `workout_exercises` fails on the FK constraint today, and a cascade added carelessly could
+  reach past the rows R54 says must survive.
+- *Recommendation:* the removal migration deletes in explicit dependency order (`set_logs` →
+  `exercise_sets` → `workout_exercises` → `exercises`) and stops exactly there:
+  `workout_feedback`/`workout_logs` key only to `workout_log_id` (`V18`, `V19`), so R54 (session
+  and its feedback untouched) holds automatically as long as the script never reaches past
+  `workout_exercises`.
 
-**F5** [High] — R57–R59 (an exercise kept under R56 becomes private to the trainer whose workouts
-use it; when more than one trainer's workouts use it, each gets their own copy with their own
-workout entries repointed to it) has no existing building block. Nothing in this codebase
-duplicates an `Exercise` row or repoints a `WorkoutExercise.exercise` reference from one row to
-another. *Recommendation:* a one-off migration step (per-exercise, per-trainer-using-it) that (a)
-creates one exercise row per distinct trainer found via
-`workout_exercises → workouts → training_plans → trainer_id`, (b) repoints only that trainer's
-`workout_exercises` rows to their copy, (c) sets the new ownership column, (d) assigns the launch
-groups the platform team specifies (R59).
+**F5** [High]
+- *What:* R57–R59 (an exercise kept under R56 becomes private to the trainer whose workouts use
+  it; when more than one trainer's workouts use it, each gets their own copy with their own
+  workout entries repointed to it) has no existing building block.
+- *Where:* new surface; nothing in the codebase duplicates an `Exercise` row or repoints a
+  `WorkoutExercise.exercise` reference; R56–R59, E23.
+- *Why it matters:* without a copy-and-repoint step, a kept exercise used by two trainers would
+  either stay shared (breaking R14/R15) or lose one trainer's history (breaking R56).
+- *Recommendation:* a one-off migration step, per kept exercise and per trainer using it, that
+  (a) creates one exercise row per distinct trainer found via `workout_exercises → workouts →
+  training_plans → trainer_id`, (b) repoints only that trainer's `workout_exercises` rows to
+  their copy, (c) sets the new ownership column, (d) assigns the launch groups the platform team
+  specifies (R59).
 
-**F6** [Medium] — R48/R49 (a trainer's own exercises first, then starter-set exercises in the
-exact order given in PRD §10, "most commonly prescribed first") needs a stored ordinal to
-reproduce deterministically. `WorkoutExercise.order` (`workout_exercises.exercise_order`) is a
-different concept — placement within one workout, not catalog ordering — and nothing else exists.
-*Recommendation:* an ordinal column on the join table (position within the group the exercise is
-primarily filed under), populated 1..N directly from each PRD §10 table's row order at migration
-time.
+**F6** [Medium]
+- *What:* R48/R49 (a trainer's own exercises first, then starter-set exercises in the exact
+  order given in PRD §10) needs a stored ordinal to reproduce deterministically.
+- *Where:* new surface; `WorkoutExercise.order` (`workout_exercises.exercise_order`) is a
+  different concept (placement within one workout), and nothing else exists; R48, R49.
+- *Why it matters:* without an ordinal, "most commonly prescribed first" can only be
+  approximated by name or id, and ids stop matching PRD order the first time a row is re-seeded.
+- *Recommendation:* an ordinal column on the join table (position within the group the exercise
+  is primarily filed under), populated 1..N directly from each PRD §10 table's row order at
+  migration time.
 
-**F7** [Medium] — The join table needs to distinguish the group an exercise is *filed under*
-(PRD §10's per-section listing, where R49's ordinal applies) from every *other* group it also
-carries (R50, explicitly unordered). *Recommendation:* a boolean/flag column on the join row (e.g.
-"primary"), set once at seed time.
+**F7** [Medium]
+- *What:* the join table needs to distinguish the group an exercise is *filed under* (PRD §10's
+  per-section listing, where R49's ordinal applies) from every *other* group it also carries
+  (R50, explicitly unordered).
+- *Where:* new surface (the join table of F1); R49, R50.
+- *Why it matters:* with only an ordinal and no flag, an exercise listed under Costas and also
+  carrying Lombar would take its Costas position into the Lombar list, which R50 says is
+  unspecified and PRD §10 does not define.
+- *Recommendation:* a boolean flag column on the join row (e.g. "primary"), set once at seed
+  time.
 
-**F8** [Info] — `V20`'s muscle-group backfill (name-substring heuristic, documented in its own
-comment as "throwaway local data") is superseded by R51 for any pre-starter row not explicitly
-kept under R56; the spec doesn't need to reconcile old heuristic values except for the handful of
-R56-kept rows, which the platform team refiles manually anyway (R59).
+**F8** [Info]
+- *What:* `V20`'s muscle-group backfill (a name-substring heuristic, documented in its own
+  comment as "throwaway local data") is superseded by R51 for any pre-starter row not kept.
+- *Where:* `V20`; R51, R56, R59.
+- *Why it matters:* the spec does not need to reconcile old heuristic values, except for the
+  handful of R56-kept rows, which the platform team refiles by hand (R59).
+- *Recommendation:* none; drop the old column rather than migrate its values.
 
 ### API contract and backward compatibility
 
-**F9** [High] — `ExerciseRequest.muscle_group` (field 4, singular `MuscleGroup`) must become
-multi-valued to satisfy R43. No `.proto` file in this codebase uses `reserved` yet
-(`grep -rn reserved src/main/proto` — no hits), so this is the first field this codebase actually
-breaks. *Recommendation:* add a new field (e.g. `repeated int64 muscle_group_ids = 5`) and mark
-field 4 `reserved` rather than silently retyping/renumbering it, so this sets the convention
-cleanly instead of by accident.
+**F9** [High]
+- *What:* `ExerciseRequest.muscle_group` (field 4, a single `MuscleGroup`) must become
+  multi-valued to satisfy R43. No `.proto` file in this codebase uses `reserved` yet, so this is
+  the first field this codebase actually breaks.
+- *Where:* `exercise.proto` (`ExerciseRequest` field 4, `ExerciseResponse` field 5); `grep -rn
+  reserved src/main/proto` → no hits; R39, R43.
+- *Why it matters:* retyping or renumbering field 4 in place would let an old client's bytes be
+  read as the new type, and would set the convention for every later breaking change by accident.
+- *Recommendation:* add a new repeated field for the group ids under a new field number, and
+  mark the old field number and name `reserved` rather than retyping or renumbering it, so this
+  sets the convention deliberately.
 
-**F10** [High] — `ListExercisesRequest` is an empty message today, and `ListExercises` returns
-every row unfiltered (`ExerciseService.java:20-25`, plain `findAll()`). Once ownership-scoped
-visibility (R13–R15) ships, the *same* RPC called with the *same* (unmodified) request shape now
-returns a caller-scoped subset instead of everything — a behavior break per dimension 3's own
-definition ("a list that starts filtering ... is a compatibility break for the BFF even with the
-same proto"), independent of any new fields added. *Recommendation:* confirm with the chained BFF
-assessment whether anything depends on today's unfiltered list; treat this as a deploy-ordering
-concern (§7), not just an additive-fields one.
+**F10** [High]
+- *What:* `ListExercisesRequest` is an empty message today, and `ListExercises` returns every row
+  unfiltered. Once ownership-scoped visibility ships, the *same* RPC called with the *same*
+  request shape returns a caller-scoped subset instead of everything.
+- *Where:* `ExerciseService.java:20-25` (plain `findAll()`); `exercise.proto`
+  `ListExercisesRequest`; R13–R15.
+- *Why it matters:* dimension 3 counts "a list that starts filtering" as a compatibility break
+  for the BFF even with the same proto, independent of any new fields.
+- *Recommendation:* confirm with the chained BFF assessment whether anything depends on today's
+  unfiltered list, and treat this as a deploy-ordering concern (§7), not just an
+  additive-fields one.
 
-**F11** [Info] — `GetExercise`/`CreateExercise`/`UpdateExercise`/`DeleteExercise` gain new refusal
-paths but no wire-shape changes beyond F9 — no additional compatibility concern.
+**F11** [Info]
+- *What:* `GetExercise`/`CreateExercise`/`UpdateExercise`/`DeleteExercise` gain new refusal
+  paths but no wire-shape changes beyond F9.
+- *Where:* `exercise.proto` `ExerciseService`; R16, R23, R24, R26, R27, R32, R34, R36.
+- *Why it matters:* no compatibility concern beyond F9 and F10; the new refusals are status
+  codes, which F13 decides.
+- *Recommendation:* none.
 
 ### Security and privacy
 
-**F12** [Blocker] — No per-caller identity is available anywhere in this stack today for
-vertice-api to enforce R14–R25/R32/R36. Three independent pieces of evidence, all verified this
-session:
-1. No business code in vertice-api reads the authenticated principal —
-   `grep -rln "SecurityContext\|Authentication\|Principal" src/main/java` outside `grpc/` returns
-   nothing; `GrpcSecurityConfig`'s own doc comment says "any authenticated caller may do anything,
-   no role/scope differentiation," and every prior spec's `## 0. Scope decisions` repeats this as
-   an accepted gap (§3).
-2. `vertice-bff` already has this exact pattern one layer up:
-   `vertice-bff/src/lib/ownership.ts` derives a real `AuthUser` (`id`, `role`) from a JWT it mints
-   itself (`vertice-bff/src/lib/jwt.ts`) and enforces per-caller ownership before calling
-   vertice-api for plans/workouts/workout-exercises.
-3. But `vertice-bff/src/grpc/clients.ts` wires every gRPC client to vertice-api with
-   `grpc.credentials.createInsecure()` and attaches no token or metadata at all — nothing carries
-   the BFF's already-resolved identity across to vertice-api today, so even a JWT-verifying
-   vertice-api would have nothing to check when called through the BFF as currently wired.
+**F12** [Blocker]
+- *What:* no per-caller identity is available anywhere in this stack today for vertice-api to
+  enforce R14–R25/R32/R36.
+- *Where:* three pieces of evidence, all verified this session:
+  1. No business code in vertice-api reads the authenticated principal: `grep -rln
+     "SecurityContext\|Authentication\|Principal" src/main/java` outside `grpc/` returns
+     nothing; `GrpcSecurityConfig`'s own doc comment says "any authenticated caller may do
+     anything, no role/scope differentiation", and every prior spec's `## 0. Scope decisions`
+     repeats this as an accepted gap (§3).
+  2. `vertice-bff` already has this pattern one layer up: `vertice-bff/src/lib/ownership.ts`
+     derives an `AuthUser` (`id`, `role`) from a JWT it mints itself (`vertice-bff/src/lib/jwt.ts`)
+     and enforces per-caller ownership before calling vertice-api for plans, workouts and
+     workout-exercises.
+  3. But `vertice-bff/src/grpc/clients.ts` wires every gRPC client to vertice-api with
+     `grpc.credentials.createInsecure()` and attaches no token or metadata, so nothing carries
+     the BFF's resolved identity across to vertice-api today.
+  PRD rules: R14–R25, R32, R36, E14, E16–E21.
+- *Why it matters:* R16–R18/R32/R36 and E18/E21 are framed adversarially ("a trainer who
+  *learns* another trainer's private exercise identifier fetches it *directly*"), which describes
+  a caller reaching vertice-api's gRPC surface directly, bypassing `ownership.ts`. Enforcement
+  therefore has to live in vertice-api itself, or those rules do not hold. A caller-supplied
+  `trainer_id` would be trivially spoofed.
+- *Recommendation:* build real per-caller identity resolution into vertice-api (decided this
+  session with the owner, Q1), mirroring the shape `ownership.ts` established: (a) the chained
+  `technical-assessment-bff` records how identity crosses the BFF → API boundary (e.g. the BFF
+  forwards its own signed JWT as gRPC call metadata for vertice-api to validate), since it is a
+  two-repo change; (b) build one reusable "current caller" resolver under `grpc/` (F26), not an
+  inline check inside `ExerciseService`.
 
-This matters concretely because R16–R18/R32/R36 and E18/E21 use adversarial framing ("a trainer
-who *learns* another trainer's private exercise identifier fetches it *directly*") that describes
-a caller reaching vertice-api's gRPC surface directly, bypassing `ownership.ts` entirely — so
-enforcement has to live in vertice-api itself, not only in the BFF, for those rules to hold.
-*Decision made this session:* build real per-caller identity resolution into vertice-api (not a
-caller-supplied `trainer_id`), mirroring the shape `vertice-bff/src/lib/ownership.ts` already
-established. *Recommendation:* (a) this session's chained `technical-assessment-bff` must record
-how identity crosses the BFF → API boundary (e.g. the BFF forwards its own signed JWT as gRPC call
-metadata for vertice-api to validate) — it's a two-repo change; (b) build one reusable
-"current trainer" resolver under `grpc/` (F26), not an inline check inside `ExerciseService`.
+**F13** [Medium]
+- *What:* the status code for a cross-trainer refusal is undecided.
+- *Where:* `GrpcExceptionAdvice.java:24-27` (`ResourceNotFoundException` → `Status.NOT_FOUND`,
+  echoing the id); the advice's own comment notes Spring gRPC's `SecurityGrpcExceptionHandler`
+  already maps `AccessDeniedException` to `PERMISSION_DENIED`; R16–R18, R32, R36.
+- *Why it matters:* the choice is whether "exists but isn't yours" is indistinguishable from
+  "doesn't exist" (`NOT_FOUND` for both) or explicit (`PERMISSION_DENIED`). The PRD's "refused,
+  not merely absent from their list" leans toward the caller knowing they were refused. Whichever
+  is chosen sets the pattern for every future ownership check in this codebase.
+- *Recommendation:* the spec decides explicitly; `PERMISSION_DENIED` for a real row the caller
+  may not see, `NOT_FOUND` for a missing id, matches the PRD's wording.
 
-**F13** [Medium] — The status code for a cross-trainer refusal (R16–R18, R32, R36) is undecided.
-`ResourceNotFoundException` → `Status.NOT_FOUND` (`GrpcExceptionAdvice.java:24-27`) echoes the id
-back in its message, but that's not new information to a caller who already supplied it — the
-real question is whether "exists but isn't yours" should be indistinguishable from "doesn't exist"
-(`NOT_FOUND` for both) or explicit (`PERMISSION_DENIED`, which `GrpcExceptionAdvice`'s own comment
-notes Spring gRPC's `SecurityGrpcExceptionHandler` already maps for `AccessDeniedException`). PRD
-language ("refused, not merely absent from their list") leans toward the caller knowing they were
-refused. *Recommendation:* the spec decides explicitly — this sets the pattern for every future
-ownership check in this codebase, not just this one.
-
-**F14** [Nothing found] — Checked: free-text bounds for the fields this feature touches. `name`
-(`VARCHAR(255) NOT NULL`) and `description` (`VARCHAR(255)`) from `V4`, `video_url`
+**F14** — Nothing found for free-text bounds. Checked: the fields this feature touches. `name`
+(`VARCHAR(255) NOT NULL`) and `description` (`VARCHAR(255)`) from `V4` and `video_url`
 (`VARCHAR(500)`) from `V17` are already bounded, and `ExerciseController`'s existing `@Pattern`
-(`ExerciseController.java:80`) already restricts `video_url` to blank-or-http(s). Nothing new
-needed for R41/R42/R6.
+(`ExerciseController.java:80`) already restricts `video_url` to blank-or-http(s). Nothing new is
+needed for R41, R42 or R6.
 
 ### Data integrity and consistency
 
-**F15** [High] — R34 (delete refused while any workout uses the exercise) has zero enforcement
-today: `ExerciseService.deleteExercise` (`ExerciseService.java:43-46`) deletes unconditionally.
-Today, deleting a referenced exercise fails at the database as a raw FK-violation exception, which
-`GrpcExceptionAdvice` doesn't map (falls through to `UNKNOWN`) — not the described refusal R34
-wants. This codebase already has the right shape of exception for exactly this case:
-`WorkoutExerciseHasRecordedDataException` → `Status.FAILED_PRECONDITION`
-(`GrpcExceptionAdvice.java:37-40`), used for "can't replace, something depends on it."
-*Recommendation:* add an equivalent exception, checked via an `existsBy...` query on
-`WorkoutExerciseRepository`, before the delete.
+**F15** [High]
+- *What:* R34 (delete refused while any workout uses the exercise) has zero enforcement today.
+- *Where:* `ExerciseService.deleteExercise` (`ExerciseService.java:43-46`) deletes
+  unconditionally; `GrpcExceptionAdvice` has no mapping for the FK violation; R34, R35, E5.
+- *Why it matters:* deleting a referenced exercise fails at the database as a raw FK violation
+  that falls through to `UNKNOWN`, not the described refusal R34 wants, and the BFF cannot tell
+  it apart from a server fault.
+- *Recommendation:* add an exception shaped like `WorkoutExerciseHasRecordedDataException` →
+  `Status.FAILED_PRECONDITION` (`GrpcExceptionAdvice.java:37-40`, used for "can't replace,
+  something depends on it"), checked via an `existsBy...` query on `WorkoutExerciseRepository`
+  before the delete.
 
-**F16** [Medium] — No optimistic locking exists anywhere (`grep -rn "@Version\|@Lock"
-src/main/java` — no hits). Not a new gap this feature introduces, but the R51–R59 migration is the
-first genuinely destructive bulk write in this codebase's history, running once against
-potentially-live tables; last-write-wins silently, same as everywhere else, if ordinary traffic
-touches the same rows at the same moment.
+**F16** [Medium]
+- *What:* no optimistic locking exists anywhere. This feature does not introduce the gap, but
+  the R51–R59 migration is the first genuinely destructive bulk write in this codebase's history.
+- *Where:* `grep -rn "@Version\|@Lock" src/main/java` → no hits; the new cleanup migration;
+  R51–R59.
+- *Why it matters:* if ordinary traffic touched the same rows while the cleanup ran, the last
+  write would win silently, as everywhere else in this codebase.
+- *Recommendation:* the spec may defer this with a reason. Running the cleanup as a Flyway
+  migration at boot, before the application serves traffic, removes the concurrent writer; if
+  the spec chooses another mechanism (Option B), it must decide how writes are held off during
+  the run.
 
 ### Performance and scalability
 
-**F17** [Medium] — No RPC in this codebase paginates (`grep -rn "Pageable\|page_size\|page_token"`
-— no hits), and today's `ListExercises` is an unfiltered `findAll()`. R48/R49's ordering can't be
-produced by sorting a fully-loaded list in Java without the ordinal from F6 — it needs a real
-query (join across exercise/join-table/muscle-group, ordered by own-first then stored ordinal),
-not app-side filtering. Fine at ~200 starter rows plus a handful of private rows per trainer
-today; worth building as a real query from the start rather than a later migration, since PRD Flow
-1 makes this the "every workout-build" hot path.
+**F17** [Medium]
+- *What:* no RPC in this codebase paginates, and today's `ListExercises` is an unfiltered
+  `findAll()`. R48/R49's ordering cannot be produced by sorting a fully loaded list in Java
+  without the ordinal from F6.
+- *Where:* `grep -rn "Pageable\|page_size\|page_token"` → no hits; `ExerciseService.java:20-25`;
+  R45–R50; PRD §3 Flow 1.
+- *Why it matters:* PRD Flow 1 makes this the "every workout-build" hot path. At ~200 starter
+  rows plus a handful of private rows per trainer it is fine without pagination today, but an
+  app-side filter would have to be replaced by a query later.
+- *Recommendation:* build it as a real query from the start (join across exercise, join table
+  and muscle group, ordered by own-first then the stored ordinal), so pagination can be added
+  later without a rewrite. The spec may defer pagination itself with a reason.
 
-**F18** [Nothing found] — Checked: N+1 risk beyond the list query above.
+**F18** — Nothing found for N+1 risk beyond the list query above. Checked:
 `WorkoutExerciseService.createWorkoutExercise` (`WorkoutExerciseService.java:36-40`) and
-`WorkoutService.cloneWorkout` (`WorkoutService.java:96`) already load `Exercise` via simple
-`findById` per reference — unaffected by this feature.
+`WorkoutService.cloneWorkout` (`WorkoutService.java:96`) already load `Exercise` via a simple
+`findById` per reference and are unaffected by this feature.
 
 ### Error handling
 
-**F19** [Medium] — R40/R31/E13/E22 (create/update refused with zero groups) is a direct extension
-of the existing pattern: `ExerciseController#requireMuscleGroup` (`ExerciseController.java:72-76`)
-already rejects the proto3 zero-value case for the single-enum field the same way
-`WorkoutController#requireDayOfWeek` does; the multi-group version needs the equivalent
-"list is empty" check, reused for both create (R40) and update (R31).
+**F19** [Medium]
+- *What:* R40/R31/E13/E22 (create/update refused with zero groups) need an "empty list" check
+  for the new multi-group field.
+- *Where:* `ExerciseController#requireMuscleGroup` (`ExerciseController.java:72-76`) rejects the
+  proto3 zero value for the single-enum field, the same way `WorkoutController#requireDayOfWeek`
+  does; R31, R40, E13, E22.
+- *Why it matters:* a repeated field has no zero value to reject, so the existing check stops
+  protecting anything once F9 lands, and create and update could drift apart if each gets its
+  own check.
+- *Recommendation:* one "list is empty" check, reused for create (R40) and update (R31), with a
+  message the BFF can show.
 
-**F20** [Medium] — New exception types for R26/R27 (starter-set immutability) and the R14–R25
-ownership family (F12/F13) must be added to **both** `GrpcExceptionAdvice` and
-`GlobalExceptionHandler`, per CLAUDE.md's explicit convention — nothing enforces keeping the two in
-sync, so it's easy to add one and forget the other.
+**F20** [Medium]
+- *What:* new exception types for R26/R27 (starter-set immutability), the R14–R25 ownership
+  family (F12/F13) and R34 (F15) must be added to **both** `GrpcExceptionAdvice` and
+  `GlobalExceptionHandler`.
+- *Where:* `grpc/GrpcExceptionAdvice.java`, `common/exception/GlobalExceptionHandler.java`;
+  CLAUDE.md "Exception mapping"; R26, R27, R34.
+- *Why it matters:* nothing enforces keeping the two in sync, so it is easy to add one and forget
+  the other, and a missed gRPC mapping surfaces as `UNKNOWN`.
+- *Recommendation:* the spec lists every new exception with its gRPC status and REST status side
+  by side, and each gets a `GrpcExceptionMappingTest` scenario.
 
 ### Logging
 
-**F21** [Info] — No application code logs anything today (`grep -rln "Slf4j\|LoggerFactory\|
-log\.\(info\|warn\|error\|debug\)" src/main/java` — no hits). The R51–R54 removal is the most
-consequential/irreversible write this codebase will have run; if it's executed as anything other
-than plain SQL (§5), it's a reasonable place to set this codebase's first logging convention, but
-nothing requires it.
+**F21** [Info]
+- *What:* no application code logs anything today.
+- *Where:* `grep -rln "Slf4j\|LoggerFactory\|log\.\(info\|warn\|error\|debug\)" src/main/java` →
+  no hits; R51–R54.
+- *Why it matters:* the R51–R54 removal is the most consequential, irreversible write this
+  codebase will have run. If it runs as anything other than plain SQL (§5), it is a reasonable
+  place to set the first logging convention; as plain SQL, Flyway's history row is the record.
+- *Recommendation:* none required; if the spec picks Option B (§5), decide the log format there.
 
 ### Metrics and observability
 
-**F22** [Nothing found] — Checked: no `MeterRegistry`/`@Timed`/`@Observed` anywhere, consistent
-with the existing baseline. `ListExercises` becoming a hot, per-caller-filtered endpoint (F17) is
-worth a latency/row-count signal eventually, but this feature doesn't need to be the one that
-introduces metrics tooling to this codebase.
+**F22** — Nothing found. Checked: no `MeterRegistry`, `@Timed` or `@Observed` anywhere,
+consistent with the existing baseline. `ListExercises` becoming a hot, per-caller-filtered
+endpoint (F17) is worth a latency or row-count signal eventually, but this feature does not need
+to be the one that introduces metrics tooling.
 
 ### Testing
 
-**F23** [High] — This is the first feature whose correctness depends on real SQL ordering/joins
-across three tables (R47–R50). This codebase's only test flavors are a Mockito `*ServiceTest`
-(mocked repository — can't prove a real `ORDER BY`/join produces the right sequence) and a
-wire-level `*ControllerTest`. No repository-level test slice exists today
-(`@DataJpaTest` — no hits anywhere in `src/test`). *Recommendation:* add the first one to prove
-R47–R50 against real Postgres rather than trusting a mocked list.
+**F23** [High]
+- *What:* this is the first feature whose correctness depends on real SQL ordering and joins
+  across three tables (R47–R50), and no test flavor here can prove that.
+- *Where:* this codebase has a Mockito `*ServiceTest` (mocked repository) and a wire-level
+  `*ControllerTest`; `@DataJpaTest` → no hits anywhere in `src/test`; R47–R50, E8.
+- *Why it matters:* a mocked repository returns whatever list the test hands it, so a wrong
+  `ORDER BY` or join would pass every existing kind of test.
+- *Recommendation:* add the first repository-level test, against real Postgres, proving R47–R50
+  rather than trusting a mocked list.
 
-**F24** [Nothing found beyond F23] — `ExerciseControllerTest`/`ExerciseServiceTest` (15 and 7
-`@Test` methods) are a reasonable template for the CRUD-shaped rules. Next free
+**F24** — Nothing found beyond F23. Checked: `ExerciseControllerTest`/`ExerciseServiceTest` (15
+and 7 `@Test` methods) are a reasonable template for the CRUD-shaped rules. Next free
 `spring.grpc.server.port`: **19104** (19090–19103 confirmed in use across existing
-`*ControllerTest` classes — one higher than this skill's recorded baseline of 19090–19102; noted
+`*ControllerTest` classes, one higher than this skill's recorded baseline of 19090–19102; noted
 as baseline drift).
 
 ### Architecture fit and maintainability
 
-**F25** [Medium] — `MuscleGroup` moving from a Java enum to a JPA entity/table (F1) is contained
-to `plan/exercise/` plus `ExerciseMapper`/`exercise.proto` — nothing outside that package
-references `MuscleGroup` directly; every other entity that touches an exercise (`WorkoutExercise`)
-only ever references `Exercise` itself.
+**F25** [Medium]
+- *What:* `MuscleGroup` moves from a Java enum to a JPA entity backed by a table (F1).
+- *Where:* `plan/exercise/MuscleGroup.java`, `ExerciseMapper` (the `@ValueMapping` for the enum),
+  `exercise.proto`; nothing outside `plan/exercise/` references `MuscleGroup` directly, and every
+  other entity that touches an exercise (`WorkoutExercise`) only references `Exercise`; R8, R38.
+- *Why it matters:* the change is contained, but it is a rename of a concept: keeping the name
+  `MuscleGroup` for the new entity means every enum-based reference must go in the same change,
+  or the build breaks halfway.
+- *Recommendation:* the spec decides whether the entity reuses the name `MuscleGroup` (deleting
+  the enum in the same PR) and lists the files that change, so the switch lands in one PR with
+  the migration (F27).
 
-**F26** [High] — The caller-identity resolver F12 needs is inherently cross-cutting: every future
-spec adding ownership to trainer-owned data will need the same "who is calling, do they own this"
-shape. *Recommendation:* build it once under `grpc/` (this codebase's existing home for
-cross-cutting gRPC concerns — `GrpcRequestValidator`, `GrpcExceptionAdvice`, the `Proto*` helpers),
-not inline inside `ExerciseService`, so this feature isn't the first of many one-off copies.
+**F26** [High]
+- *What:* the caller-identity resolver F12 needs is inherently cross-cutting.
+- *Where:* new surface under `grpc/`, this codebase's home for cross-cutting gRPC concerns
+  (`GrpcRequestValidator`, `GrpcExceptionAdvice`, the `Proto*` helpers); R14–R25, R32, R36.
+- *Why it matters:* every future spec adding ownership to trainer-owned data will need the same
+  "who is calling, do they own this" shape; an inline check inside `ExerciseService` would be the
+  first of many one-off copies.
+- *Recommendation:* build it once under `grpc/`, not inside `ExerciseService`.
 
 ### Operability and rollout
 
-**F27** [High] — The `MuscleGroup` enum→table migration and `Exercise.muscleGroup`
-column→join-table migration must land in the exact same deploy as the code —
-`spring.jpa.hibernate.ddl-auto=validate` means old code booting against the new schema (or the
-reverse) fails at startup, not at first use. There's no partial/rolling window here, unlike a
-normal additive column.
+**F27** [High]
+- *What:* the `MuscleGroup` enum-to-table migration and the `Exercise.muscleGroup`
+  column-to-join-table migration must land in the exact same deploy as the code.
+- *Where:* `spring.jpa.hibernate.ddl-auto=validate` (`application.properties`); the new
+  migration; R3, R8, R43.
+- *Why it matters:* old code booting against the new schema (or the reverse) fails at startup,
+  not at first use. There is no partial or rolling window here, unlike a normal additive column.
+- *Recommendation:* ship the schema migration and the entity change in one PR, state in the
+  spec that the PR is a same-deploy unit, and order later migrations after it by version.
 
-**F28** [High] — No Flyway undo migrations exist in this codebase (only forward `V*` files).
-Combined with F4/F5's one-off, destructive R51–R59 migration, rolling the app back after it runs
-leaves the schema — and the already-deleted rows — ahead with no automatic path back. The owner
-confirmed this session that the affected rows are test data, capping the practical risk, but it's
-still a one-way door worth calling out explicitly in the deploy runbook.
+**F28** [High]
+- *What:* no Flyway undo migrations exist in this codebase (only forward `V*` files).
+- *Where:* `src/main/resources/db/migration`; the R51–R59 cleanup (F4/F5).
+- *Why it matters:* rolling the app back after the cleanup runs leaves the schema, and the
+  already-deleted rows, ahead with no automatic path back. The owner confirmed this session that
+  the affected rows are test data (Q2), which caps the practical risk.
+- *Recommendation:* call it a one-way door explicitly in the spec's rollout and in the deploy
+  runbook, and keep the destructive migration in its own PR so it is reviewed on its own.
 
-**F29** [High] — Same root cause as F12, restated for rollout purposes: `vertice-bff`'s gRPC
-client to vertice-api is wired insecure with zero auth metadata
-(`vertice-bff/src/grpc/clients.ts`). Whatever mechanism F12 settles on for identity to cross that
-boundary is a coordinated two-repo deploy, not something vertice-api can ship and validate alone.
+**F29** [High]
+- *What:* same root cause as F12, restated for rollout: `vertice-bff`'s gRPC client to
+  vertice-api is wired insecure with zero auth metadata.
+- *Where:* `vertice-bff/src/grpc/clients.ts`; R14–R25.
+- *Why it matters:* whatever mechanism F12 settles on for identity to cross that boundary is a
+  coordinated two-repo deploy, not something vertice-api can ship and validate alone. If
+  vertice-api starts requiring identity before the BFF sends it, every BFF call fails.
+- *Recommendation:* sequence it so the BFF's forwarding and vertice-api's verification ship
+  first and are harmless alone (vertice-api accepts but does not yet require identity), and only
+  then deploy the RPCs that require it; provision any shared credential identically on both sides.
+
+### Effort, risk, and dependencies
+
+**F30** [Info]
+- *What:* the work splits into increments that each deploy on their own, which is what makes an
+  XL feature (§8) shippable. The spec's delivery plan (`docs/specs/exercise-starter-catalog/spec.md`
+  §10) takes this split: Increment 0 (identity verification and the resolver, two PRs, no
+  behavior change); Increment 1 (six PRs: the muscle-group model, the cleanup migration, the
+  seed, then authorization, the in-use guard and the list query), deployed api → bff → web in one
+  window; Increment 2 (the R17–R19 workout-side guards, one PR).
+- *Where:* spec §10; F12, F27, F28, F29; R17–R19, R51–R59.
+- *Why it matters:* the order differs from §8's first suggestion ((a) → (c) → (b)). Identity
+  goes first because it is harmless alone (F29), the cleanup must run after the groups table and
+  before the seed (so every row it sees is pre-starter), and the RPCs that require identity can
+  only deploy once the BFF forwards the token. The riskiest dependency is therefore on another
+  repo: the BFF's Increment 0 must be deployed before Increment 1's authorization PR. Nine PRs
+  across three repos also make the proto-sync step (the BFF's copy of `exercise.proto`) a
+  recurring chance to drift.
+- *Recommendation:* none beyond what the spec's delivery plan does; §8's risks still apply.
 
 ## 5. Options
 
@@ -483,7 +609,8 @@ its own; here they land together because they all trace back to the same `Exerci
 - No dependency on other in-flight work was found in this session, but the chained BFF and web
   assessments may surface UI/route-level work large enough to justify shipping this in slices.
 
-**Sequencing**: the PRD gives no explicit smaller-first-version signal, but a natural split exists:
+**Sequencing** (dimension 13 has the delivery-plan view, F30): the PRD gives no explicit
+smaller-first-version signal, but a natural split exists:
 (a) data model + starter-set seed + unauthenticated CRUD reshaping (F1, F6, F7, F9, F14, F19)
 could ship and be exercised before (b) the ownership/identity layer (F12, F26, F29) and (c) the
 R51–R59 cleanup migration (F4, F5) land — ship order (a) → (c) → (b), since (c) is safest run
@@ -531,3 +658,7 @@ assume as written; this assessment's coverage map (§2) does the same.
 - [ ] Whether this feature adds the first repository-level (`@DataJpaTest`-style) test, and what it covers (F23)
 - [ ] Where the caller-identity resolver lives and how it's shared across controllers (F26)
 - [ ] Deploy/rollback runbook acknowledging the R51–R59 migration as a one-way door (F27, F28)
+- [ ] How the zero-group refusal is checked once for both create and update, and what message it carries (F19)
+- [ ] Whether the new muscle-group entity reuses the `MuscleGroup` name, and which files change with it in one PR (F25)
+- [ ] Whether the cleanup's bulk delete needs protection from concurrent writes, or is deferred with a reason (F16; the spec defers it)
+- [ ] Whether `ListExercises` paginates now, or is built as a real query and pagination deferred with a reason (F17; the spec defers pagination)
