@@ -4,6 +4,10 @@ import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
+import com.vertice.api.grpc.CallerIdentityResolver;
+import com.vertice.api.user.Role;
+import com.vertice.api.user.User;
+import com.vertice.api.user.UserRepository;
 import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +27,8 @@ public class ExerciseService {
     private final ExerciseRepository exerciseRepository;
     private final MuscleGroupRepository muscleGroupRepository;
     private final ExerciseMapper exerciseMapper;
+    private final CallerIdentityResolver callerIdentityResolver;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public List<MuscleGroupResponse> listMuscleGroups() {
@@ -44,8 +50,11 @@ public class ExerciseService {
     }
 
     public ExerciseResponse createExercise(ExerciseRequest request) {
+        Long trainerId = callerIdentityResolver.require().userId();
+        User trainer = findTrainerByIdOrThrow(trainerId);
         List<MuscleGroup> groups = resolveMuscleGroups(request.getMuscleGroupIdsList());
         Exercise exercise = exerciseMapper.toEntity(request);
+        exercise.setOwner(trainer);
         exercise.addMuscleGroups(groups);
         return exerciseMapper.toResponse(exerciseRepository.save(exercise));
     }
@@ -77,6 +86,12 @@ public class ExerciseService {
     private Exercise findByIdOrThrow(Long id) {
         return exerciseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Exercise", id));
+    }
+
+    private User findTrainerByIdOrThrow(Long id) {
+        return userRepository.findById(id)
+                .filter(user -> user.getRole() == Role.TRAINER)
+                .orElseThrow(() -> new ResourceNotFoundException("Trainer", id));
     }
 
     /**
