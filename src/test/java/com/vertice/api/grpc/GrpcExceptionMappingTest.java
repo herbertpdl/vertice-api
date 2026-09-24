@@ -17,6 +17,7 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,6 +93,16 @@ class GrpcExceptionMappingTest {
     }
 
     @Test
+    void constraintViolationWithoutViolations_keepsMessageAsDescription() {
+        assertThatThrownBy(() -> trigger("validation-message"))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("muscleGroupIds: unknown muscle group 99");
+                });
+    }
+
+    @Test
     void unauthenticatedException_mapsToUnauthenticated() {
         assertThatThrownBy(() -> trigger("unauthenticated"))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
@@ -126,6 +138,8 @@ class GrpcExceptionMappingTest {
                     case "not-found" -> throw new ResourceNotFoundException("Trainer", 1L);
                     case "duplicate" -> throw new DuplicateEmailException("a@b.com");
                     case "validation" -> validator.validate(new ValidationProbe(""));
+                    case "validation-message" ->
+                            throw new ConstraintViolationException("muscleGroupIds: unknown muscle group 99", Set.of());
                     case "unauthenticated" -> throw new UnauthenticatedException();
                     case "permission-denied" -> throw PermissionDeniedException.noAccess("exercise", 7L);
                     default -> { }

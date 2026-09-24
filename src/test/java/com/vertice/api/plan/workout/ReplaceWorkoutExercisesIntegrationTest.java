@@ -11,7 +11,6 @@ import com.vertice.api.plan.TrainingPlan;
 import com.vertice.api.plan.TrainingPlanRepository;
 import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.exercise.ExerciseRepository;
-import com.vertice.api.plan.exercise.MuscleGroup;
 import com.vertice.api.plan.session.SetLog;
 import com.vertice.api.plan.session.SetLogRepository;
 import com.vertice.api.plan.session.WorkoutLog;
@@ -102,7 +101,6 @@ class ReplaceWorkoutExercisesIntegrationTest {
 
         exercise = new Exercise();
         exercise.setName("Bench Press");
-        exercise.setMuscleGroup(MuscleGroup.CHEST);
         exercise = exerciseRepository.save(exercise);
 
         workout = new Workout();
