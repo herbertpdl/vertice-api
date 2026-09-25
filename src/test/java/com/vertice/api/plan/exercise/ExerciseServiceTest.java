@@ -1,5 +1,6 @@
 package com.vertice.api.plan.exercise;
 
+import com.vertice.api.common.exception.ExerciseInUseException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
@@ -367,6 +368,38 @@ class ExerciseServiceTest {
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessage("Role CLIENT is not allowed to delete exercises");
         verifyNoInteractions(exerciseRepository);
+    }
+
+    @Test
+    void deleteExercise_inUse_throwsExerciseInUse() {
+        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(privateExercise(1L, "Mine", TRAINER)));
+        when(workoutExerciseRepository.existsByExerciseId(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteExercise(TRAINER, 1L))
+                .isInstanceOf(ExerciseInUseException.class)
+                .hasMessage("Exercise 1 is used by a workout and cannot be deleted");
+        verify(exerciseRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteExercise_unused_deletes() {
+        Exercise own = privateExercise(1L, "Mine", TRAINER);
+        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(own));
+        when(workoutExerciseRepository.existsByExerciseId(1L)).thenReturn(false);
+
+        service.deleteExercise(TRAINER, 1L);
+
+        verify(exerciseRepository).delete(own);
+    }
+
+    @Test
+    void deleteExercise_checksStarterAndOwnershipBeforeInUse() {
+        when(exerciseRepository.findById(1L)).thenReturn(Optional.of(starterExercise(1L, "Agachamento")));
+        when(exerciseRepository.findById(2L)).thenReturn(Optional.of(privateExercise(2L, "Theirs", OTHER_TRAINER)));
+
+        assertThatThrownBy(() -> service.deleteExercise(TRAINER, 1L)).isInstanceOf(PermissionDeniedException.class);
+        assertThatThrownBy(() -> service.deleteExercise(TRAINER, 2L)).isInstanceOf(PermissionDeniedException.class);
+        verifyNoInteractions(workoutExerciseRepository);
     }
 
     @Test

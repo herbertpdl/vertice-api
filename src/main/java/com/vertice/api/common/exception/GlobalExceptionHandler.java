@@ -24,6 +24,11 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, ex.getMessage());
     }
 
+    @ExceptionHandler(ExerciseInUseException.class)
+    public ProblemDetail handleExerciseInUse(ExerciseInUseException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, ex.getMessage());
+    }
+
     @ExceptionHandler(UnauthenticatedException.class)
     public ProblemDetail handleUnauthenticated(UnauthenticatedException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
