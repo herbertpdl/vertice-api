@@ -1,9 +1,14 @@
 package com.vertice.api.plan.exercise;
 
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.plan.workout.WorkoutExerciseRepository;
+import com.vertice.api.user.Role;
+import com.vertice.api.user.UserRepository;
 import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,6 +20,11 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Role rules (spec §0 D5): trainers see the starter set plus their own exercises and manage only
+ * their own; admins see the starter set only and manage nothing; clients cannot list and can only
+ * open an exercise used in one of their own plans. The starter set is never changed or deleted.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -22,6 +32,8 @@ public class ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
     private final MuscleGroupRepository muscleGroupRepository;
+    private final WorkoutExerciseRepository workoutExerciseRepository;
+    private final UserRepository userRepository;
     private final ExerciseMapper exerciseMapper;
 
     @Transactional(readOnly = true)
@@ -31,36 +43,64 @@ public class ExerciseService {
                 .toList();
     }
 
+    /**
+     * Passing the caller's own id for an ADMIN too is deliberate: an admin never owns an exercise
+     * (creating one is trainer-only), so the query collapses to the starter set.
+     */
     @Transactional(readOnly = true)
-    public List<ExerciseResponse> listExercises() {
-        return exerciseRepository.findAll().stream()
+    public List<ExerciseResponse> listExercises(CallerIdentity caller) {
+        caller.requireRole("list exercises", Role.TRAINER, Role.ADMIN);
+        return exerciseRepository.findByOwnerIdIsNullOrOwnerId(caller.userId()).stream()
                 .map(exerciseMapper::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public ExerciseResponse getExercise(Long id) {
-        return exerciseMapper.toResponse(findByIdOrThrow(id));
+    public ExerciseResponse getExercise(CallerIdentity caller, Long id) {
+        Exercise exercise = findByIdOrThrow(id);
+        boolean visible = caller.role() == Role.CLIENT
+                ? workoutExerciseRepository.existsByExerciseIdAndWorkout_TrainingPlan_Client_Id(id, caller.userId())
+                : exercise.isVisibleTo(caller);
+        if (!visible) {
+            throw PermissionDeniedException.noAccess("exercise", id);
+        }
+        return exerciseMapper.toResponse(exercise);
     }
 
-    public ExerciseResponse createExercise(ExerciseRequest request) {
+    public ExerciseResponse createExercise(CallerIdentity caller, ExerciseRequest request) {
+        caller.requireRole("create exercises", Role.TRAINER);
         List<MuscleGroup> groups = resolveMuscleGroups(request.getMuscleGroupIdsList());
         Exercise exercise = exerciseMapper.toEntity(request);
+        exercise.setOwner(userRepository.getReferenceById(caller.userId()));
         exercise.addMuscleGroups(groups);
         return exerciseMapper.toResponse(exerciseRepository.save(exercise));
     }
 
-    public ExerciseResponse updateExercise(Long id, ExerciseRequest request) {
-        Exercise exercise = findByIdOrThrow(id);
+    public ExerciseResponse updateExercise(CallerIdentity caller, Long id, ExerciseRequest request) {
+        caller.requireRole("change exercises", Role.TRAINER);
+        Exercise exercise = findOwnedOrThrow(caller, id, "changed");
         List<MuscleGroup> groups = resolveMuscleGroups(request.getMuscleGroupIdsList());
         exerciseMapper.updateEntityFromRequest(request, exercise);
         replaceMuscleGroups(exercise, groups);
         return exerciseMapper.toResponse(exerciseRepository.save(exercise));
     }
 
-    public void deleteExercise(Long id) {
-        Exercise exercise = findByIdOrThrow(id);
+    public void deleteExercise(CallerIdentity caller, Long id) {
+        caller.requireRole("delete exercises", Role.TRAINER);
+        Exercise exercise = findOwnedOrThrow(caller, id, "deleted");
         exerciseRepository.delete(exercise);
+    }
+
+    /** Existence first, then starter-set immutability, then ownership. */
+    private Exercise findOwnedOrThrow(CallerIdentity caller, Long id, String verb) {
+        Exercise exercise = findByIdOrThrow(id);
+        if (exercise.isStarter()) {
+            throw PermissionDeniedException.starterSet(id, verb);
+        }
+        if (!exercise.isOwnedBy(caller)) {
+            throw PermissionDeniedException.noAccess("exercise", id);
+        }
+        return exercise;
     }
 
     /**
