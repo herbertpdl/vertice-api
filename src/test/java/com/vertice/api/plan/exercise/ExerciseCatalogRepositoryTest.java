@@ -58,16 +58,20 @@ class ExerciseCatalogRepositoryTest {
     }
 
     private CallerIdentity newTrainer(String name) {
+        return new CallerIdentity(newUser(name, Role.TRAINER), Role.TRAINER);
+    }
+
+    private Long newUser(String name, Role role) {
         String unique = String.valueOf(System.nanoTime());
         User user = new User();
         user.setName(name);
         user.setEmail(name.toLowerCase() + "-" + unique + "@example.com");
         user.setCpf(unique.substring(unique.length() - 11));
         user.setPasswordHash("hash");
-        user.setRole(Role.TRAINER);
+        user.setRole(role);
         user = userRepository.save(user);
         createdUserIds.add(user.getId());
-        return new CallerIdentity(user.getId(), Role.TRAINER);
+        return user.getId();
     }
 
     private int count(String sql) {
@@ -155,19 +159,142 @@ class ExerciseCatalogRepositoryTest {
         assertThat(count("SELECT count(DISTINCT name) FROM exercises WHERE owner_id IS NULL")).isEqualTo(199);
     }
 
+    // --- findVisible (R45-R50) ---
+
+    private static final long PEITO = 1L;
+    private static final long LOMBAR = 12L;
+
     @Test
-    void findByOwnerIdIsNullOrOwnerId_returnsStarterAndOwnOnly() {
+    void findVisible_ownFirstThenStarterByName() {
+        CallerIdentity trainer = newTrainer("Trainer");
+        createOwn(trainer, "Zeta own", PEITO);
+        createOwn(trainer, "Alpha own", LOMBAR);
+
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), 0, ""));
+
+        assertThat(names).hasSize(201);
+        assertThat(names.subList(0, 2)).containsExactly("Alpha own", "Zeta own");
+        assertThat(names.subList(2, 201)).containsExactlyElementsOf(starterNamesByName());
+    }
+
+    @Test
+    void findVisible_groupFilter_primaryInCatalogOrderThenSecondaryByName() {
+        CallerIdentity trainer = newTrainer("Trainer");
+        createOwn(trainer, "Own chest press", PEITO);
+
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), PEITO, ""));
+
+        assertThat(names).hasSize(25);
+        assertThat(names.getFirst()).isEqualTo("Own chest press");
+        List<String> starter = names.subList(1, 25);
+        assertThat(starter.get(0)).isEqualTo("Supino reto com barra");
+        assertThat(starter.get(1)).isEqualTo("Supino inclinado com halteres");
+        assertThat(starter.subList(0, 20)).containsExactlyElementsOf(jdbc.queryForList("""
+                SELECT e.name FROM exercises e
+                JOIN exercise_muscle_groups g ON g.exercise_id = e.id
+                WHERE e.owner_id IS NULL AND g.muscle_group_id = ? AND g.is_primary
+                ORDER BY g.catalog_order
+                """, String.class, PEITO));
+        List<String> secondary = starter.subList(20, 24);
+        assertThat(secondary).contains("Mergulho nas paralelas", "Supino fechado com barra");
+        assertThat(secondary).containsExactlyElementsOf(jdbc.queryForList("""
+                SELECT e.name FROM exercises e
+                JOIN exercise_muscle_groups g ON g.exercise_id = e.id
+                WHERE e.owner_id IS NULL AND g.muscle_group_id = ? AND NOT g.is_primary
+                ORDER BY e.name
+                """, String.class, PEITO));
+    }
+
+    @Test
+    void findVisible_groupFilter_includesSecondaryGroupExercises() {
+        CallerIdentity trainer = newTrainer("Trainer");
+
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), LOMBAR, ""));
+
+        assertThat(names).hasSize(19).contains("Levantamento terra com barra");
+        assertThat(names.indexOf("Levantamento terra com barra")).isGreaterThanOrEqualTo(7);
+    }
+
+    @Test
+    void findVisible_search_caseInsensitiveSubstring() {
+        CallerIdentity trainer = newTrainer("Trainer");
+
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), 0, "SUPINO"));
+
+        assertThat(names).isNotEmpty()
+                .contains("Supino reto com barra")
+                .allMatch(name -> name.toLowerCase().contains("supino"));
+        assertThat(names).hasSize(count("SELECT count(*) FROM exercises WHERE owner_id IS NULL AND name ILIKE '%supino%'"));
+    }
+
+    @Test
+    void findVisible_search_wildcardsAreLiteral() {
+        CallerIdentity trainer = newTrainer("Trainer");
+
+        assertThat(exerciseService.listExercises(trainer, 0, "%")).isEmpty();
+        assertThat(exerciseService.listExercises(trainer, 0, "_")).isEmpty();
+        assertThat(exerciseService.listExercises(trainer, 0, "\\")).isEmpty();
+    }
+
+    @Test
+    void findVisible_search_ignoresOtherTrainersRows() {
         CallerIdentity trainer = newTrainer("Trainer");
         CallerIdentity other = newTrainer("Other");
-        Long own = exerciseService.createExercise(trainer, ExerciseRequest.newBuilder()
-                .setName("Own exercise").addMuscleGroupIds(1L).build()).getId();
-        Long theirs = exerciseService.createExercise(other, ExerciseRequest.newBuilder()
-                .setName("Their exercise").addMuscleGroupIds(1L).build()).getId();
-        createdExerciseIds.addAll(List.of(own, theirs));
+        createOwn(other, "Supino secreto", PEITO);
 
-        List<Exercise> visible = exerciseRepository.findByOwnerIdIsNullOrOwnerId(trainer.userId());
+        assertThat(names(exerciseRepository.findVisible(trainer.userId(), 0, "secreto"))).isEmpty();
+        assertThat(names(exerciseRepository.findVisible(trainer.userId(), PEITO, ""))).doesNotContain("Supino secreto");
+        assertThat(names(exerciseRepository.findVisible(other.userId(), 0, "secreto"))).containsExactly("Supino secreto");
+    }
 
-        assertThat(visible).hasSize(200).extracting(Exercise::getId).contains(own).doesNotContain(theirs);
+    @Test
+    void findVisible_adminId_returnsStarterOnly() {
+        CallerIdentity trainer = newTrainer("Trainer");
+        createOwn(trainer, "Trainer private", PEITO);
+        CallerIdentity admin = new CallerIdentity(newUser("Admin", Role.ADMIN), Role.ADMIN);
+
+        List<Exercise> visible = exerciseRepository.findVisible(admin.userId(), 0, "");
+
+        assertThat(visible).hasSize(199).allMatch(Exercise::isStarter);
+    }
+
+    @Test
+    void findVisible_noFilter_starterByName() {
+        CallerIdentity trainer = newTrainer("Trainer");
+
+        assertThat(names(exerciseRepository.findVisible(trainer.userId(), 0, "")))
+                .containsExactlyElementsOf(starterNamesByName());
+    }
+
+    @Test
+    void findVisible_groupAndSearch_combined() {
+        CallerIdentity trainer = newTrainer("Trainer");
+        createOwn(trainer, "Supino inclinado caseiro", PEITO);
+        createOwn(trainer, "Remada inclinado caseira", LOMBAR);
+
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), PEITO, "inclinado"));
+
+        assertThat(names).containsExactly(
+                "Supino inclinado caseiro",
+                "Supino inclinado com halteres",
+                "Supino inclinado com barra",
+                "Crucifixo inclinado com halteres",
+                "Supino inclinado na máquina",
+                "Mergulho nas paralelas com tronco inclinado",
+                "Supino inclinado no Smith");
+    }
+
+    private void createOwn(CallerIdentity trainer, String name, long groupId) {
+        createdExerciseIds.add(exerciseService.createExercise(trainer, ExerciseRequest.newBuilder()
+                .setName(name).addMuscleGroupIds(groupId).build()).getId());
+    }
+
+    private List<String> starterNamesByName() {
+        return jdbc.queryForList("SELECT name FROM exercises WHERE owner_id IS NULL ORDER BY name", String.class);
+    }
+
+    private static List<String> names(List<Exercise> exercises) {
+        return exercises.stream().map(Exercise::getName).toList();
     }
 
     @Test

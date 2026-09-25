@@ -47,11 +47,17 @@ public class ExerciseService {
     /**
      * Passing the caller's own id for an ADMIN too is deliberate: an admin never owns an exercise
      * (creating one is trainer-only), so the query collapses to the starter set.
+     *
+     * @param muscleGroupId {@code 0} = no group filter
+     * @param search        name substring, case-insensitive; blank = no filter
      */
     @Transactional(readOnly = true)
-    public List<ExerciseResponse> listExercises(CallerIdentity caller) {
+    public List<ExerciseResponse> listExercises(CallerIdentity caller, long muscleGroupId, String search) {
         caller.requireRole("list exercises", Role.TRAINER, Role.ADMIN);
-        return exerciseRepository.findByOwnerIdIsNullOrOwnerId(caller.userId()).stream()
+        if (muscleGroupId != 0 && !muscleGroupRepository.existsById(muscleGroupId)) {
+            throw new ResourceNotFoundException("MuscleGroup", muscleGroupId);
+        }
+        return exerciseRepository.findVisible(caller.userId(), muscleGroupId, escapeLike(search.strip())).stream()
                 .map(exerciseMapper::toResponse)
                 .toList();
     }
@@ -117,6 +123,11 @@ public class ExerciseService {
         exercise.getMuscleGroups().clear();
         exerciseRepository.flush();
         exercise.addMuscleGroups(groups);
+    }
+
+    /** Makes a user-typed {@code %}, {@code _} or backslash match literally (the query escapes with a backslash). */
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private Exercise findByIdOrThrow(Long id) {
