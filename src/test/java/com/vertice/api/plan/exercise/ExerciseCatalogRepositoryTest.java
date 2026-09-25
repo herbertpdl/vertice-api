@@ -13,6 +13,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +49,10 @@ class ExerciseCatalogRepositoryTest {
         exerciseRepository.deleteAllById(createdExerciseIds);
     }
 
+    private int count(String sql) {
+        return jdbc.queryForObject(sql, Integer.class);
+    }
+
     @Test
     void muscleGroups_seededInLaunchOrder() {
         List<MuscleGroup> groups = muscleGroupRepository.findAllByOrderByIdAsc();
@@ -55,6 +60,78 @@ class ExerciseCatalogRepositoryTest {
         assertThat(groups).extracting(MuscleGroup::getId)
                 .containsExactly(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L, 13L, 14L);
         assertThat(groups).extracting(MuscleGroup::getName).containsExactlyElementsOf(LAUNCH_GROUPS);
+    }
+
+    @Test
+    void starterSet_has199ExercisesWithNullOwner() {
+        assertThat(count("SELECT count(*) FROM exercises WHERE owner_id IS NULL")).isEqualTo(199);
+    }
+
+    @Test
+    void starterSet_has283LinksAcross14Groups() {
+        assertThat(count("""
+                SELECT count(*) FROM exercise_muscle_groups emg
+                JOIN exercises e ON e.id = emg.exercise_id
+                WHERE e.owner_id IS NULL
+                """)).isEqualTo(283);
+        assertThat(count("""
+                SELECT count(DISTINCT emg.muscle_group_id) FROM exercise_muscle_groups emg
+                JOIN exercises e ON e.id = emg.exercise_id
+                WHERE e.owner_id IS NULL
+                """)).isEqualTo(14);
+        assertThat(count("""
+                SELECT count(*) FROM exercise_muscle_groups emg
+                JOIN exercises e ON e.id = emg.exercise_id
+                WHERE e.owner_id IS NULL AND NOT emg.is_primary AND emg.catalog_order IS NULL
+                """)).isEqualTo(84);
+    }
+
+    @Test
+    void starterSet_everyExerciseHasExactlyOnePrimaryWithCatalogOrder() {
+        assertThat(count("""
+                SELECT count(*) FROM exercises e
+                WHERE e.owner_id IS NULL
+                  AND (SELECT count(*) FROM exercise_muscle_groups emg
+                       WHERE emg.exercise_id = e.id AND emg.is_primary AND emg.catalog_order IS NOT NULL) <> 1
+                """)).isZero();
+    }
+
+    @Test
+    void starterSet_noDescriptionOrVideo() {
+        assertThat(count("""
+                SELECT count(*) FROM exercises
+                WHERE owner_id IS NULL AND (description IS NOT NULL OR video_url IS NOT NULL)
+                """)).isZero();
+    }
+
+    @Test
+    void starterSet_perGroupPrimaryCountsMatchPrd() {
+        Map<String, Integer> expected = Map.ofEntries(
+                Map.entry("Peito", 20), Map.entry("Costas", 22), Map.entry("Ombros", 20), Map.entry("Bíceps", 16),
+                Map.entry("Tríceps", 16), Map.entry("Antebraço", 9), Map.entry("Quadríceps", 20),
+                Map.entry("Posteriores de coxa", 13), Map.entry("Glúteos", 14), Map.entry("Panturrilhas", 8),
+                Map.entry("Abdômen", 17), Map.entry("Lombar", 7), Map.entry("Trapézio", 7), Map.entry("Cardio", 10));
+
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT mg.name, count(*) AS primaries, max(emg.catalog_order) AS last_order
+                FROM exercise_muscle_groups emg
+                JOIN exercises e ON e.id = emg.exercise_id
+                JOIN muscle_groups mg ON mg.id = emg.muscle_group_id
+                WHERE e.owner_id IS NULL AND emg.is_primary
+                GROUP BY mg.name
+                """);
+
+        assertThat(rows).hasSize(14).allSatisfy(row -> {
+            int primaries = ((Number) row.get("primaries")).intValue();
+            assertThat(primaries).isEqualTo(expected.get((String) row.get("name")));
+            // catalog_order runs 1..n within each group.
+            assertThat(((Number) row.get("last_order")).intValue()).isEqualTo(primaries);
+        });
+    }
+
+    @Test
+    void starterSet_namesUnique() {
+        assertThat(count("SELECT count(DISTINCT name) FROM exercises WHERE owner_id IS NULL")).isEqualTo(199);
     }
 
     @Test
