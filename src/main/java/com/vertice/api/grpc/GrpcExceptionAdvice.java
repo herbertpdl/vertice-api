@@ -4,6 +4,8 @@ import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ExerciseInUseException;
+import com.vertice.api.common.exception.InvalidCredentialsException;
+import com.vertice.api.common.exception.InvalidPasswordSetupTokenException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.exception.UnauthenticatedException;
@@ -57,6 +59,16 @@ public class GrpcExceptionAdvice {
 
     @GrpcExceptionHandler(UnauthenticatedException.class)
     public Status handleUnauthenticated(UnauthenticatedException ex) {
+        return Status.UNAUTHENTICATED.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(InvalidCredentialsException.class)
+    public Status handleInvalidCredentials(InvalidCredentialsException ex) {
+        return Status.UNAUTHENTICATED.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(InvalidPasswordSetupTokenException.class)
+    public Status handleInvalidPasswordSetupToken(InvalidPasswordSetupTokenException ex) {
         return Status.UNAUTHENTICATED.withDescription(ex.getMessage());
     }
 

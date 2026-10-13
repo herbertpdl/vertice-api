@@ -90,6 +90,27 @@ class TrainerClientControllerTest {
     }
 
     @Test
+    void createClientForTrainer_withoutPassword_isAccepted() {
+        UserResponse created = UserResponse.newBuilder().setId(2L).setRole(Role.CLIENT).build();
+        when(trainerClientService.createClientForTrainer(any())).thenReturn(created);
+
+        assertThat(stub.createClientForTrainer(validCreateRequest().clearPassword().build())).isEqualTo(created);
+    }
+
+    @Test
+    void createClientForTrainer_withPasswordOver72Chars_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createClientForTrainer(validCreateRequest().setPassword("x".repeat(73)).build()));
+    }
+
+    @Test
+    void createClientForTrainer_withMixedCaseEmail_isAccepted() {
+        UserResponse created = UserResponse.newBuilder().setId(2L).setRole(Role.CLIENT).build();
+        when(trainerClientService.createClientForTrainer(any())).thenReturn(created);
+
+        assertThat(stub.createClientForTrainer(validCreateRequest().setEmail(" Client@Vertice.com ").build())).isEqualTo(created);
+    }
+
+    @Test
     void createClientForTrainer_withInvalidCpf_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createClientForTrainer(validCreateRequest().setCpf("00000000000").build()));
     }

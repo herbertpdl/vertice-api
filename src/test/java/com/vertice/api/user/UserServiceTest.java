@@ -2,10 +2,12 @@ package com.vertice.api.user;
 
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.UserCreateRequest;
 import com.vertice.api.generated.grpc.user.v1.UserRequest;
+import com.vertice.api.generated.grpc.user.v1.UserResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +24,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -258,5 +263,149 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> service.setPassword(99L, "brandNewPassword1"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void createUser_normalizesEmailBeforeCheckingAndSaving() {
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.createUser(UserCreateRequest.newBuilder()
+                .setName("New Coach").setEmail("  Coach@Vertice.COM ").setPassword("supersecret1")
+                .setCpf(VALID_CPF).setRole(Role.TRAINER).build());
+
+        verify(userRepository).findByEmail("coach@vertice.com");
+        var captor = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("coach@vertice.com");
+    }
+
+    @Test
+    void createUser_withMixedCaseEmailOfExistingUser_throwsDuplicateEmail() {
+        User existing = new User();
+        existing.setId(1L);
+        when(userRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.createUser(UserCreateRequest.newBuilder()
+                .setName("New Coach").setEmail("COACH@vertice.com").setPassword("supersecret1")
+                .setCpf(VALID_CPF).setRole(Role.TRAINER).build()))
+                .isInstanceOf(DuplicateEmailException.class);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void createUser_withoutPassword_savesNullHash() {
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.createUser(UserCreateRequest.newBuilder()
+                .setName("New Client").setEmail("client@vertice.com")
+                .setCpf(VALID_CPF).setRole(Role.CLIENT).build());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getPasswordHash()).isNull();
+    }
+
+    @Test
+    void updateUser_normalizesEmail() {
+        User existing = new User();
+        existing.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.updateUser(1L, UserRequest.newBuilder()
+                .setName("Coach").setEmail(" Coach@Vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).build());
+
+        verify(userRepository).findByEmail("coach@vertice.com");
+        assertThat(existing.getEmail()).isEqualTo("coach@vertice.com");
+    }
+
+    @Test
+    void listUsersWithoutPassword_filtersByRoleWhenGiven() {
+        User client = userWithPassword(7L, null);
+        client.setRole(com.vertice.api.user.Role.CLIENT);
+        when(userRepository.findByRoleAndPasswordHashIsNull(com.vertice.api.user.Role.CLIENT)).thenReturn(List.of(client));
+
+        assertThat(service.listUsersWithoutPassword(com.vertice.api.user.Role.CLIENT))
+                .extracting(UserResponse::getId).containsExactly(7L);
+    }
+
+    @Test
+    void listUsersWithoutPassword_withoutRole_listsAll() {
+        when(userRepository.findByPasswordHashIsNull()).thenReturn(List.of());
+
+        assertThat(service.listUsersWithoutPassword(null)).isEmpty();
+        verify(userRepository).findByPasswordHashIsNull();
+    }
+
+    @Test
+    void verifyCredentials_withRightPassword_returnsUser() {
+        User user = userWithPassword(1L, passwordEncoder.encode("supersecret1"));
+        when(userRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(user));
+
+        UserResponse response = service.verifyCredentials("coach@vertice.com", "supersecret1");
+
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getEmail()).isEqualTo("coach@vertice.com");
+    }
+
+    @Test
+    void verifyCredentials_matchesEmailCaseInsensitively() {
+        User user = userWithPassword(1L, passwordEncoder.encode("supersecret1"));
+        when(userRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(user));
+
+        assertThat(service.verifyCredentials("  Coach@VERTICE.com ", "supersecret1").getId()).isEqualTo(1L);
+    }
+
+    @Test
+    void verifyCredentials_withWrongPassword_throwsInvalidCredentials() {
+        User user = userWithPassword(1L, passwordEncoder.encode("supersecret1"));
+        when(userRepository.findByEmail("coach@vertice.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> service.verifyCredentials("coach@vertice.com", "wrongpassword"))
+                .isInstanceOf(InvalidCredentialsException.class)
+                .hasMessage("Invalid email or password");
+    }
+
+    @Test
+    void verifyCredentials_withUnknownEmail_throwsSameErrorAfterADummyCompare() {
+        PasswordEncoder encoder = spy(new BCryptPasswordEncoder());
+        UserService spiedService = new UserService(userRepository, Mappers.getMapper(UserMapper.class), encoder);
+        when(userRepository.findByEmail("nobody@vertice.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> spiedService.verifyCredentials("nobody@vertice.com", "supersecret1"))
+                .isInstanceOf(InvalidCredentialsException.class)
+                .hasMessage("Invalid email or password");
+        verify(encoder).matches(eq("supersecret1"), startsWith("$2"));
+    }
+
+    @Test
+    void verifyCredentials_withNoPasswordSet_throwsSameErrorAfterADummyCompare() {
+        PasswordEncoder encoder = spy(new BCryptPasswordEncoder());
+        UserService spiedService = new UserService(userRepository, Mappers.getMapper(UserMapper.class), encoder);
+        when(userRepository.findByEmail("client@vertice.com")).thenReturn(Optional.of(userWithPassword(2L, null)));
+
+        assertThatThrownBy(() -> spiedService.verifyCredentials("client@vertice.com", "supersecret1"))
+                .isInstanceOf(InvalidCredentialsException.class)
+                .hasMessage("Invalid email or password");
+        verify(encoder).matches(eq("supersecret1"), startsWith("$2"));
+    }
+
+    @Test
+    void verifyCredentials_withLegacyEmptyHash_throwsInvalidCredentials() {
+        when(userRepository.findByEmail("client@vertice.com")).thenReturn(Optional.of(userWithPassword(2L, "")));
+
+        assertThatThrownBy(() -> service.verifyCredentials("client@vertice.com", ""))
+                .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    private static User userWithPassword(Long id, String passwordHash) {
+        User user = new User();
+        user.setId(id);
+        user.setName("Someone");
+        user.setEmail("coach@vertice.com");
+        user.setCpf(VALID_CPF);
+        user.setRole(com.vertice.api.user.Role.TRAINER);
+        user.setPasswordHash(passwordHash);
+        return user;
     }
 }
