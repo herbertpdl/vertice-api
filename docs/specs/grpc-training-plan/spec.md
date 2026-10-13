@@ -40,7 +40,7 @@ relation); the service sets `trainingPlan.setTrainer(trainer)` explicitly using 
 fetched for the existence check — one query, not two. `toResponse` maps `trainer_id` via
 `@Mapping(target = "trainerId", source = "trainer.id")`.
 
-`Update` never changes `trainer` — same "no re-parenting via update" rule as the rest of the plan.
+`Update` never changes `trainer`, and never changes `client` (a different `client_id` is `FAILED_PRECONDITION`, REL-API-002) — same "no re-parenting via update" rule as the rest of the plan.
 `Delete` cascades to `Workout`/`WorkoutExercise`/`ExerciseSet` for free (JPA `cascade = ALL,
 orphanRemoval = true` already configured on `TrainingPlan.workouts`).
 

@@ -97,6 +97,7 @@ New file `src/main/proto/vertice/session/v1/workout_session.proto`, `package ver
 | RPC | Request | Response |
 |---|---|---|
 | `GetOrStartWorkoutLog` | `{workout_id, client_id, week_start_date}` | `WorkoutLogResponse` |
+| `GetWorkoutLog` | `{id}` | `WorkoutLogResponse` (`NOT_FOUND` if missing; added for REL-API-001 so the BFF can check log ownership) |
 | `RecordSetLog` | `{workout_log_id, exercise_set_id, weight, reps}` | `SetLogResponse` |
 | `CompleteWorkoutLog` | `{id}` | `WorkoutLogResponse` |
 | `ListWorkoutLogs` | `{client_id, training_plan_id, week_start_date}` | `repeated WorkoutLogResponse` |
@@ -119,6 +120,10 @@ New file `src/main/proto/vertice/session/v1/workout_session.proto`, `package ver
   negative, blank → unset).
 - `RecordSetLog` against a `WorkoutLog` whose `completedAt` is already set → rejected
   (`ConstraintViolationException`, "session already completed").
+- Session invariants (added for REL-API-001, `BusinessRuleViolationException` →
+  `FAILED_PRECONDITION`): on `RecordSetLog` the exercise set must belong to the log's workout;
+  on `GetOrStartWorkoutLog` the workout's plan must belong to `client_id` (checked when starting
+  and when returning an existing log).
 
 ## 5. Out of scope
 

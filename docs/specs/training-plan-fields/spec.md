@@ -99,7 +99,9 @@ canonical-form fields — no dedicated date/timestamp proto type in use anywhere
 `PlanLevel level = 8`. `TrainingPlanRequest` (update body) and `TrainingPlanCreateRequest` both
 gain `client_id`, `start_date`, `end_date`, `level` alongside `name`/`description` — a plan's
 assignment/dates/level are as editable as its name (same "person's own record" reasoning
-`trainer-cref/spec.md` §2 used for making `cref` part of the update body).
+`trainer-cref/spec.md` §2 used for making `cref` part of the update body). **Superseded for
+`client_id` (REL-API-002):** the update body still carries `client_id`, but it must equal the
+plan's current client, otherwise `FAILED_PRECONDITION`. Dates and level stay editable.
 
 `ListTrainingPlansRequest` gains `int64 client_id = 2` (field 1 remains `trainer_id`). Both are
 optional filters — supplying neither returns everything, matching how `ListUsersRequest`'s `role`
@@ -109,7 +111,9 @@ filter already behaves when left at its zero value.
 
 - `name`: unchanged, `@NotBlank`.
 - `client_id`: must resolve to a `User` with `role == CLIENT`, else `ResourceNotFoundException`
-  — identical shape to `TrainingPlanService`'s existing trainer-role check.
+  — identical shape to `TrainingPlanService`'s existing trainer-role check. Since REL-API-002,
+  create and update also require an active `trainer_clients` link (`ended_at IS NULL`) for
+  `(trainer, client)`, else `FAILED_PRECONDITION`.
 - `start_date`/`end_date`: parsed as `LocalDate`; unparsable or blank → `INVALID_ARGUMENT`
   (`ConstraintViolationException`, same class every other manual validation in this codebase
   throws); `end_date` before `start_date` → `INVALID_ARGUMENT` with a dedicated message.
