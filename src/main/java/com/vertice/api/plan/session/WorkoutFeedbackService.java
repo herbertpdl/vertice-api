@@ -1,6 +1,7 @@
 package com.vertice.api.plan.session;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackResponse;
 import jakarta.validation.ConstraintViolationException;
@@ -8,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
@@ -31,7 +31,7 @@ public class WorkoutFeedbackService {
         WorkoutFeedback feedback = new WorkoutFeedback();
         feedback.setWorkoutLog(workoutLog);
         feedback.setText(request.getText());
-        feedback.setCreatedAt(Instant.now());
+        feedback.setCreatedAt(DbInstants.now());
         return workoutFeedbackMapper.toResponse(workoutFeedbackRepository.save(feedback));
     }
 

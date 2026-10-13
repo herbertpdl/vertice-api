@@ -2,6 +2,7 @@ package com.vertice.api.plan.session;
 
 import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.ProgressPoint;
@@ -24,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -81,14 +81,14 @@ public class WorkoutSessionService {
         setLog.setExerciseSet(exerciseSet);
         setLog.setWeight(ProtoDecimals.stringToDecimal(request.getWeight()));
         setLog.setReps(request.getReps());
-        setLog.setRecordedAt(Instant.now());
+        setLog.setRecordedAt(DbInstants.now());
         return setLogMapper.toResponse(setLogRepository.save(setLog));
     }
 
     public WorkoutLogResponse completeWorkoutLog(Long id) {
         WorkoutLog workoutLog = findWorkoutLogOrThrow(id);
         if (workoutLog.getCompletedAt() == null) {
-            workoutLog.setCompletedAt(Instant.now());
+            workoutLog.setCompletedAt(DbInstants.now());
             workoutLog = workoutLogRepository.save(workoutLog);
         }
         return workoutLogMapper.toResponse(workoutLog);
@@ -146,7 +146,7 @@ public class WorkoutSessionService {
         workoutLog.setWorkout(workout);
         workoutLog.setClient(client);
         workoutLog.setWeekStartDate(weekStartDate);
-        workoutLog.setStartedAt(Instant.now());
+        workoutLog.setStartedAt(DbInstants.now());
         return workoutLogRepository.save(workoutLog);
     }
 
