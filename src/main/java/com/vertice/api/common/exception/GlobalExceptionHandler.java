@@ -29,6 +29,11 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, ex.getMessage());
     }
 
+    @ExceptionHandler(BusinessRuleViolationException.class)
+    public ProblemDetail handleBusinessRuleViolation(BusinessRuleViolationException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, ex.getMessage());
+    }
+
     @ExceptionHandler(UnauthenticatedException.class)
     public ProblemDetail handleUnauthenticated(UnauthenticatedException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());

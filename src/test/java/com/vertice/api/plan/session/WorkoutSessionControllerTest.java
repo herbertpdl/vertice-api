@@ -1,5 +1,6 @@
 package com.vertice.api.plan.session;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressRequest;
@@ -7,6 +8,7 @@ import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.GetWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.ProgressPoint;
@@ -93,6 +95,48 @@ class WorkoutSessionControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    @Test
+    void getWorkoutLog_whenExists_returnsLog() {
+        WorkoutLogResponse log = WorkoutLogResponse.newBuilder().setId(1L).setWorkoutId(3L).setClientId(2L).setWeekStartDate("2026-08-24").build();
+        when(workoutSessionService.getWorkoutLog(1L)).thenReturn(log);
+
+        WorkoutLogResponse response = stub.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(1L).build());
+
+        assertThat(response).isEqualTo(log);
+    }
+
+    @Test
+    void getWorkoutLog_whenMissing_throwsNotFound() {
+        when(workoutSessionService.getWorkoutLog(99L)).thenThrow(new ResourceNotFoundException("WorkoutLog", 99L));
+
+        assertThatThrownBy(() -> stub.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(99L).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    @Test
+    void getWorkoutLog_withZeroId_throwsInvalidArgument() {
+        assertThatThrownBy(() -> stub.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(0).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void recordSetLog_withSetFromAnotherWorkout_throwsFailedPrecondition() {
+        when(workoutSessionService.recordSetLog(any()))
+                .thenThrow(new BusinessRuleViolationException("ExerciseSet 5 does not belong to the workout of WorkoutLog 1"));
+
+        assertThatThrownBy(() -> stub.recordSetLog(RecordSetLogRequest.newBuilder()
+                .setWorkoutLogId(1L).setExerciseSetId(5L).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+                    assertThat(ex.getStatus().getDescription()).contains("ExerciseSet 5");
+                });
     }
 
     @Test

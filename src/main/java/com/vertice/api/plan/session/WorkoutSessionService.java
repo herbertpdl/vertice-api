@@ -1,5 +1,6 @@
 package com.vertice.api.plan.session;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 
@@ -45,20 +47,33 @@ public class WorkoutSessionService {
 
     public WorkoutLogResponse getOrStartWorkoutLog(GetOrStartWorkoutLogRequest request) {
         LocalDate weekStartDate = assertMonday(request.getWeekStartDate());
-        WorkoutLog workoutLog = workoutLogRepository
-                .findByWorkoutIdAndClientIdAndWeekStartDate(request.getWorkoutId(), request.getClientId(), weekStartDate)
-                .orElseGet(() -> startWorkoutLog(request.getWorkoutId(), request.getClientId(), weekStartDate));
-        return workoutLogMapper.toResponse(workoutLog);
+        Optional<WorkoutLog> existing = workoutLogRepository
+                .findByWorkoutIdAndClientIdAndWeekStartDate(request.getWorkoutId(), request.getClientId(), weekStartDate);
+        if (existing.isPresent()) {
+            // Checked here too so a log created before this rule existed isn't handed back.
+            assertWorkoutAssignedToClient(existing.get().getWorkout(), request.getClientId());
+            return workoutLogMapper.toResponse(existing.get());
+        }
+        return workoutLogMapper.toResponse(startWorkoutLog(request.getWorkoutId(), request.getClientId(), weekStartDate));
+    }
+
+    @Transactional(readOnly = true)
+    public WorkoutLogResponse getWorkoutLog(Long id) {
+        return workoutLogMapper.toResponse(findWorkoutLogOrThrow(id));
     }
 
     public SetLogResponse recordSetLog(RecordSetLogRequest request) {
-        WorkoutLog workoutLog = workoutLogRepository.findById(request.getWorkoutLogId())
-                .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", request.getWorkoutLogId()));
+        WorkoutLog workoutLog = findWorkoutLogOrThrow(request.getWorkoutLogId());
         if (workoutLog.getCompletedAt() != null) {
             throw new ConstraintViolationException("workoutLogId: session already completed", Set.of());
         }
         ExerciseSet exerciseSet = exerciseSetRepository.findById(request.getExerciseSetId())
                 .orElseThrow(() -> new ResourceNotFoundException("ExerciseSet", request.getExerciseSetId()));
+        Long setWorkoutId = exerciseSet.getWorkoutExercise().getWorkout().getId();
+        if (!setWorkoutId.equals(workoutLog.getWorkout().getId())) {
+            throw new BusinessRuleViolationException("ExerciseSet %d does not belong to the workout of WorkoutLog %d"
+                    .formatted(exerciseSet.getId(), workoutLog.getId()));
+        }
 
         SetLog setLog = setLogRepository.findByWorkoutLogIdAndExerciseSetId(workoutLog.getId(), exerciseSet.getId())
                 .orElseGet(SetLog::new);
@@ -71,8 +86,7 @@ public class WorkoutSessionService {
     }
 
     public WorkoutLogResponse completeWorkoutLog(Long id) {
-        WorkoutLog workoutLog = workoutLogRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", id));
+        WorkoutLog workoutLog = findWorkoutLogOrThrow(id);
         if (workoutLog.getCompletedAt() == null) {
             workoutLog.setCompletedAt(Instant.now());
             workoutLog = workoutLogRepository.save(workoutLog);
@@ -126,6 +140,7 @@ public class WorkoutSessionService {
         User client = userRepository.findById(clientId)
                 .filter(user -> user.getRole() == Role.CLIENT)
                 .orElseThrow(() -> new ResourceNotFoundException("Client", clientId));
+        assertWorkoutAssignedToClient(workout, clientId);
 
         WorkoutLog workoutLog = new WorkoutLog();
         workoutLog.setWorkout(workout);
@@ -133,6 +148,19 @@ public class WorkoutSessionService {
         workoutLog.setWeekStartDate(weekStartDate);
         workoutLog.setStartedAt(Instant.now());
         return workoutLogRepository.save(workoutLog);
+    }
+
+    private WorkoutLog findWorkoutLogOrThrow(Long id) {
+        return workoutLogRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", id));
+    }
+
+    /** A client may only log workouts from their own training plan. */
+    private void assertWorkoutAssignedToClient(Workout workout, Long clientId) {
+        if (!workout.getTrainingPlan().getClient().getId().equals(clientId)) {
+            throw new BusinessRuleViolationException("Workout %d is not assigned to client %d"
+                    .formatted(workout.getId(), clientId));
+        }
     }
 
     /**

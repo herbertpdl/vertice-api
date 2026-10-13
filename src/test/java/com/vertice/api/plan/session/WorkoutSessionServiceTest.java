@@ -1,11 +1,14 @@
 package com.vertice.api.plan.session;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
+import com.vertice.api.plan.TrainingPlan;
 import com.vertice.api.plan.workout.ExerciseSet;
 import com.vertice.api.plan.workout.ExerciseSetRepository;
 import com.vertice.api.plan.workout.Workout;
+import com.vertice.api.plan.workout.WorkoutExercise;
 import com.vertice.api.plan.workout.WorkoutRepository;
 import com.vertice.api.user.Role;
 import com.vertice.api.user.User;
@@ -57,10 +60,27 @@ class WorkoutSessionServiceTest {
                 workoutRepository, userRepository, exerciseSetRepository);
     }
 
+    /** A workout from a plan assigned to client 2, the client every test below logs as. */
     private static Workout workout(long id) {
+        return workoutForClient(id, 2L);
+    }
+
+    private static Workout workoutForClient(long id, long clientId) {
+        TrainingPlan plan = new TrainingPlan();
+        plan.setClient(client(clientId));
         Workout workout = new Workout();
         workout.setId(id);
+        workout.setTrainingPlan(plan);
         return workout;
+    }
+
+    private static ExerciseSet exerciseSet(long id, Workout workout) {
+        WorkoutExercise workoutExercise = new WorkoutExercise();
+        workoutExercise.setWorkout(workout);
+        ExerciseSet exerciseSet = new ExerciseSet();
+        exerciseSet.setId(id);
+        exerciseSet.setWorkoutExercise(workoutExercise);
+        return exerciseSet;
     }
 
     private static User client(long id) {
@@ -121,6 +141,55 @@ class WorkoutSessionServiceTest {
     }
 
     @Test
+    void getOrStartWorkoutLog_throwsWhenWorkoutNotAssignedToClient() {
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+                .thenReturn(Optional.empty());
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workoutForClient(1L, 3L)));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(client(2L)));
+
+        var request = GetOrStartWorkoutLogRequest.newBuilder()
+                .setWorkoutId(1L).setClientId(2L).setWeekStartDate("2026-08-24").build();
+
+        assertThatThrownBy(() -> service.getOrStartWorkoutLog(request))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("Workout 1");
+        verify(workoutLogRepository, never()).save(any());
+    }
+
+    @Test
+    void getOrStartWorkoutLog_throwsWhenExistingLogIsForAnotherClientsWorkout() {
+        WorkoutLog existing = workoutLog(10L, workoutForClient(1L, 3L), client(2L));
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+                .thenReturn(Optional.of(existing));
+
+        var request = GetOrStartWorkoutLogRequest.newBuilder()
+                .setWorkoutId(1L).setClientId(2L).setWeekStartDate("2026-08-24").build();
+
+        assertThatThrownBy(() -> service.getOrStartWorkoutLog(request))
+                .isInstanceOf(BusinessRuleViolationException.class);
+    }
+
+    @Test
+    void getWorkoutLog_returnsLog() {
+        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(workoutLog(10L, workout(1L), client(2L))));
+
+        var response = service.getWorkoutLog(10L);
+
+        assertThat(response.getId()).isEqualTo(10L);
+        assertThat(response.getWorkoutId()).isEqualTo(1L);
+        assertThat(response.getClientId()).isEqualTo(2L);
+        assertThat(response.getWeekStartDate()).isEqualTo("2026-08-24");
+    }
+
+    @Test
+    void getWorkoutLog_throwsWhenMissing() {
+        when(workoutLogRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getWorkoutLog(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void getOrStartWorkoutLog_throwsWhenNotMonday() {
         var request = GetOrStartWorkoutLogRequest.newBuilder()
                 .setWorkoutId(1L).setClientId(2L).setWeekStartDate("2026-08-25").build();
@@ -161,9 +230,9 @@ class WorkoutSessionServiceTest {
 
     @Test
     void recordSetLog_createsNewSetLog() {
-        WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        ExerciseSet exerciseSet = new ExerciseSet();
-        exerciseSet.setId(5L);
+        Workout workout = workout(1L);
+        WorkoutLog log = workoutLog(10L, workout, client(2L));
+        ExerciseSet exerciseSet = exerciseSet(5L, workout);
 
         when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet));
@@ -183,9 +252,9 @@ class WorkoutSessionServiceTest {
 
     @Test
     void recordSetLog_upsertsExistingSetLogInPlace() {
-        WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        ExerciseSet exerciseSet = new ExerciseSet();
-        exerciseSet.setId(5L);
+        Workout workout = workout(1L);
+        WorkoutLog log = workoutLog(10L, workout, client(2L));
+        ExerciseSet exerciseSet = exerciseSet(5L, workout);
         SetLog existing = new SetLog();
         existing.setId(50L);
         existing.setWorkoutLog(log);
@@ -204,6 +273,21 @@ class WorkoutSessionServiceTest {
 
         assertThat(response.getId()).isEqualTo(50L);
         assertThat(response.getWeight()).isEqualTo("65");
+    }
+
+    @Test
+    void recordSetLog_throwsWhenExerciseSetBelongsToAnotherWorkout() {
+        WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
+        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet(5L, workout(7L))));
+
+        var request = RecordSetLogRequest.newBuilder()
+                .setWorkoutLogId(10L).setExerciseSetId(5L).setWeight("60").setReps(8).build();
+
+        assertThatThrownBy(() -> service.recordSetLog(request))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("ExerciseSet 5");
+        verify(setLogRepository, never()).save(any());
     }
 
     @Test
