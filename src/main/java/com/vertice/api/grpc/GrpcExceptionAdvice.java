@@ -2,7 +2,10 @@ package com.vertice.api.grpc;
 
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.ExerciseInUseException;
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.exception.UnauthenticatedException;
 import com.vertice.api.common.exception.WorkoutExerciseHasRecordedDataException;
 import io.grpc.Status;
 import jakarta.validation.ConstraintViolationException;
@@ -41,8 +44,30 @@ public class GrpcExceptionAdvice {
         return Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
     }
 
+    @GrpcExceptionHandler(ExerciseInUseException.class)
+    public Status handleExerciseInUse(ExerciseInUseException ex) {
+        return Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(UnauthenticatedException.class)
+    public Status handleUnauthenticated(UnauthenticatedException ex) {
+        return Status.UNAUTHENTICATED.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(PermissionDeniedException.class)
+    public Status handlePermissionDenied(PermissionDeniedException ex) {
+        return Status.PERMISSION_DENIED.withDescription(ex.getMessage());
+    }
+
+    /**
+     * Hand-thrown {@code new ConstraintViolationException("field: message", Set.of())} carries its
+     * description in the message and no violations, so fall back to the message in that case.
+     */
     @GrpcExceptionHandler(ConstraintViolationException.class)
     public Status handleValidation(ConstraintViolationException ex) {
+        if (ex.getConstraintViolations() == null || ex.getConstraintViolations().isEmpty()) {
+            return Status.INVALID_ARGUMENT.withDescription(ex.getMessage());
+        }
         String detail = ex.getConstraintViolations().stream()
                 .map(violation -> "%s: %s".formatted(violation.getPropertyPath(), violation.getMessage()))
                 .collect(Collectors.joining("; "));
