@@ -3,15 +3,12 @@ package com.vertice.api.config;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.boot.WebApplicationType;
-import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.Configuration;
 
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.vertice.api.config.GuardBoot.boot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -104,7 +101,8 @@ class JwtSecretGuardTest {
 
     @Test
     void devDefault_nonLocalProfile_refusesToStart() {
-        assertThatThrownBy(() -> boot("--spring.profiles.active=prod"))
+        assertThatThrownBy(() -> boot("--spring.profiles.active=prod",
+                "--vertice.jwt.secret=" + JwtSecretGuard.DEV_SECRET))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("JWT_SECRET is a publicly known placeholder/dev value; set a random secret");
     }
@@ -112,7 +110,8 @@ class JwtSecretGuardTest {
     @Test
     void devDefault_nonLocalProfile_lazyInitialization_refusesToStart() {
         // The guard runs on the environment, not as a bean, so lazy initialization can't skip it.
-        assertThatThrownBy(() -> boot("--spring.profiles.active=prod", "--spring.main.lazy-initialization=true"))
+        assertThatThrownBy(() -> boot("--spring.profiles.active=prod",
+                "--vertice.jwt.secret=" + JwtSecretGuard.DEV_SECRET, "--spring.main.lazy-initialization=true"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("JWT_SECRET is a publicly known placeholder/dev value; set a random secret");
     }
@@ -128,17 +127,6 @@ class JwtSecretGuardTest {
     void validSecret_nonLocalProfile_starts() {
         assertThatCode(() -> boot("--spring.profiles.active=prod", "--vertice.jwt.secret=" + VALID_SECRET).close())
                 .doesNotThrowAnyException();
-    }
-
-    /** Command-line args, so they win over any JWT_SECRET/VERTICE_ENV in the developer's shell. */
-    private static ConfigurableApplicationContext boot(String... args) {
-        return new SpringApplicationBuilder(EmptyConfig.class)
-                .web(WebApplicationType.NONE)
-                .run(args);
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class EmptyConfig {
     }
 
     private static void assertRefused(String secret, String message) {

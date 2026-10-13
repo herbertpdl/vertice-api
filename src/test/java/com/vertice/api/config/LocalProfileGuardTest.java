@@ -3,16 +3,14 @@ package com.vertice.api.config;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
-import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
+import static com.vertice.api.config.GuardBoot.boot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -101,7 +99,7 @@ class LocalProfileGuardTest {
 
     @Test
     void localProfile_otherEnv_refusesToStart() {
-        assertThatThrownBy(() -> boot(EmptyConfig.class, "--spring.profiles.active=local", "--VERTICE_ENV=prod",
+        assertThatThrownBy(() -> boot("--spring.profiles.active=local", "--VERTICE_ENV=prod",
                 "--spring.datasource.url=" + LOCAL_URL))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("must not run with VERTICE_ENV=prod");
@@ -109,7 +107,7 @@ class LocalProfileGuardTest {
 
     @Test
     void localProfile_lazyInitialization_stillRefusesToStart() {
-        assertThatThrownBy(() -> boot(EmptyConfig.class, "--spring.profiles.active=local", "--VERTICE_ENV=prod",
+        assertThatThrownBy(() -> boot("--spring.profiles.active=local", "--VERTICE_ENV=prod",
                 "--spring.datasource.url=" + LOCAL_URL, "--spring.main.lazy-initialization=true"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("must not run with VERTICE_ENV=prod");
@@ -128,7 +126,7 @@ class LocalProfileGuardTest {
 
     @Test
     void localCombinedWithAnotherProfile_stillGuarded() {
-        assertThatThrownBy(() -> boot(EmptyConfig.class, "--spring.profiles.active=local,prod", "--VERTICE_ENV=prod",
+        assertThatThrownBy(() -> boot("--spring.profiles.active=local,prod", "--VERTICE_ENV=prod",
                 "--spring.datasource.url=" + LOCAL_URL))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("must not run with VERTICE_ENV=prod");
@@ -136,14 +134,14 @@ class LocalProfileGuardTest {
 
     @Test
     void localProfile_localEnvironment_starts() {
-        assertThatCode(() -> boot(EmptyConfig.class, "--spring.profiles.active=local", "--VERTICE_ENV=",
+        assertThatCode(() -> boot("--spring.profiles.active=local", "--VERTICE_ENV=",
                 "--spring.datasource.url=" + LOCAL_URL).close())
                 .doesNotThrowAnyException();
     }
 
     @Test
     void nonLocalProfile_doesNotRunGuard() {
-        assertThatCode(() -> boot(EmptyConfig.class, "--spring.profiles.active=prod", "--VERTICE_ENV=prod",
+        assertThatCode(() -> boot("--spring.profiles.active=prod", "--VERTICE_ENV=prod",
                 "--spring.datasource.url=" + REMOTE_URL,
                 "--vertice.jwt.secret=" + "x".repeat(JwtSecretGuard.MIN_SECRET_BYTES)).close())
                 .doesNotThrowAnyException();
@@ -157,17 +155,6 @@ class LocalProfileGuardTest {
         assertThatThrownBy(new LocalProfileGuard(env, url)::check)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(message);
-    }
-
-    /** Command-line args, so they win over any VERTICE_ENV/SPRING_DATASOURCE_URL in the developer's shell. */
-    private static ConfigurableApplicationContext boot(Class<?> config, String... args) {
-        return new SpringApplicationBuilder(config)
-                .web(WebApplicationType.NONE)
-                .run(args);
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class EmptyConfig {
     }
 
     @Configuration(proxyBeanMethods = false)

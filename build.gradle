@@ -61,4 +61,10 @@ protobuf {
 
 tasks.withType(Test).configureEach {
 	useJUnitPlatform()
+	// Keep the developer's shell out of the test JVM: an exported VERTICE_ENV would make
+	// LocalProfileGuard refuse every @ActiveProfiles("local") context, and an exported JWT_SECRET
+	// would stop tokens minted with TestJwts.LOCAL_SECRET from verifying. Tests that need either
+	// value set it explicitly.
+	environment.remove('VERTICE_ENV')
+	environment.remove('JWT_SECRET')
 }

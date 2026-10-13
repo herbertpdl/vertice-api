@@ -73,7 +73,9 @@ must keep a localhost datasource. `postgres` may also be a deployed DB's hostnam
 environments must set `VERTICE_ENV`. Both guards are plain classes run by `config/BootGuards`, an
 `EnvironmentPostProcessor` registered in `META-INF/spring.factories`: they fire before any bean
 exists (so before Hikari/Flyway touch the database, and regardless of lazy initialization). Keep
-new boot-time checks there rather than in `@PostConstruct` beans.
+new boot-time checks there rather than in `@PostConstruct` beans. The Gradle test task drops
+`VERTICE_ENV` and `JWT_SECRET` from the test JVM's environment; tests that boot the guards (`config/GuardBoot`)
+pass every property they depend on as command-line args so the developer's shell can't leak in.
 The two transports need separate wiring: Spring Boot's default gRPC
 OAuth2 auto-config is `@ConditionalOnMissingBean(AuthenticationProcessInterceptor.class)`, so
 `GrpcSecurityConfig` defining its own bean is what makes the local-profile bypass exist for gRPC
