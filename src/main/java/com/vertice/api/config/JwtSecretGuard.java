@@ -1,10 +1,5 @@
 package com.vertice.api.config;
 
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Component;
-
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
@@ -14,10 +9,9 @@ import java.util.Locale;
  * brute-force: blank, whitespace-padded, below the 256-bit HS256 floor, or one of the publicly
  * known dev/placeholder values. Mirrors vertice-bff's {@code src/config/env.ts}; keep the two in
  * sync. Under {@code local} the shared dev default ({@link #DEV_SECRET}) is allowed so the API
- * verifies tokens minted by a BFF running on its own default.
+ * verifies tokens minted by a BFF running on its own default. Run by {@link BootGuards} before any
+ * bean exists.
  */
-@Component
-@Profile("!local")
 public class JwtSecretGuard {
 
     static final int MIN_SECRET_BYTES = 32;
@@ -31,12 +25,11 @@ public class JwtSecretGuard {
 
     private final String secret;
 
-    public JwtSecretGuard(@Value("${vertice.jwt.secret}") String secret) {
+    public JwtSecretGuard(String secret) {
         this.secret = secret;
     }
 
     // Messages never echo the secret itself.
-    @PostConstruct
     void checkSecret() {
         if (secret == null || jsTrim(secret).isEmpty()) {
             throw new IllegalStateException("JWT_SECRET is required outside the local profile");

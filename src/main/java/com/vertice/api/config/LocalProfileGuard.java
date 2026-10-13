@@ -1,10 +1,5 @@
 package com.vertice.api.config;
 
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -16,11 +11,13 @@ import java.util.Set;
  * so the application refuses to boot with it anywhere that doesn't look like a developer machine:
  * when {@code VERTICE_ENV} names any environment other than {@code local}/{@code dev}, or when the
  * datasource points at a host other than this machine or the compose {@code postgres} service.
- * Active whenever {@code local} is among the active profiles, including combinations such as
- * {@code local,prod}.
+ * Run by {@link BootGuards} whenever {@code local} is among the active profiles, including
+ * combinations such as {@code local,prod}, before any bean (datasource, Flyway, servers) exists.
+ *
+ * <p>{@code postgres} is allowlisted because it is the compose service name, but it may just as well
+ * be a deployed database's hostname: deployed environments must set {@code VERTICE_ENV} (e.g.
+ * {@code prod}) for this guard to catch them.
  */
-@Component
-@Profile("local")
 public class LocalProfileGuard {
 
     static final Set<String> ALLOWED_ENVS = Set.of("local", "dev");
@@ -36,14 +33,12 @@ public class LocalProfileGuard {
     private final String verticeEnv;
     private final String datasourceUrl;
 
-    public LocalProfileGuard(@Value("${VERTICE_ENV:}") String verticeEnv,
-                             @Value("${spring.datasource.url:}") String datasourceUrl) {
-        this.verticeEnv = verticeEnv;
+    public LocalProfileGuard(String verticeEnv, String datasourceUrl) {
+        this.verticeEnv = verticeEnv == null ? "" : verticeEnv;
         this.datasourceUrl = datasourceUrl;
     }
 
     // Messages never echo the datasource URL: it may carry a user or password as query parameters.
-    @PostConstruct
     void check() {
         String env = verticeEnv.strip().toLowerCase(Locale.ROOT);
         if (!env.isEmpty() && !ALLOWED_ENVS.contains(env)) {
@@ -106,18 +101,20 @@ public class LocalProfileGuard {
         return Optional.of(hosts);
     }
 
-    /** {@code host}, {@code host:port}, {@code [ipv6]} or {@code [ipv6]:port}. */
+    /**
+     * {@code host}, {@code host:port}, {@code [ipv6]} or {@code [ipv6]:port}. Splits off the port at
+     * the last {@code :} after any {@code ]}, as pgjdbc does, so {@code localhost:evil:5432} yields
+     * host {@code localhost:evil}.
+     */
     private static Optional<String> hostOf(String hostAndPort) {
-        String host;
-        if (hostAndPort.startsWith("[")) {
-            int close = hostAndPort.indexOf(']');
-            if (close < 0) {
-                return Optional.empty();
-            }
-            host = hostAndPort.substring(1, close);
-        } else {
-            int colon = hostAndPort.indexOf(':');
-            host = colon < 0 ? hostAndPort : hostAndPort.substring(0, colon);
+        int portStart = hostAndPort.lastIndexOf(':');
+        String host = portStart >= 0 && hostAndPort.lastIndexOf(']') < portStart
+                ? hostAndPort.substring(0, portStart)
+                : hostAndPort;
+        if (host.startsWith("[") && host.endsWith("]")) {
+            host = host.substring(1, host.length() - 1);
+        } else if (host.contains("[") || host.contains("]")) {
+            return Optional.empty();
         }
         return host.isBlank() ? Optional.empty() : Optional.of(host);
     }
