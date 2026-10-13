@@ -1,6 +1,7 @@
 package com.vertice.api.trainerclient;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerResponse;
@@ -15,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -52,7 +52,7 @@ public class TrainerClientService {
         TrainerClient trainerClient = new TrainerClient();
         trainerClient.setTrainer(trainer);
         trainerClient.setClient(client);
-        trainerClient.setStartedAt(Instant.now());
+        trainerClient.setStartedAt(DbInstants.now());
         trainerClientRepository.save(trainerClient);
 
         return createdClient;

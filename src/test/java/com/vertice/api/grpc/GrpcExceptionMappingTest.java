@@ -2,6 +2,7 @@ package com.vertice.api.grpc;
 
 import com.google.protobuf.Empty;
 import com.google.protobuf.StringValue;
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ExerciseInUseException;
 import com.vertice.api.common.exception.PermissionDeniedException;
@@ -114,6 +115,16 @@ class GrpcExceptionMappingTest {
     }
 
     @Test
+    void businessRuleViolationException_mapsToFailedPrecondition() {
+        assertThatThrownBy(() -> trigger("business-rule"))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("Workout 1 is not assigned to client 2");
+                });
+    }
+
+    @Test
     void unauthenticatedException_mapsToUnauthenticated() {
         assertThatThrownBy(() -> trigger("unauthenticated"))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
@@ -152,6 +163,7 @@ class GrpcExceptionMappingTest {
                     case "validation-message" ->
                             throw new ConstraintViolationException("muscleGroupIds: unknown muscle group 99", Set.of());
                     case "in-use" -> throw new ExerciseInUseException(3L);
+                    case "business-rule" -> throw new BusinessRuleViolationException("Workout 1 is not assigned to client 2");
                     case "unauthenticated" -> throw new UnauthenticatedException();
                     case "permission-denied" -> throw PermissionDeniedException.noAccess("exercise", 7L);
                     default -> { }

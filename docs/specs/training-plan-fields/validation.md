@@ -40,9 +40,17 @@ that are actually verified (test run, manual grpcurl, or code read) — not assu
   `TrainingPlanServiceTest#createTrainingPlan_allowsEndDateEqualToStartDate`
 - [x] `level` unset (`PLAN_LEVEL_UNSPECIFIED`) → `INVALID_ARGUMENT` —
   `TrainingPlanControllerTest#createTrainingPlan_withUnsetLevel_throwsInvalidArgument`
-- [x] Update re-validates and can reassign `client_id`/dates/level —
-  `TrainingPlanServiceTest#updateTrainingPlan_updatesFieldsAndReassignsClient`,
-  `#updateTrainingPlan_throwsWhenNewClientMissing`
+- [x] Update re-validates dates/level and keeps the client —
+  `TrainingPlanServiceTest#updateTrainingPlan_updatesFieldsAndKeepsClient`
+- [x] `client_id` is immutable on update: a different `client_id` → `FAILED_PRECONDITION`
+  (superseded the original "can reassign `client_id`" rule, REL-API-002) —
+  `TrainingPlanServiceTest#updateTrainingPlan_throwsWhenClientChanged`,
+  `OwnershipInvariantsIntegrationTest#updateTrainingPlan_acceptsSameClientAndRejectsClientChange`
+- [x] Create and update require an active `trainer_clients` link (`ended_at IS NULL`) for
+  `(trainer, client)`, else `FAILED_PRECONDITION` (REL-API-002) —
+  `TrainingPlanServiceTest#createTrainingPlan_throwsWhenClientIsNotTrainersActiveClient`,
+  `#updateTrainingPlan_throwsWhenClientIsNoLongerTrainersActiveClient`,
+  `OwnershipInvariantsIntegrationTest#createTrainingPlan_acceptsActiveClientAndRejectsUnlinkedClient`
 
 ## Listing (section 3)
 

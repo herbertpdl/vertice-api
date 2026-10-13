@@ -1,9 +1,11 @@
 package com.vertice.api.plan;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.PlanLevel;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanRequest;
+import com.vertice.api.trainerclient.TrainerClientRepository;
 import com.vertice.api.user.Role;
 import com.vertice.api.user.User;
 import com.vertice.api.user.UserRepository;
@@ -34,11 +36,15 @@ class TrainingPlanServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private TrainerClientRepository trainerClientRepository;
+
     private TrainingPlanService service;
 
     @BeforeEach
     void setUp() {
-        service = new TrainingPlanService(trainingPlanRepository, Mappers.getMapper(TrainingPlanMapper.class), userRepository);
+        service = new TrainingPlanService(trainingPlanRepository, Mappers.getMapper(TrainingPlanMapper.class), userRepository,
+                trainerClientRepository);
     }
 
     private static User user(long id, Role role) {
@@ -75,6 +81,7 @@ class TrainingPlanServiceTest {
     void createTrainingPlan_setsTrainerAndClientAndSaves() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, Role.TRAINER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, Role.CLIENT)));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(true);
         when(trainingPlanRepository.save(any(TrainingPlan.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = service.createTrainingPlan(validCreateRequest().build());
@@ -134,9 +141,24 @@ class TrainingPlanServiceTest {
     }
 
     @Test
+    void createTrainingPlan_throwsWhenClientIsNotTrainersActiveClient() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, Role.TRAINER)));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, Role.CLIENT)));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(false);
+
+        var request = validCreateRequest().build();
+
+        assertThatThrownBy(() -> service.createTrainingPlan(request))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("Client 2");
+        verify(trainingPlanRepository, never()).save(any());
+    }
+
+    @Test
     void createTrainingPlan_throwsWhenEndDateBeforeStartDate() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, Role.TRAINER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, Role.CLIENT)));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(true);
 
         var request = validCreateRequest().setStartDate("2026-03-30").setEndDate("2026-01-05").build();
 
@@ -149,6 +171,7 @@ class TrainingPlanServiceTest {
     void createTrainingPlan_allowsEndDateEqualToStartDate() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, Role.TRAINER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, Role.CLIENT)));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(true);
         when(trainingPlanRepository.save(any(TrainingPlan.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var request = validCreateRequest().setStartDate("2026-01-05").setEndDate("2026-01-05").build();
@@ -162,6 +185,7 @@ class TrainingPlanServiceTest {
     void createTrainingPlan_throwsWhenDateUnparsable() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, Role.TRAINER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, Role.CLIENT)));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(true);
 
         var request = validCreateRequest().setStartDate("not-a-date").build();
 
@@ -170,35 +194,37 @@ class TrainingPlanServiceTest {
         verify(trainingPlanRepository, never()).save(any());
     }
 
-    @Test
-    void updateTrainingPlan_updatesFieldsAndReassignsClient() {
-        User trainer = user(1L, Role.TRAINER);
-        User newClient = user(3L, Role.CLIENT);
+    private static TrainingPlan existingPlan() {
         TrainingPlan existing = new TrainingPlan();
         existing.setId(1L);
         existing.setName("Old Name");
-        existing.setTrainer(trainer);
+        existing.setTrainer(user(1L, Role.TRAINER));
         existing.setClient(user(2L, Role.CLIENT));
         existing.setLevel(com.vertice.api.plan.PlanLevel.BEGINNER);
+        return existing;
+    }
 
-        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(userRepository.findById(3L)).thenReturn(Optional.of(newClient));
-        when(trainingPlanRepository.save(any(TrainingPlan.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        TrainingPlanRequest request = TrainingPlanRequest.newBuilder()
+    private static TrainingPlanRequest.Builder validUpdateRequest() {
+        return TrainingPlanRequest.newBuilder()
                 .setName("New Name")
                 .setDescription("New description")
-                .setClientId(3L)
+                .setClientId(2L)
                 .setStartDate("2026-02-01")
                 .setEndDate("2026-04-01")
-                .setLevel(PlanLevel.ADVANCED)
-                .build();
+                .setLevel(PlanLevel.ADVANCED);
+    }
 
-        var response = service.updateTrainingPlan(1L, request);
+    @Test
+    void updateTrainingPlan_updatesFieldsAndKeepsClient() {
+        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(existingPlan()));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(true);
+        when(trainingPlanRepository.save(any(TrainingPlan.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.updateTrainingPlan(1L, validUpdateRequest().build());
 
         assertThat(response.getName()).isEqualTo("New Name");
         assertThat(response.getTrainerId()).isEqualTo(1L);
-        assertThat(response.getClientId()).isEqualTo(3L);
+        assertThat(response.getClientId()).isEqualTo(2L);
         assertThat(response.getLevel()).isEqualTo(PlanLevel.ADVANCED);
     }
 
@@ -206,29 +232,33 @@ class TrainingPlanServiceTest {
     void updateTrainingPlan_throwsWhenMissing() {
         when(trainingPlanRepository.findById(99L)).thenReturn(Optional.empty());
 
-        TrainingPlanRequest request = TrainingPlanRequest.newBuilder()
-                .setName("Name").setClientId(2L).setStartDate("2026-01-05").setEndDate("2026-03-30")
-                .setLevel(PlanLevel.BEGINNER).build();
+        TrainingPlanRequest request = validUpdateRequest().build();
 
         assertThatThrownBy(() -> service.updateTrainingPlan(99L, request))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
-    void updateTrainingPlan_throwsWhenNewClientMissing() {
-        TrainingPlan existing = new TrainingPlan();
-        existing.setId(1L);
-        existing.setTrainer(user(1L, Role.TRAINER));
-        existing.setClient(user(2L, Role.CLIENT));
-        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+    void updateTrainingPlan_throwsWhenClientChanged() {
+        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(existingPlan()));
 
-        TrainingPlanRequest request = TrainingPlanRequest.newBuilder()
-                .setName("Name").setClientId(99L).setStartDate("2026-01-05").setEndDate("2026-03-30")
-                .setLevel(PlanLevel.BEGINNER).build();
+        TrainingPlanRequest request = validUpdateRequest().setClientId(3L).build();
 
         assertThatThrownBy(() -> service.updateTrainingPlan(1L, request))
-                .isInstanceOf(ResourceNotFoundException.class);
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("clientId cannot be changed");
+        verify(trainingPlanRepository, never()).save(any());
+    }
+
+    @Test
+    void updateTrainingPlan_throwsWhenClientIsNoLongerTrainersActiveClient() {
+        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(existingPlan()));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(false);
+
+        TrainingPlanRequest request = validUpdateRequest().build();
+
+        assertThatThrownBy(() -> service.updateTrainingPlan(1L, request))
+                .isInstanceOf(BusinessRuleViolationException.class);
         verify(trainingPlanRepository, never()).save(any());
     }
 

@@ -1,10 +1,12 @@
 package com.vertice.api.plan;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanResponse;
 import com.vertice.api.grpc.ProtoDates;
+import com.vertice.api.trainerclient.TrainerClientRepository;
 import com.vertice.api.user.Role;
 import com.vertice.api.user.User;
 import com.vertice.api.user.UserRepository;
@@ -25,6 +27,7 @@ public class TrainingPlanService {
     private final TrainingPlanRepository trainingPlanRepository;
     private final TrainingPlanMapper trainingPlanMapper;
     private final UserRepository userRepository;
+    private final TrainerClientRepository trainerClientRepository;
 
     @Transactional(readOnly = true)
     public List<TrainingPlanResponse> listTrainingPlans(Long trainerId, Long clientId) {
@@ -51,6 +54,7 @@ public class TrainingPlanService {
     public TrainingPlanResponse createTrainingPlan(TrainingPlanCreateRequest request) {
         User trainer = findUserWithRoleOrThrow(request.getTrainerId(), Role.TRAINER, "Trainer");
         User client = findUserWithRoleOrThrow(request.getClientId(), Role.CLIENT, "Client");
+        assertActiveTrainerClient(trainer.getId(), client.getId());
         assertDateRangeValid(request.getStartDate(), request.getEndDate());
         TrainingPlan trainingPlan = trainingPlanMapper.toEntity(request);
         trainingPlan.setTrainer(trainer);
@@ -60,10 +64,13 @@ public class TrainingPlanService {
 
     public TrainingPlanResponse updateTrainingPlan(Long id, TrainingPlanRequest request) {
         TrainingPlan trainingPlan = findByIdOrThrow(id);
-        User client = findUserWithRoleOrThrow(request.getClientId(), Role.CLIENT, "Client");
+        Long clientId = trainingPlan.getClient().getId();
+        if (!clientId.equals(request.getClientId())) {
+            throw new BusinessRuleViolationException("TrainingPlan %d: clientId cannot be changed".formatted(id));
+        }
+        assertActiveTrainerClient(trainingPlan.getTrainer().getId(), clientId);
         assertDateRangeValid(request.getStartDate(), request.getEndDate());
         trainingPlanMapper.updateEntityFromRequest(request, trainingPlan);
-        trainingPlan.setClient(client);
         return trainingPlanMapper.toResponse(trainingPlanRepository.save(trainingPlan));
     }
 
@@ -81,6 +88,14 @@ public class TrainingPlanService {
         return userRepository.findById(id)
                 .filter(user -> user.getRole() == role)
                 .orElseThrow(() -> new ResourceNotFoundException(resourceName, id));
+    }
+
+    /** A trainer may only plan for a client they currently have (an open {@code trainer_clients} row). */
+    private void assertActiveTrainerClient(Long trainerId, Long clientId) {
+        if (!trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(trainerId, clientId)) {
+            throw new BusinessRuleViolationException("Client %d is not an active client of trainer %d"
+                    .formatted(clientId, trainerId));
+        }
     }
 
     /**

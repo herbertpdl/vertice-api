@@ -1,5 +1,6 @@
 package com.vertice.api.grpc;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ExerciseInUseException;
@@ -46,6 +47,11 @@ public class GrpcExceptionAdvice {
 
     @GrpcExceptionHandler(ExerciseInUseException.class)
     public Status handleExerciseInUse(ExerciseInUseException ex) {
+        return Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(BusinessRuleViolationException.class)
+    public Status handleBusinessRuleViolation(BusinessRuleViolationException ex) {
         return Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
     }
 
