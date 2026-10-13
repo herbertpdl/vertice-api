@@ -66,8 +66,7 @@ public class TrainingPlanService {
         TrainingPlan trainingPlan = findByIdOrThrow(id);
         Long clientId = trainingPlan.getClient().getId();
         if (!clientId.equals(request.getClientId())) {
-            throw new BusinessRuleViolationException("TrainingPlan %d belongs to client %d; clientId cannot be changed"
-                    .formatted(id, clientId));
+            throw new BusinessRuleViolationException("TrainingPlan %d: clientId cannot be changed".formatted(id));
         }
         assertActiveTrainerClient(trainingPlan.getTrainer().getId(), clientId);
         assertDateRangeValid(request.getStartDate(), request.getEndDate());

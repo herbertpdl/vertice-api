@@ -41,7 +41,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -63,6 +65,7 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 class OwnershipInvariantsIntegrationTest {
 
     private static final String WEEK = "2026-03-02";
+    private static final AtomicLong CPF_BASE = new AtomicLong(ThreadLocalRandom.current().nextLong(100_000_000L, 900_000_000L));
 
     @Autowired
     private UserRepository userRepository;
@@ -270,11 +273,40 @@ class OwnershipInvariantsIntegrationTest {
         return workoutRepository.save(w);
     }
 
+    /**
+     * A unique, check-digit-valid CPF per call: a random 9-digit base per run plus a counter, so
+     * users created in the same run never collide on {@code uq_users_cpf}.
+     */
+    private static String nextCpf() {
+        String base = "%09d".formatted(CPF_BASE.getAndIncrement() % 1_000_000_000L);
+        int[] digits = new int[11];
+        for (int i = 0; i < 9; i++) {
+            digits[i] = base.charAt(i) - '0';
+        }
+        digits[9] = cpfCheckDigit(digits, 9);
+        digits[10] = cpfCheckDigit(digits, 10);
+        StringBuilder cpf = new StringBuilder();
+        for (int digit : digits) {
+            cpf.append(digit);
+        }
+        return cpf.toString();
+    }
+
+    /** Same algorithm as {@code CpfValidator}. */
+    private static int cpfCheckDigit(int[] digits, int count) {
+        int sum = 0;
+        for (int i = 0; i < count; i++) {
+            sum += digits[i] * (count + 1 - i);
+        }
+        int remainder = sum % 11;
+        return remainder < 2 ? 0 : 11 - remainder;
+    }
+
     private static User newUser(String name, Role role) {
         User user = new User();
         user.setName(name);
         user.setEmail(name.toLowerCase() + "-" + System.nanoTime() + "@example.com");
-        user.setCpf(String.valueOf(System.nanoTime()).substring(0, 11));
+        user.setCpf(nextCpf());
         user.setPasswordHash("hash");
         user.setRole(role);
         return user;
