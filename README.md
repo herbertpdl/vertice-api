@@ -62,6 +62,7 @@ environment variables:
 | `DB_USERNAME` | `vertice` | PostgreSQL username |
 | `DB_PASSWORD` | `vertice` | PostgreSQL password |
 | `JWT_SECRET` | `vertice-dev-jwt-secret-do-not-use-in-production` | HS256 secret shared with vertice-bff to verify its tokens. The default works only under the `local` profile; any other profile refuses to boot on a blank, padded, sub-32-byte or placeholder secret (`JwtSecretGuard`) |
+| `VERTICE_ENV` | unset | Which environment this is. Under the `local` profile it must be unset, `local` or `dev` (case-insensitive), or the app refuses to boot (`LocalProfileGuard`). **Every deployed environment must set it** (e.g. `prod`): it is the only check that catches `local` against a deployed database that happens to be reachable as `postgres` |
 
 `spring.datasource.url` defaults to `jdbc:postgresql://localhost:5432/vertice` (overridable via
 the standard `SPRING_DATASOURCE_URL` environment variable, as done by `vertice-local`'s
@@ -84,6 +85,15 @@ The `local` profile ([`application-local.properties`](src/main/resources/applica
 disables authentication (see `LocalSecurityConfig`) and enables gRPC server reflection, so the
 service can be exercised directly with tools like Postman or `grpcurl` without a running JWT
 issuer.
+
+Because it turns authentication off, `LocalProfileGuard` refuses to start the `local` profile
+(alone or combined with another profile, e.g. `local,prod`) when `VERTICE_ENV` is set to anything
+other than `local`/`dev`, or when `spring.datasource.url` points at a host other than `localhost`,
+`127.0.0.1`, `::1` or the compose service `postgres` (a URL it can't parse, or one with
+`host`/`PGHOST`/`service` query parameters, is refused too). The check runs before any bean is
+created, so the app never connects to, or migrates, a non-local database under `local`. Because
+`postgres` is allowlisted for compose and can also be a real database's hostname, deployed
+environments must set `VERTICE_ENV`. The compose file publishes Postgres on `127.0.0.1` only.
 
 Flyway runs the migrations under [`src/main/resources/db/migration`](src/main/resources/db/migration)
 automatically on startup.

@@ -42,7 +42,8 @@ plan/session/        WorkoutLog, SetLog, WorkoutFeedback (client-facing logging/
 trainerclient/        Trainer↔client relationship (join between two Users)
 user/                  User (trainer/client, unified by Role)
 grpc/                  Cross-cutting: exception mapping, health, request validation, proto conversion helpers
-config/                Spring Security wiring (shared-secret JWT decoder, local-profile auth bypass)
+config/                Spring Security wiring (shared-secret JWT decoder, local-profile auth bypass) and boot
+                       guards (BootGuards → JwtSecretGuard / LocalProfileGuard)
 common/                Shared exceptions and Bean Validation constraints (e.g. @Cpf)
 ```
 
@@ -65,6 +66,16 @@ with `grpc/CallerIdentityResolver#require()` (`UNAUTHENTICATED` when anonymous) 
 `CallerIdentity` into the service, which enforces role/ownership (`PermissionDeniedException` →
 `PERMISSION_DENIED`). Today only the exercise RPCs do; every other RPC still trusts caller-supplied
 ids. Non-local test contexts must set a valid (≥32-byte, non-placeholder) `vertice.jwt.secret`.
+Under `local` (even combined, e.g. `local,prod`), `config/LocalProfileGuard` refuses to boot when
+`VERTICE_ENV` is set to anything but `local`/`dev`, or when `spring.datasource.url`'s host isn't
+`localhost`/`127.0.0.1`/`::1`/`postgres` (unparseable URLs fail closed), so `local`-profile tests
+must keep a localhost datasource. `postgres` may also be a deployed DB's hostname, so deployed
+environments must set `VERTICE_ENV`. Both guards are plain classes run by `config/BootGuards`, an
+`EnvironmentPostProcessor` registered in `META-INF/spring.factories`: they fire before any bean
+exists (so before Hikari/Flyway touch the database, and regardless of lazy initialization). Keep
+new boot-time checks there rather than in `@PostConstruct` beans. The Gradle test task drops
+`VERTICE_ENV` and `JWT_SECRET` from the test JVM's environment; tests that boot the guards (`config/GuardBoot`)
+pass every property they depend on as command-line args so the developer's shell can't leak in.
 The two transports need separate wiring: Spring Boot's default gRPC
 OAuth2 auto-config is `@ConditionalOnMissingBean(AuthenticationProcessInterceptor.class)`, so
 `GrpcSecurityConfig` defining its own bean is what makes the local-profile bypass exist for gRPC

@@ -3,12 +3,12 @@ package com.vertice.api.config;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.vertice.api.config.GuardBoot.boot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,10 +16,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JwtSecretGuardTest {
 
     private static final String VALID_SECRET = "x".repeat(JwtSecretGuard.MIN_SECRET_BYTES);
-
-    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(JwtSecretGuard.class)
-            .withPropertyValues("vertice.jwt.secret=" + JwtSecretGuard.DEV_SECRET);
 
     @Test
     void shortSecret_fails() {
@@ -105,13 +101,32 @@ class JwtSecretGuardTest {
 
     @Test
     void devDefault_nonLocalProfile_refusesToStart() {
-        contextRunner.run(context -> assertThat(context).hasFailed());
+        assertThatThrownBy(() -> boot("--spring.profiles.active=prod",
+                "--vertice.jwt.secret=" + JwtSecretGuard.DEV_SECRET))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("JWT_SECRET is a publicly known placeholder/dev value; set a random secret");
+    }
+
+    @Test
+    void devDefault_nonLocalProfile_lazyInitialization_refusesToStart() {
+        // The guard runs on the environment, not as a bean, so lazy initialization can't skip it.
+        assertThatThrownBy(() -> boot("--spring.profiles.active=prod",
+                "--vertice.jwt.secret=" + JwtSecretGuard.DEV_SECRET, "--spring.main.lazy-initialization=true"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("JWT_SECRET is a publicly known placeholder/dev value; set a random secret");
     }
 
     @Test
     void devDefault_localProfile_starts() {
-        contextRunner.withPropertyValues("spring.profiles.active=local")
-                .run(context -> assertThat(context).hasNotFailed().doesNotHaveBean(JwtSecretGuard.class));
+        assertThatCode(() -> boot("--spring.profiles.active=local", "--VERTICE_ENV=",
+                "--spring.datasource.url=jdbc:postgresql://localhost:5432/vertice").close())
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validSecret_nonLocalProfile_starts() {
+        assertThatCode(() -> boot("--spring.profiles.active=prod", "--vertice.jwt.secret=" + VALID_SECRET).close())
+                .doesNotThrowAnyException();
     }
 
     private static void assertRefused(String secret, String message) {
