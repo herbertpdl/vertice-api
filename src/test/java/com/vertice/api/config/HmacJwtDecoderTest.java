@@ -69,9 +69,10 @@ class HmacJwtDecoderTest {
 
     @Test
     void decode_shortSecret_stillVerifies() {
-        HmacJwtDecoder shortSecretDecoder = new HmacJwtDecoder(TestJwts.LOCAL_SECRET);
+        String shortSecret = "short-local-secret";
+        HmacJwtDecoder shortSecretDecoder = new HmacJwtDecoder(shortSecret);
 
-        Jwt jwt = shortSecretDecoder.decode(TestJwts.token(1L, Role.ADMIN));
+        Jwt jwt = shortSecretDecoder.decode(TestJwts.token(shortSecret, 1L, Role.ADMIN));
 
         assertThat(jwt.getClaimAsString("role")).isEqualTo("ADMIN");
     }

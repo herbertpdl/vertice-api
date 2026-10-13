@@ -24,8 +24,8 @@ import java.util.Map;
  * Verifies the BFF-minted HS256 JWT with the shared {@code JWT_SECRET}.
  *
  * <p>Exists instead of {@code NimbusJwtDecoder.withSecretKey(...)} because Nimbus refuses HMAC
- * secrets shorter than 256 bits, while the local defaults on both sides are shorter (see
- * docs/specs/exercise-starter-catalog/spec.md §0 D1). {@link JwtSecretGuard} makes sure a short
+ * secrets shorter than 256 bits, and the {@code local} profile accepts any secret a developer sets
+ * (see docs/specs/exercise-starter-catalog/spec.md §0 D1). {@link JwtSecretGuard} makes sure a short
  * secret never reaches a non-local deployment. Nimbus is still used to parse the compact form;
  * only the signature check is done here.
  */
