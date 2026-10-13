@@ -65,6 +65,10 @@ with `grpc/CallerIdentityResolver#require()` (`UNAUTHENTICATED` when anonymous) 
 `CallerIdentity` into the service, which enforces role/ownership (`PermissionDeniedException` →
 `PERMISSION_DENIED`). Today only the exercise RPCs do; every other RPC still trusts caller-supplied
 ids. Non-local test contexts must set a valid (≥32-byte, non-placeholder) `vertice.jwt.secret`.
+Under `local` (even combined, e.g. `local,prod`), `config/LocalProfileGuard` refuses to boot when
+`VERTICE_ENV` is set to anything but `local`/`dev`, or when `spring.datasource.url`'s host isn't
+`localhost`/`127.0.0.1`/`::1`/`postgres` (unparseable URLs fail closed), so `local`-profile tests
+must keep a localhost datasource.
 The two transports need separate wiring: Spring Boot's default gRPC
 OAuth2 auto-config is `@ConditionalOnMissingBean(AuthenticationProcessInterceptor.class)`, so
 `GrpcSecurityConfig` defining its own bean is what makes the local-profile bypass exist for gRPC
