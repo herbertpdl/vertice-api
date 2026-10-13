@@ -62,6 +62,7 @@ environment variables:
 | `DB_USERNAME` | `vertice` | PostgreSQL username |
 | `DB_PASSWORD` | `vertice` | PostgreSQL password |
 | `JWT_SECRET` | `vertice-dev-jwt-secret-do-not-use-in-production` | HS256 secret shared with vertice-bff to verify its tokens. The default works only under the `local` profile; any other profile refuses to boot on a blank, padded, sub-32-byte or placeholder secret (`JwtSecretGuard`) |
+| `PASSWORD_SETUP_TOKEN_TTL` | `72h` | How long a password setup (first-access) token stays usable (`vertice.password-setup.token-ttl`, a Spring `Duration`) |
 | `VERTICE_ENV` | unset | Which environment this is. Under the `local` profile it must be unset, `local` or `dev` (case-insensitive), or the app refuses to boot (`LocalProfileGuard`). **Every deployed environment must set it** (e.g. `prod`): it is the only check that catches `local` against a deployed database that happens to be reachable as `postgres` |
 
 `spring.datasource.url` defaults to `jdbc:postgresql://localhost:5432/vertice` (overridable via
