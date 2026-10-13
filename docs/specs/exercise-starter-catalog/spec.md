@@ -42,7 +42,8 @@ numbering. The same acceptance covers it.
 - **Caller identity is the BFF's own JWT, verified with a shared HS256 secret and resolved once
   under `grpc/` (R14–R25, R32, R36, E18, E21; F12, F26, F29, Q3; D1).** `vertice-bff` attaches
   `authorization: Bearer <its JWT>` as call metadata on every RPC. vertice-api verifies it with
-  `JWT_SECRET` (same value both sides; default `dev-secret-change-me` for local) instead of the
+  `JWT_SECRET` (same value both sides; default `dev-secret-change-me` for local, superseded by
+  `vertice-dev-jwt-secret-do-not-use-in-production` in audit P0-03) instead of the
   never-wired `issuer-uri` decoder. It resolves `CallerIdentity { userId = claim "id", role =
   claim "role" }` through one `CallerIdentityResolver` under `grpc/` that every controller reuses
   (F26). Non-local: every RPC still requires authentication (as today), now against the shared
@@ -55,7 +56,8 @@ numbering. The same acceptance covers it.
     `NimbusJwtDecoder.withSecretKey`.* Nimbus 10.9's `MACProvider` throws
     `KeyLengthException("The secret length must be at least 256 bits")` for any secret under 32
     bytes, and both local defaults are shorter (`dev-secret-change-me` = 20 bytes; the BFF's
-    checked-in `.env` value `change-me-in-production` = 24 bytes). `jsonwebtoken` 9.0.3 on the BFF
+    checked-in `.env` value `change-me-in-production` = 24 bytes; both superseded in audit P0-03 by
+    the 47-byte shared `vertice-dev-jwt-secret-do-not-use-in-production`). `jsonwebtoken` 9.0.3 on the BFF
     signs with any length. So `config/HmacJwtDecoder` implements
     `org.springframework.security.oauth2.jwt.JwtDecoder` directly: Nimbus parses the compact form,
     and the signature is checked with `javax.crypto.Mac` (HmacSHA256) and a constant-time compare
@@ -69,6 +71,8 @@ numbering. The same acceptance covers it.
     sub-decision above removes it so the local defaults work. The guard puts the floor back
     everywhere except `local`. It fails at boot, not on the first call, because F29 makes the
     secret a value two repos must provision, and a misconfigured deployment should not start.
+    (Audit P0-03 later extended the guard to also refuse blank, whitespace-padded and known
+    placeholder secrets, mirroring vertice-bff's `src/config/env.ts`.)
   - *Sub-decision (mine; F26, assessment §6): controllers resolve the identity and pass
     `CallerIdentity` into the service.* Services stay plain Mockito-testable (the assessment's §6
     "mock the resolved caller identity two ways"), and `*ControllerTest` is what proves the
@@ -587,6 +591,8 @@ meaningful.
 
 ### Properties (PR1)
 
+> **Note (audit P0-03):** the dev default `dev-secret-change-me` named in this spec was later superseded by `vertice-dev-jwt-secret-do-not-use-in-production` (shared with vertice-bff); `JwtSecretGuard` now also refuses placeholder and whitespace-padded secrets outside `local`.
+
 `application.properties`: remove `spring.security.oauth2.resourceserver.jwt.issuer-uri`; add
 `vertice.jwt.secret=${JWT_SECRET:dev-secret-change-me}`. No profile-specific override.
 
@@ -831,7 +837,8 @@ query above); `WorkoutExerciseRepository#existsByExerciseId(Long)` (PR7) and
 Ports: `19104` `GrpcCallerIdentityTest`, `19105` `ExerciseCatalogRepositoryTest`, `19106`
 `PreStarterCleanupMigrationTest` (19090–19103 in use except an unused gap at 19093, left alone).
 `src/test/java/com/vertice/api/grpc/TestJwts` (PR1) signs HS256 tokens with
-`dev-secret-change-me` for tests: `TestJwts.token(long userId, Role role)`, `token(secret, userId,
+`dev-secret-change-me` (superseded by `vertice-dev-jwt-secret-do-not-use-in-production` in audit
+P0-03) for tests: `TestJwts.token(long userId, Role role)`, `token(secret, userId,
 role)`, `sign(secret, headerJson, payloadJson)`, and `asCaller(stub, userId, role)` /
 `withBearer(stub, token)` to attach it to a blocking stub. The names below are the methods on the
 PR branches; `verification.md` §1 lists the same names per PR.

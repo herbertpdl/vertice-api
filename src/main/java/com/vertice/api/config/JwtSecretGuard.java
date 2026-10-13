@@ -38,10 +38,10 @@ public class JwtSecretGuard {
     // Messages never echo the secret itself.
     @PostConstruct
     void checkSecret() {
-        if (secret == null || secret.isBlank()) {
+        if (secret == null || jsTrim(secret).isEmpty()) {
             throw new IllegalStateException("JWT_SECRET is required outside the local profile");
         }
-        if (!secret.equals(secret.strip())) {
+        if (!secret.equals(jsTrim(secret))) {
             throw new IllegalStateException("JWT_SECRET must not have leading or trailing whitespace");
         }
         if (secret.getBytes(StandardCharsets.UTF_8).length < MIN_SECRET_BYTES) {
@@ -54,7 +54,29 @@ public class JwtSecretGuard {
     }
 
     private static boolean isPlaceholder(String secret) {
-        String normalized = secret.strip().toLowerCase(Locale.ROOT);
+        String normalized = jsTrim(secret).toLowerCase(Locale.ROOT);
         return PLACEHOLDER_SECRETS.stream().anyMatch(p -> p.toLowerCase(Locale.ROOT).equals(normalized));
+    }
+
+    /**
+     * Trims exactly what JavaScript's {@code String.prototype.trim()} does, so this guard and the
+     * BFF agree on blank/padded secrets: TAB, LF, VT, FF, CR, every Unicode space/line/paragraph
+     * separator (Zs, Zl, Zp, e.g. NBSP) and the BOM (U+FEFF). Java's {@code strip()} differs: it
+     * misses NBSP-like spaces and the BOM but strips U+001C–U+001F.
+     */
+    static String jsTrim(String value) {
+        int start = 0;
+        int end = value.length();
+        while (start < end && isJsWhitespace(value.charAt(start))) {
+            start++;
+        }
+        while (end > start && isJsWhitespace(value.charAt(end - 1))) {
+            end--;
+        }
+        return value.substring(start, end);
+    }
+
+    private static boolean isJsWhitespace(char c) {
+        return (c >= '\t' && c <= '\r') || Character.isSpaceChar(c) || c == '\uFEFF';
     }
 }

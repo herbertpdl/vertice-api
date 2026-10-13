@@ -5,6 +5,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,16 +47,55 @@ class JwtSecretGuardTest {
         assertRefused(" " + VALID_SECRET + "\n", "JWT_SECRET must not have leading or trailing whitespace");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"\u00A0", "\uFEFF", "\u202F", "\u2028"})
+    void unicodePaddedSecret_fails(String padding) {
+        assertRefused(padding + VALID_SECRET, "JWT_SECRET must not have leading or trailing whitespace");
+        assertRefused(VALID_SECRET + padding, "JWT_SECRET must not have leading or trailing whitespace");
+    }
+
+    @Test
+    void secretWithInformationSeparatorEdges_passes() {
+        // JS trim() keeps U+001C–U+001F (Java's strip() would remove them); the BFF accepts this too.
+        assertThatCode(new JwtSecretGuard("\u001C" + VALID_SECRET + "\u001F")::checkSecret)
+                .doesNotThrowAnyException();
+    }
+
     @Test
     void paddedPlaceholderSecret_fails() {
-        assertThatThrownBy(new JwtSecretGuard("  " + JwtSecretGuard.DEV_SECRET)::checkSecret)
-                .isInstanceOf(IllegalStateException.class);
+        // The whitespace check runs before the placeholder check, as in the BFF.
+        assertRefused("  " + JwtSecretGuard.DEV_SECRET, "JWT_SECRET must not have leading or trailing whitespace");
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"", "   "})
     void blankSecret_fails(String secret) {
         assertRefused(secret, "JWT_SECRET is required outside the local profile");
+    }
+
+    @Test
+    void allNbspSecret_fails() {
+        assertRefused("\u00A0".repeat(JwtSecretGuard.MIN_SECRET_BYTES), "JWT_SECRET is required outside the local profile");
+    }
+
+    @Test
+    void jsTrim_trimsExactlyTheJavaScriptTrimSet() {
+        // Every BMP char that `(c + "x").trim() === "x"` holds for in Node.js.
+        Set<Integer> jsTrimmed = Set.of(0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000, 0x2001,
+                0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F,
+                0x205F, 0x3000, 0xFEFF);
+        Set<Integer> javaTrimmed = IntStream.rangeClosed(0, 0xFFFF)
+                .filter(c -> JwtSecretGuard.jsTrim((char) c + "x").equals("x"))
+                .boxed()
+                .collect(Collectors.toSet());
+
+        assertThat(javaTrimmed).isEqualTo(jsTrimmed);
+    }
+
+    @Test
+    void jsTrim_matchesJavaScriptTrim() {
+        assertThat(JwtSecretGuard.jsTrim("\uFEFF\u00A0\t secret \n\u3000")).isEqualTo("secret");
+        assertThat(JwtSecretGuard.jsTrim("\u001Csecret\u001F")).isEqualTo("\u001Csecret\u001F");
     }
 
     @Test

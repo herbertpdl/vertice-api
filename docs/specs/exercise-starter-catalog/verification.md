@@ -34,6 +34,7 @@ written as its gRPC code and description, which `grpcurl` prints as `Code: Permi
 - **Fresh database** for §1.3–§1.5: `docker compose down -v && docker compose up -d`, so every
   migration runs from V1. §1.4 seeds pre-starter data on `main` first; follow it in order.
 - **Tokens.** vertice-api verifies HS256 tokens with `JWT_SECRET` (default
+  `vertice-dev-jwt-secret-do-not-use-in-production` since audit P0-03; originally
   `dev-secret-change-me`). Mint one without `exp` (spec §6 accepts it) with this shell function:
   ```sh
   b64url() { base64 | tr -d '=\n' | tr '/+' '_-'; }
@@ -41,7 +42,7 @@ written as its gRPC code and description, which `grpcurl` prints as `Code: Permi
     local h p s
     h=$(printf '{"alg":"HS256","typ":"JWT"}' | b64url)
     p=$(printf '{"id":%s,"role":"%s"}' "$1" "$2" | b64url)
-    s=$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -hmac "${3:-dev-secret-change-me}" -binary | b64url)
+    s=$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -hmac "${3:-vertice-dev-jwt-secret-do-not-use-in-production}" -binary | b64url)
     printf '%s.%s.%s' "$h" "$p" "$s"
   }
   ```
@@ -115,7 +116,8 @@ Properties, §5.0 steps 1, 2, 4, §6 `HmacJwtDecoder`/`JwtSecretGuard`.
 **Scope decisions honored**
 - [ ] S1: `issuer-uri` is gone and the secret property exists. Evidence:
       `grep -n "issuer-uri\|vertice.jwt.secret" src/main/resources/application*.properties` → only
-      `vertice.jwt.secret=${JWT_SECRET:dev-secret-change-me}` in `application.properties`.
+      `vertice.jwt.secret=${JWT_SECRET:vertice-dev-jwt-secret-do-not-use-in-production}` in
+      `application.properties` (the default changed from `dev-secret-change-me` in audit P0-03).
 - [ ] S2: one decoder bean for both transports. Evidence: `grep -rn "JwtDecoder jwtDecoder"
       src/main/java` → only `config/JwtDecoderConfig`.
 
