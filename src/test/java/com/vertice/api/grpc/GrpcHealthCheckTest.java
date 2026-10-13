@@ -22,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * is on the classpath — same as it already does for REST via {@code SecurityConfig} — so an
  * unauthenticated call is the correct smoke-test signal here: it proves the server is up, wired to
  * the standard health service, and enforcing auth by default, without grpc-cross-cutting having
- * written a single line of interceptor code yet. The secret is overridden with a 32-byte one because
- * {@code JwtSecretGuard} refuses the short default outside the {@code local} profile.
+ * written a single line of interceptor code yet. The secret is overridden with a valid 32-byte one
+ * because {@code JwtSecretGuard} refuses the dev default outside the {@code local} profile.
  */
 @SpringBootTest(properties = {"spring.grpc.server.port=19090", "spring.datasource.hikari.maximum-pool-size=3",
         "vertice.jwt.secret=" + GrpcHealthCheckTest.SECRET})

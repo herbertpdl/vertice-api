@@ -13,13 +13,13 @@ import java.util.Base64;
 
 /**
  * Mints HS256 tokens shaped like the BFF's ({@code id}, {@code role} claims) for tests. Signs by
- * hand with {@link Mac} because Nimbus' own signer refuses the short local default secret — the
- * same reason {@code HmacJwtDecoder} exists.
+ * hand with {@link Mac} because Nimbus' own signer refuses secrets under 32 bytes, which some tests
+ * use on purpose — the same reason {@code HmacJwtDecoder} exists.
  */
 public final class TestJwts {
 
     /** The {@code vertice.jwt.secret} default every {@code local}-profile test context runs with. */
-    public static final String LOCAL_SECRET = "dev-secret-change-me";
+    public static final String LOCAL_SECRET = "vertice-dev-jwt-secret-do-not-use-in-production";
 
     private static final String HS256_HEADER = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
     private static final Metadata.Key<String> AUTHORIZATION =

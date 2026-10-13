@@ -61,7 +61,7 @@ environment variables:
 |---|---|---|
 | `DB_USERNAME` | `vertice` | PostgreSQL username |
 | `DB_PASSWORD` | `vertice` | PostgreSQL password |
-| `JWT_ISSUER_URI` | `http://localhost:9000` | OAuth2/JWT issuer used to validate bearer tokens |
+| `JWT_SECRET` | `vertice-dev-jwt-secret-do-not-use-in-production` | HS256 secret shared with vertice-bff to verify its tokens. The default works only under the `local` profile; any other profile refuses to boot on a blank, padded, sub-32-byte or placeholder secret (`JwtSecretGuard`) |
 
 `spring.datasource.url` defaults to `jdbc:postgresql://localhost:5432/vertice` (overridable via
 the standard `SPRING_DATASOURCE_URL` environment variable, as done by `vertice-local`'s
