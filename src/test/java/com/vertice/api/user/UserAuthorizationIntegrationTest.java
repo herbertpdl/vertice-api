@@ -4,6 +4,7 @@ import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerReq
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
+import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
 import com.vertice.api.generated.grpc.user.v1.UserCreateRequest;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
 import com.vertice.api.generated.grpc.user.v1.UserServiceGrpc;
@@ -101,7 +102,7 @@ class UserAuthorizationIntegrationTest {
 
     @Test
     void listUsersWithoutPassword_withTrainerToken_onlyListsTheirOwnClients() {
-        List<Long> ids = as(trainer).listUsersWithoutPassword(ListUsersRequest.getDefaultInstance()).getUsersList().stream()
+        List<Long> ids = as(trainer).listUsersWithoutPassword(ListUsersWithoutPasswordRequest.getDefaultInstance()).getUsersList().stream()
                 .map(UserResponse::getId)
                 .toList();
 

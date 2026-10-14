@@ -4,11 +4,13 @@ import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.UserCreateRequest;
 import com.vertice.api.generated.grpc.user.v1.UserRequest;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.data.domain.Limit;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,9 @@ import java.util.UUID;
 @Service
 @Transactional
 public class UserService {
+
+    /** Largest {@code ListUsers} page; also the page size when the request leaves it at 0. */
+    public static final int MAX_PAGE_SIZE = 100;
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
@@ -42,10 +47,27 @@ public class UserService {
         this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
+    /**
+     * One page of users ordered by id, in the {@link UserView#CONTACT} view.
+     *
+     * @param pageSize already bounded by the caller (1 to {@link #MAX_PAGE_SIZE})
+     * @param afterId  the last id of the previous page, 0 for the first page
+     */
     @Transactional(readOnly = true)
-    public List<UserResponse> listUsers(com.vertice.api.user.Role roleFilter) {
-        List<User> users = roleFilter == null ? userRepository.findAll() : userRepository.findByRole(roleFilter);
-        return users.stream().map(userMapper::toResponse).toList();
+    public ListUsersResponse listUsers(com.vertice.api.user.Role roleFilter, int pageSize, long afterId) {
+        // One extra row tells whether another page follows without a count query.
+        Limit limit = Limit.of(pageSize + 1);
+        List<User> users = roleFilter == null
+                ? userRepository.findByIdGreaterThanOrderByIdAsc(afterId, limit)
+                : userRepository.findByRoleAndIdGreaterThanOrderByIdAsc(roleFilter, afterId, limit);
+        boolean hasNext = users.size() > pageSize;
+        List<User> page = hasNext ? users.subList(0, pageSize) : users;
+        ListUsersResponse.Builder response = ListUsersResponse.newBuilder()
+                .addAllUsers(page.stream().map(user -> UserView.CONTACT.restrict(userMapper.toResponse(user))).toList());
+        if (hasNext) {
+            response.setNextPageToken(String.valueOf(page.getLast().getId()));
+        }
+        return response.build();
     }
 
     @Transactional(readOnly = true)
@@ -53,12 +75,13 @@ public class UserService {
         return userMapper.toResponse(findByIdOrThrow(id));
     }
 
+    /** In the {@link UserView#SUMMARY} view: the BFF only needs the ids. */
     @Transactional(readOnly = true)
     public List<UserResponse> listUsersWithoutPassword(com.vertice.api.user.Role roleFilter) {
         List<User> users = roleFilter == null
                 ? userRepository.findByPasswordHashIsNull()
                 : userRepository.findByRoleAndPasswordHashIsNull(roleFilter);
-        return users.stream().map(userMapper::toResponse).toList();
+        return summaries(users);
     }
 
     /** {@link #listUsersWithoutPassword} narrowed to {@code trainerId}'s active clients. */
@@ -67,7 +90,11 @@ public class UserService {
         if (roleFilter != null && roleFilter != com.vertice.api.user.Role.CLIENT) {
             return List.of();
         }
-        return userRepository.findActiveClientsWithoutPassword(trainerId).stream().map(userMapper::toResponse).toList();
+        return summaries(userRepository.findActiveClientsWithoutPassword(trainerId));
+    }
+
+    private List<UserResponse> summaries(List<User> users) {
+        return users.stream().map(user -> UserView.SUMMARY.restrict(userMapper.toResponse(user))).toList();
     }
 
     /** An empty password creates the user without one; they set it later with a setup token. */
@@ -131,7 +158,7 @@ public class UserService {
         userRepository.findByEmail(email)
                 .filter(existing -> !existing.getId().equals(excludingId))
                 .ifPresent(existing -> {
-                    throw new DuplicateEmailException(email);
+                    throw new DuplicateEmailException();
                 });
     }
 
@@ -139,7 +166,7 @@ public class UserService {
         userRepository.findByCpf(cpf)
                 .filter(existing -> !existing.getId().equals(excludingId))
                 .ifPresent(existing -> {
-                    throw new DuplicateCpfException(cpf);
+                    throw new DuplicateCpfException();
                 });
     }
 

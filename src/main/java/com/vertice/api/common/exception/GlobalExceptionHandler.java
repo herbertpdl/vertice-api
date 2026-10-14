@@ -19,6 +19,11 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(DuplicateCpfException.class)
+    public ProblemDetail handleDuplicateCpf(DuplicateCpfException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     @ExceptionHandler(WorkoutExerciseHasRecordedDataException.class)
     public ProblemDetail handleWorkoutExerciseHasRecordedData(WorkoutExerciseHasRecordedDataException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, ex.getMessage());

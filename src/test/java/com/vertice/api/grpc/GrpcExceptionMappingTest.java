@@ -158,7 +158,7 @@ class GrpcExceptionMappingTest {
             ServerCalls.UnaryMethod<StringValue, Empty> handler = (request, responseObserver) -> {
                 switch (request.getValue()) {
                     case "not-found" -> throw new ResourceNotFoundException("Trainer", 1L);
-                    case "duplicate" -> throw new DuplicateEmailException("a@b.com");
+                    case "duplicate" -> throw new DuplicateEmailException();
                     case "validation" -> validator.validate(new ValidationProbe(""));
                     case "validation-message" ->
                             throw new ConstraintViolationException("muscleGroupIds: unknown muscle group 99", Set.of());
