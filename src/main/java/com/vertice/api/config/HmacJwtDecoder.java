@@ -1,5 +1,6 @@
 package com.vertice.api.config;
 
+import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jwt.SignedJWT;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
@@ -35,7 +36,8 @@ import java.util.Objects;
  * secret never reaches a non-local deployment. Nimbus is still used to parse the compact form;
  * only the signature check is done here.
  *
- * <p>Every token must be scoped to this API: issued by the BFF ({@code iss}), for vertice-api
+ * <p>The header must say {@code alg: HS256} and, when it has a {@code typ}, {@code JWT}. Every
+ * token must be scoped to this API: issued by the BFF ({@code iss}), for vertice-api
  * ({@code aud}), and expiring ({@code exp}), so a token minted for anything else, or one that never
  * expires, is rejected (SEC-API-004). The same checks apply under {@code local} whenever a token is
  * sent at all, so local runs and tests behave like production.
@@ -64,6 +66,12 @@ public class HmacJwtDecoder implements JwtDecoder {
         SignedJWT signedJwt = parse(token);
         if (!JWSAlgorithm.HS256.equals(signedJwt.getHeader().getAlgorithm())) {
             throw new BadJwtException("Unsupported JWT algorithm; only HS256 is accepted");
+        }
+        // Optional, but when present it must say JWT (media types compare case-insensitively), so a
+        // differently typed object signed with the same secret is never taken for an access token.
+        JOSEObjectType type = signedJwt.getHeader().getType();
+        if (type != null && !JOSEObjectType.JWT.getType().equalsIgnoreCase(type.getType())) {
+            throw new BadJwtException("Unsupported JWT type; only JWT is accepted");
         }
         if (!MessageDigest.isEqual(sign(signedJwt.getSigningInput()), signedJwt.getSignature().decode())) {
             throw new BadJwtException("Invalid JWT signature");

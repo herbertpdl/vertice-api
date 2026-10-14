@@ -109,6 +109,42 @@ class HmacJwtDecoderTest {
     }
 
     @Test
+    void decode_headerWithoutTyp_isAccepted() {
+        Jwt jwt = decoder.decode(TestJwts.sign(SECRET, "{\"alg\":\"HS256\"}", payload(USER, ISS, AUD, EXP)));
+
+        assertThat(jwt.getSubject()).isEqualTo("42");
+    }
+
+    @Test
+    void decode_typOtherThanJwt_throwsBadJwt() {
+        assertRejected(TestJwts.sign(SECRET, "{\"alg\":\"HS256\",\"typ\":\"at+jwt\"}", payload(USER, ISS, AUD, EXP)));
+        assertRejected(TestJwts.sign(SECRET, "{\"alg\":\"HS256\",\"typ\":\"JOSE\"}", payload(USER, ISS, AUD, EXP)));
+    }
+
+    @Test
+    void decode_lowercaseJwtTyp_isAccepted() {
+        assertThat(decoder.decode(TestJwts.sign(SECRET, "{\"alg\":\"HS256\",\"typ\":\"jwt\"}", payload(USER, ISS, AUD, EXP))))
+                .isNotNull();
+    }
+
+    /** The default validator allows 60 s of clock skew between the BFF and the API, and no more. */
+    @Test
+    void decode_expiredWithinClockSkew_isAccepted_beyondItRejected() {
+        long now = Instant.now().getEpochSecond();
+
+        assertThat(decoder.decode(sign(USER, ISS, AUD, "\"exp\":" + (now - 30))).getSubject()).isEqualTo("42");
+        assertRejected(sign(USER, ISS, AUD, "\"exp\":" + (now - 90)));
+    }
+
+    @Test
+    void decode_notBeforeWithinClockSkew_isAccepted_beyondItRejected() {
+        long now = Instant.now().getEpochSecond();
+
+        assertThat(decoder.decode(sign(USER, ISS, AUD, EXP, "\"nbf\":" + (now + 30))).getSubject()).isEqualTo("42");
+        assertRejected(sign(USER, ISS, AUD, EXP, "\"nbf\":" + (now + 90)));
+    }
+
+    @Test
     void decode_shortSecret_stillVerifies() {
         String shortSecret = "short-local-secret";
         HmacJwtDecoder shortSecretDecoder = new HmacJwtDecoder(shortSecret);
