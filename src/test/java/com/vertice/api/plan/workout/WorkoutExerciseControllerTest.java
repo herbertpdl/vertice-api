@@ -11,6 +11,8 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseResponse;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseServiceGrpc;
+import com.vertice.api.plan.PlanAccessRepository;
+import com.vertice.api.plan.PlanCallers;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -22,8 +24,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.plan.PlanCallers.PARTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
@@ -32,20 +36,39 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
+/**
+ * Validation, error mapping and {@link WorkoutAuthorization} over a real gRPC call, with the
+ * service and the ownership lookup mocked. {@code stub} is ADMIN, who bypasses ownership, so the
+ * request-shape tests stay about the request; the authorization tests try every caller.
+ */
 @SpringBootTest(properties = {"spring.grpc.server.port=19098", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class WorkoutExerciseControllerTest {
 
+    /** A workout and a workout exercise in {@link PlanCallers#PARTIES}' plan. */
+    private static final long WORKOUT_ID = 5L;
+    private static final long WORKOUT_EXERCISE_ID = 6L;
+
     @MockitoBean
     private WorkoutExerciseService workoutExerciseService;
 
+    @MockitoBean
+    private PlanAccessRepository planAccessRepository;
+
     private ManagedChannel channel;
     private WorkoutExerciseServiceGrpc.WorkoutExerciseServiceBlockingStub stub;
+    private PlanCallers<WorkoutExerciseServiceGrpc.WorkoutExerciseServiceBlockingStub> callers;
 
     @BeforeEach
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19098").usePlaintext().build();
-        stub = WorkoutExerciseServiceGrpc.newBlockingStub(channel);
+        callers = PlanCallers.of(WorkoutExerciseServiceGrpc.newBlockingStub(channel));
+        stub = callers.admin();
+        when(planAccessRepository.findByWorkoutId(WORKOUT_ID)).thenReturn(Optional.of(PARTIES));
+        when(planAccessRepository.findByWorkoutExerciseId(WORKOUT_EXERCISE_ID)).thenReturn(Optional.of(PARTIES));
+        when(workoutExerciseService.getWorkoutExercise(any())).thenReturn(workoutExercise().build());
+        when(workoutExerciseService.createWorkoutExercise(any())).thenReturn(workoutExercise().build());
+        when(workoutExerciseService.updateWorkoutExercise(any(), any())).thenReturn(workoutExercise().build());
     }
 
     @AfterEach
@@ -191,5 +214,40 @@ class WorkoutExerciseControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    // Authorization: owner, another trainer, the plan's client, another client, ADMIN.
+
+    @Test
+    void listWorkoutExercises_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.listWorkoutExercises(ListWorkoutExercisesRequest.newBuilder().setWorkoutId(WORKOUT_ID).build()));
+    }
+
+    @Test
+    void getWorkoutExercise_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.getWorkoutExercise(GetWorkoutExerciseRequest.newBuilder().setId(WORKOUT_EXERCISE_ID).build()));
+    }
+
+    @Test
+    void createWorkoutExercise_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.createWorkoutExercise(WorkoutExerciseCreateRequest.newBuilder()
+                .setWorkoutId(WORKOUT_ID).setExerciseId(2L).setOrder(1).build()));
+    }
+
+    @Test
+    void updateWorkoutExercise_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.updateWorkoutExercise(UpdateWorkoutExerciseRequest.newBuilder()
+                .setId(WORKOUT_EXERCISE_ID).setWorkoutExercise(WorkoutExerciseRequest.newBuilder().setOrder(1)).build()));
+    }
+
+    @Test
+    void deleteWorkoutExercise_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.deleteWorkoutExercise(DeleteWorkoutExerciseRequest.newBuilder().setId(WORKOUT_EXERCISE_ID).build()));
+    }
+
+    @Test
+    void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
+        callers.assertNoServiceOrAnonymous(c -> c.createWorkoutExercise(WorkoutExerciseCreateRequest.newBuilder()
+                .setWorkoutId(WORKOUT_ID).setExerciseId(2L).setOrder(1).build()));
     }
 }

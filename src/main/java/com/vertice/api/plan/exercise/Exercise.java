@@ -62,6 +62,16 @@ public class Exercise {
         return isStarter() || isOwnedBy(caller);
     }
 
+    /**
+     * Whether this exercise may go into a workout of {@code trainerId}'s plan: a starter row, or one
+     * of that trainer's own. For a TRAINER caller that's {@link #isVisibleTo} (only the plan's
+     * trainer may write its workouts); judging by the plan's trainer also keeps an ADMIN from
+     * putting one trainer's private exercise into another trainer's plan.
+     */
+    public boolean isVisibleToTrainer(Long trainerId) {
+        return isStarter() || owner.getId().equals(trainerId);
+    }
+
     public boolean isOwnedBy(CallerIdentity caller) {
         return owner != null && caller.role() == Role.TRAINER && owner.getId().equals(caller.userId());
     }

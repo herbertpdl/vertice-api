@@ -16,6 +16,10 @@ import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
 import com.vertice.api.generated.grpc.session.v1.SetLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
+import com.vertice.api.plan.PlanAccessRepository;
+import com.vertice.api.plan.PlanCallers;
+import com.vertice.api.trainerclient.TrainerClientRepository;
+import com.vertice.api.user.Role;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -28,28 +32,63 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.plan.PlanCallers.CLIENT_ID;
+import static com.vertice.api.plan.PlanCallers.OTHER_CLIENT_ID;
+import static com.vertice.api.plan.PlanCallers.PARTIES;
+import static com.vertice.api.plan.PlanCallers.TRAINER_ID;
+import static com.vertice.api.plan.PlanCallers.assertAllowed;
+import static com.vertice.api.plan.PlanCallers.assertDenied;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+/**
+ * Validation, error mapping and {@link WorkoutSessionAuthorization} over a real gRPC call, with the
+ * service and the ownership lookups mocked. {@code stub} is ADMIN, who bypasses ownership, so the
+ * request-shape tests stay about the request; the authorization tests try every caller.
+ */
 @SpringBootTest(properties = {"spring.grpc.server.port=19100", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class WorkoutSessionControllerTest {
 
+    /** {@link PlanCallers#PARTIES}' plan, a workout in it, and its client's log of that workout. */
+    private static final long PLAN_ID = 4L;
+    private static final long WORKOUT_ID = 5L;
+    private static final long WORKOUT_LOG_ID = 8L;
+
     @MockitoBean
     private WorkoutSessionService workoutSessionService;
 
+    @MockitoBean
+    private PlanAccessRepository planAccessRepository;
+
+    @MockitoBean
+    private TrainerClientRepository trainerClientRepository;
+
     private ManagedChannel channel;
     private WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub stub;
+    private PlanCallers<WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub> callers;
 
     @BeforeEach
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19100").usePlaintext().build();
-        stub = WorkoutSessionServiceGrpc.newBlockingStub(channel);
+        callers = PlanCallers.of(WorkoutSessionServiceGrpc.newBlockingStub(channel));
+        stub = callers.admin();
+        when(planAccessRepository.findByWorkoutLogId(WORKOUT_LOG_ID)).thenReturn(Optional.of(PARTIES));
+        when(planAccessRepository.findByPlanId(PLAN_ID)).thenReturn(Optional.of(PARTIES));
+        when(planAccessRepository.findByWorkoutId(WORKOUT_ID)).thenReturn(Optional.of(PARTIES));
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndClientRoleAndEndedAtIsNull(TRAINER_ID, CLIENT_ID, Role.CLIENT))
+                .thenReturn(true);
+        when(workoutSessionService.getOrStartWorkoutLog(any())).thenReturn(WorkoutLogResponse.getDefaultInstance());
+        when(workoutSessionService.getWorkoutLog(any())).thenReturn(WorkoutLogResponse.getDefaultInstance());
+        when(workoutSessionService.completeWorkoutLog(any())).thenReturn(WorkoutLogResponse.getDefaultInstance());
+        when(workoutSessionService.recordSetLog(any())).thenReturn(SetLogResponse.getDefaultInstance());
+        when(workoutSessionService.getExerciseProgress(any(), any())).thenReturn(GetExerciseProgressResponse.getDefaultInstance());
     }
 
     @AfterEach
@@ -252,5 +291,76 @@ class WorkoutSessionControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    // Authorization: the plan's trainer, another trainer, the plan's (and log's) client, another client, ADMIN.
+
+    @Test
+    void getOrStartWorkoutLog_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.getOrStartWorkoutLog(getOrStart(CLIENT_ID)));
+    }
+
+    @Test
+    void getOrStartWorkoutLog_clientNamingAnotherClient_isPermissionDenied() {
+        assertDenied(() -> callers.otherClient().getOrStartWorkoutLog(getOrStart(CLIENT_ID)));
+        assertDenied(() -> callers.client().getOrStartWorkoutLog(getOrStart(OTHER_CLIENT_ID)));
+        assertDenied(() -> callers.otherClient().getOrStartWorkoutLog(getOrStart(OTHER_CLIENT_ID)));
+    }
+
+    @Test
+    void getWorkoutLog_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(WORKOUT_LOG_ID).build()));
+    }
+
+    @Test
+    void recordSetLog_onlyTheLogsClientAndAdmin() {
+        callers.assertClientRule(c -> c.recordSetLog(RecordSetLogRequest.newBuilder()
+                .setWorkoutLogId(WORKOUT_LOG_ID).setExerciseSetId(9L).setReps(5).build()));
+    }
+
+    @Test
+    void completeWorkoutLog_onlyTheLogsClientAndAdmin() {
+        callers.assertClientRule(c -> c.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(WORKOUT_LOG_ID).build()));
+    }
+
+    @Test
+    void listWorkoutLogs_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.listWorkoutLogs(ListWorkoutLogsRequest.newBuilder()
+                .setClientId(CLIENT_ID).setTrainingPlanId(PLAN_ID).setWeekStartDate("2026-08-24").build()));
+    }
+
+    @Test
+    void getLastSetLogs_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.getLastSetLogs(GetLastSetLogsRequest.newBuilder()
+                .setClientId(CLIENT_ID).setWorkoutId(WORKOUT_ID).build()));
+    }
+
+    /** Not a plan-tree rule: the client, their active trainer, ADMIN. */
+    @Test
+    void getExerciseProgress_clientActiveTrainerAndAdmin_areAllowed_othersDenied() {
+        GetExerciseProgressRequest request = GetExerciseProgressRequest.newBuilder().setClientId(CLIENT_ID).setExerciseId(10L).build();
+
+        assertAllowed(() -> callers.client().getExerciseProgress(request));
+        assertAllowed(() -> callers.trainer().getExerciseProgress(request));
+        assertAllowed(() -> callers.admin().getExerciseProgress(request));
+        assertDenied(() -> callers.otherTrainer().getExerciseProgress(request));
+        assertDenied(() -> callers.otherClient().getExerciseProgress(request));
+    }
+
+    /** A missing id answers a non-admin exactly like someone else's: no existence oracle. */
+    @Test
+    void completeWorkoutLog_missingLog_isPermissionDeniedForAClient() {
+        assertDenied(() -> callers.client().completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(99L).build()));
+    }
+
+    @Test
+    void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
+        callers.assertNoServiceOrAnonymous(c -> c.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(WORKOUT_LOG_ID).build()));
+        callers.assertNoServiceOrAnonymous(c -> c.getOrStartWorkoutLog(getOrStart(CLIENT_ID)));
+    }
+
+    private static GetOrStartWorkoutLogRequest getOrStart(long clientId) {
+        return GetOrStartWorkoutLogRequest.newBuilder()
+                .setWorkoutId(WORKOUT_ID).setClientId(clientId).setWeekStartDate("2026-08-24").build();
     }
 }

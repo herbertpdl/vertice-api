@@ -10,6 +10,7 @@ import com.vertice.api.generated.grpc.session.v1.GetWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
+import com.vertice.api.grpc.TestJwts;
 import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.exercise.ExerciseRepository;
 import com.vertice.api.plan.session.SetLogRepository;
@@ -58,7 +59,8 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
  *
  * <p>Fixture: {@code trainer} has {@code client} as an active client and a plan for them;
  * {@code otherClient} has no relationship with {@code trainer} but owns a second plan (seeded
- * directly, as data from before these rules would look).
+ * directly, as data from before these rules would look). Calls are made as the caller the P1-01
+ * rules let through, so what's checked here is the service-level invariant behind them.
  */
 @SpringBootTest(properties = {"spring.grpc.server.port=19107", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
@@ -85,6 +87,10 @@ class OwnershipInvariantsIntegrationTest {
     private ManagedChannel channel;
     private WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub sessionStub;
     private TrainingPlanServiceGrpc.TrainingPlanServiceBlockingStub planStub;
+    /** The client's session calls and the trainer's plan calls; see {@link #setUp()}. */
+    private WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub clientSession;
+    private WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub trainerSession;
+    private TrainingPlanServiceGrpc.TrainingPlanServiceBlockingStub trainerPlans;
 
     private User trainer;
     private User client;
@@ -110,6 +116,10 @@ class OwnershipInvariantsIntegrationTest {
         link.setClient(client);
         link.setStartedAt(Instant.now());
         link = trainerClientRepository.save(link);
+
+        clientSession = TestJwts.asCaller(sessionStub, client.getId(), Role.CLIENT);
+        trainerSession = TestJwts.asCaller(sessionStub, trainer.getId(), Role.TRAINER);
+        trainerPlans = TestJwts.asCaller(planStub, trainer.getId(), Role.TRAINER);
 
         exercise = new Exercise();
         exercise.setName("Squat");
@@ -140,32 +150,37 @@ class OwnershipInvariantsIntegrationTest {
 
     @Test
     void recordSetLog_acceptsSetFromLogsWorkoutAndRejectsSetFromAnotherWorkout() {
-        WorkoutLogResponse log = startLog(workout, client);
+        WorkoutLogResponse log = startLog(clientSession, workout, client);
 
-        var accepted = sessionStub.recordSetLog(recordSet(log.getId(), firstSetId(workout)));
+        var accepted = clientSession.recordSetLog(recordSet(log.getId(), firstSetId(workout)));
         assertThat(accepted.getWorkoutLogId()).isEqualTo(log.getId());
 
-        assertFailedPrecondition(() -> sessionStub.recordSetLog(recordSet(log.getId(), firstSetId(otherWorkout))));
+        assertFailedPrecondition(() -> clientSession.recordSetLog(recordSet(log.getId(), firstSetId(otherWorkout))));
         assertThat(setLogRepository.findByWorkoutLogId(log.getId())).hasSize(1);
     }
 
+    /**
+     * The trainer owns both plans, so authorization lets the call through and the service's own
+     * "workout assigned to this client" rule is what refuses it. (As the client, the plan check
+     * would refuse it first, with PERMISSION_DENIED.)
+     */
     @Test
     void getOrStartWorkoutLog_acceptsOwnWorkoutAndRejectsAnotherClientsWorkout() {
-        WorkoutLogResponse log = startLog(workout, client);
+        WorkoutLogResponse log = startLog(clientSession, workout, client);
         assertThat(log.getClientId()).isEqualTo(client.getId());
 
-        assertFailedPrecondition(() -> startLog(otherWorkout, client));
+        assertFailedPrecondition(() -> startLog(trainerSession, otherWorkout, client));
         assertThat(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(
                 otherWorkout.getId(), client.getId(), LocalDate.parse(WEEK))).isEmpty();
     }
 
     @Test
     void createTrainingPlan_acceptsActiveClientAndRejectsUnlinkedClient() {
-        TrainingPlanResponse created = planStub.createTrainingPlan(createPlan(client));
+        TrainingPlanResponse created = trainerPlans.createTrainingPlan(createPlan(client));
         planIds.add(created.getId());
         assertThat(created.getClientId()).isEqualTo(client.getId());
 
-        assertFailedPrecondition(() -> planStub.createTrainingPlan(createPlan(otherClient)));
+        assertFailedPrecondition(() -> trainerPlans.createTrainingPlan(createPlan(otherClient)));
         assertThat(trainingPlanRepository.findByClientId(otherClient.getId())).hasSize(1); // only the seeded one
     }
 
@@ -173,32 +188,34 @@ class OwnershipInvariantsIntegrationTest {
     void updateTrainingPlan_acceptsSameClientAndRejectsClientChange() {
         Long planId = workout.getTrainingPlan().getId();
 
-        var updated = planStub.updateTrainingPlan(updatePlan(planId, client, "Renamed"));
+        var updated = trainerPlans.updateTrainingPlan(updatePlan(planId, client, "Renamed"));
         assertThat(updated.getName()).isEqualTo("Renamed");
 
-        assertFailedPrecondition(() -> planStub.updateTrainingPlan(updatePlan(planId, otherClient, "Moved")));
+        assertFailedPrecondition(() -> trainerPlans.updateTrainingPlan(updatePlan(planId, otherClient, "Moved")));
         assertThat(trainingPlanRepository.findById(planId)).get()
                 .satisfies(plan -> assertThat(plan.getClient().getId()).isEqualTo(client.getId()));
     }
 
+    /** NOT_FOUND is ADMIN's answer for a missing id; anyone else gets PERMISSION_DENIED (no existence oracle). */
     @Test
     void getWorkoutLog_returnsOwnershipFieldsAndNotFoundForMissingId() {
-        WorkoutLogResponse started = startLog(workout, client);
+        WorkoutLogResponse started = startLog(clientSession, workout, client);
 
-        WorkoutLogResponse fetched = sessionStub.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(started.getId()).build());
+        WorkoutLogResponse fetched = clientSession.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(started.getId()).build());
 
         assertThat(fetched).isEqualTo(started);
         assertThat(fetched.getClientId()).isEqualTo(client.getId());
         assertThat(fetched.getWorkoutId()).isEqualTo(workout.getId());
 
-        assertThatThrownBy(() -> sessionStub.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(Long.MAX_VALUE).build()))
+        var admin = TestJwts.asCaller(sessionStub, 1L, Role.ADMIN);
+        assertThatThrownBy(() -> admin.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(Long.MAX_VALUE).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
     }
 
-    private WorkoutLogResponse startLog(Workout w, User c) {
-        return sessionStub.getOrStartWorkoutLog(GetOrStartWorkoutLogRequest.newBuilder()
+    private static WorkoutLogResponse startLog(WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub as, Workout w, User c) {
+        return as.getOrStartWorkoutLog(GetOrStartWorkoutLogRequest.newBuilder()
                 .setWorkoutId(w.getId()).setClientId(c.getId()).setWeekStartDate(WEEK).build());
     }
 

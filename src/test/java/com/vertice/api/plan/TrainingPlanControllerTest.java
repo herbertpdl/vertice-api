@@ -23,6 +23,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,23 +32,49 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static com.vertice.api.plan.PlanCallers.CLIENT_ID;
+import static com.vertice.api.plan.PlanCallers.OTHER_TRAINER_ID;
+import static com.vertice.api.plan.PlanCallers.PARTIES;
+import static com.vertice.api.plan.PlanCallers.TRAINER_ID;
+import static com.vertice.api.plan.PlanCallers.assertAllowed;
+import static com.vertice.api.plan.PlanCallers.assertCode;
+import static com.vertice.api.plan.PlanCallers.assertDenied;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Validation, error mapping and {@link TrainingPlanAuthorization} over a real gRPC call, with the
+ * service and the ownership lookup mocked. {@code stub} is ADMIN, who bypasses ownership, so the
+ * request-shape tests stay about the request; the authorization tests try every caller.
+ */
 @SpringBootTest(properties = {"spring.grpc.server.port=19096", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class TrainingPlanControllerTest {
 
+    /** Owned by {@link PlanCallers#TRAINER_ID}, written for {@link PlanCallers#CLIENT_ID}. */
+    private static final long PLAN_ID = 1L;
+
     @MockitoBean
     private TrainingPlanService trainingPlanService;
 
+    @MockitoBean
+    private PlanAccessRepository planAccessRepository;
+
     private ManagedChannel channel;
     private TrainingPlanServiceGrpc.TrainingPlanServiceBlockingStub stub;
+    private PlanCallers<TrainingPlanServiceGrpc.TrainingPlanServiceBlockingStub> callers;
 
     @BeforeEach
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19096").usePlaintext().build();
-        stub = TrainingPlanServiceGrpc.newBlockingStub(channel);
+        callers = PlanCallers.of(TrainingPlanServiceGrpc.newBlockingStub(channel));
+        stub = callers.admin();
+        when(planAccessRepository.findByPlanId(PLAN_ID)).thenReturn(Optional.of(PARTIES));
+        when(trainingPlanService.getTrainingPlan(any())).thenReturn(plan().build());
+        when(trainingPlanService.createTrainingPlan(any())).thenReturn(plan().build());
+        when(trainingPlanService.updateTrainingPlan(any(), any())).thenReturn(plan().build());
     }
 
     @AfterEach
@@ -211,5 +238,97 @@ class TrainingPlanControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    // Authorization: owner, another trainer, the plan's client, another client, ADMIN.
+
+    @Test
+    void listTrainingPlans_trainerIsScopedToThemself_andCannotNameAnotherTrainer() {
+        callers.trainer().listTrainingPlans(ListTrainingPlansRequest.newBuilder().setClientId(CLIENT_ID).build());
+        verify(trainingPlanService).listTrainingPlans(TRAINER_ID, CLIENT_ID);
+
+        assertDenied(() -> callers.trainer().listTrainingPlans(ListTrainingPlansRequest.newBuilder()
+                .setTrainerId(OTHER_TRAINER_ID).build()));
+    }
+
+    @Test
+    void listTrainingPlans_clientIsScopedToThemself_andCannotNameAnotherClient() {
+        callers.client().listTrainingPlans(ListTrainingPlansRequest.getDefaultInstance());
+        verify(trainingPlanService).listTrainingPlans(null, CLIENT_ID);
+
+        assertDenied(() -> callers.otherClient().listTrainingPlans(ListTrainingPlansRequest.newBuilder()
+                .setClientId(CLIENT_ID).build()));
+    }
+
+    @Test
+    void getTrainingPlan_ownerClientAndAdmin_areAllowed_othersDenied() {
+        GetTrainingPlanRequest request = GetTrainingPlanRequest.newBuilder().setId(PLAN_ID).build();
+
+        assertAllowed(() -> callers.trainer().getTrainingPlan(request));
+        assertAllowed(() -> callers.client().getTrainingPlan(request));
+        assertAllowed(() -> callers.admin().getTrainingPlan(request));
+        assertDenied(() -> callers.otherTrainer().getTrainingPlan(request));
+        assertDenied(() -> callers.otherClient().getTrainingPlan(request));
+    }
+
+    /** A missing id answers a non-admin exactly like someone else's: no existence oracle. */
+    @Test
+    void getTrainingPlan_missingId_isPermissionDeniedForATrainer_butNotFoundForAdmin() {
+        when(trainingPlanService.getTrainingPlan(99L)).thenThrow(new ResourceNotFoundException("TrainingPlan", 99L));
+        GetTrainingPlanRequest request = GetTrainingPlanRequest.newBuilder().setId(99L).build();
+
+        assertDenied(() -> callers.trainer().getTrainingPlan(request));
+        assertCode(() -> callers.admin().getTrainingPlan(request), Status.Code.NOT_FOUND);
+    }
+
+    @Test
+    void createTrainingPlan_trainerCreatesAsThemself_clientsAreDenied() {
+        callers.trainer().createTrainingPlan(validCreateRequest().setTrainerId(0).build());
+        verify(trainingPlanService).createTrainingPlan(validCreateRequest().setTrainerId(TRAINER_ID).build());
+
+        assertDenied(() -> callers.trainer().createTrainingPlan(validCreateRequest().setTrainerId(OTHER_TRAINER_ID).build()));
+        assertDenied(() -> callers.client().createTrainingPlan(validCreateRequest().setTrainerId(TRAINER_ID).build()));
+        assertDenied(() -> callers.otherClient().createTrainingPlan(validCreateRequest().build()));
+        assertAllowed(() -> callers.otherTrainer().createTrainingPlan(validCreateRequest().setTrainerId(OTHER_TRAINER_ID).build()));
+        assertAllowed(() -> callers.admin().createTrainingPlan(validCreateRequest().setTrainerId(TRAINER_ID).build()));
+    }
+
+    @Test
+    void updateTrainingPlan_ownerAndAdmin_areAllowed_othersDenied() {
+        UpdateTrainingPlanRequest request = UpdateTrainingPlanRequest.newBuilder()
+                .setId(PLAN_ID)
+                .setTrainingPlan(TrainingPlanRequest.newBuilder()
+                        .setName("Name").setClientId(CLIENT_ID)
+                        .setStartDate("2026-01-05").setEndDate("2026-03-30").setLevel(PlanLevel.INTERMEDIATE))
+                .build();
+
+        assertAllowed(() -> callers.trainer().updateTrainingPlan(request));
+        assertAllowed(() -> callers.admin().updateTrainingPlan(request));
+        assertDenied(() -> callers.otherTrainer().updateTrainingPlan(request));
+        assertDenied(() -> callers.client().updateTrainingPlan(request));
+        assertDenied(() -> callers.otherClient().updateTrainingPlan(request));
+    }
+
+    @Test
+    void deleteTrainingPlan_ownerAndAdmin_areAllowed_othersDenied() {
+        DeleteTrainingPlanRequest request = DeleteTrainingPlanRequest.newBuilder().setId(PLAN_ID).build();
+
+        assertDenied(() -> callers.otherTrainer().deleteTrainingPlan(request));
+        assertDenied(() -> callers.client().deleteTrainingPlan(request));
+        assertDenied(() -> callers.otherClient().deleteTrainingPlan(request));
+        verify(trainingPlanService, never()).deleteTrainingPlan(any());
+
+        assertAllowed(() -> callers.trainer().deleteTrainingPlan(request));
+        assertAllowed(() -> callers.admin().deleteTrainingPlan(request));
+    }
+
+    @Test
+    void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
+        GetTrainingPlanRequest request = GetTrainingPlanRequest.newBuilder().setId(PLAN_ID).build();
+
+        assertDenied(() -> callers.bff().getTrainingPlan(request));
+        assertCode(() -> callers.anonymous().getTrainingPlan(request), Status.Code.UNAUTHENTICATED);
+        assertCode(() -> callers.anonymous().listTrainingPlans(ListTrainingPlansRequest.getDefaultInstance()),
+                Status.Code.UNAUTHENTICATED);
     }
 }

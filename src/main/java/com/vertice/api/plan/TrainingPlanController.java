@@ -10,6 +10,8 @@ import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanResponse;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.UpdateTrainingPlanRequest;
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
@@ -26,42 +28,50 @@ public class TrainingPlanController extends TrainingPlanServiceGrpc.TrainingPlan
 
     private final TrainingPlanService trainingPlanService;
     private final GrpcRequestValidator validator;
+    private final CallerIdentityResolver callerIdentityResolver;
+    private final TrainingPlanAuthorization authorization;
 
     @Override
     public void listTrainingPlans(ListTrainingPlansRequest request, StreamObserver<ListTrainingPlansResponse> responseObserver) {
-        Long trainerId = request.getTrainerId() == 0 ? null : request.getTrainerId();
-        Long clientId = request.getClientId() == 0 ? null : request.getClientId();
+        var scope = authorization.checkListTrainingPlans(
+                callerIdentityResolver.requireUser(), request.getTrainerId(), request.getClientId());
         responseObserver.onNext(ListTrainingPlansResponse.newBuilder()
-                .addAllTrainingPlans(trainingPlanService.listTrainingPlans(trainerId, clientId))
+                .addAllTrainingPlans(trainingPlanService.listTrainingPlans(scope.trainerId(), scope.clientId()))
                 .build());
         responseObserver.onCompleted();
     }
 
     @Override
     public void getTrainingPlan(GetTrainingPlanRequest request, StreamObserver<TrainingPlanResponse> responseObserver) {
+        authorization.checkGetTrainingPlan(callerIdentityResolver.requireUser(), request.getId());
         responseObserver.onNext(trainingPlanService.getTrainingPlan(request.getId()));
         responseObserver.onCompleted();
     }
 
     @Override
     public void createTrainingPlan(TrainingPlanCreateRequest request, StreamObserver<TrainingPlanResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validator.validate(new PlanValidation(request.getName(), request.getClientId(), request.getStartDate(), request.getEndDate()));
         requireLevel(request.getLevel());
-        responseObserver.onNext(trainingPlanService.createTrainingPlan(request));
+        long trainerId = authorization.checkCreateTrainingPlan(caller, request.getTrainerId());
+        responseObserver.onNext(trainingPlanService.createTrainingPlan(request.toBuilder().setTrainerId(trainerId).build()));
         responseObserver.onCompleted();
     }
 
     @Override
     public void updateTrainingPlan(UpdateTrainingPlanRequest request, StreamObserver<TrainingPlanResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         var trainingPlan = request.getTrainingPlan();
         validator.validate(new PlanValidation(trainingPlan.getName(), trainingPlan.getClientId(), trainingPlan.getStartDate(), trainingPlan.getEndDate()));
         requireLevel(trainingPlan.getLevel());
+        authorization.checkUpdateTrainingPlan(caller, request.getId());
         responseObserver.onNext(trainingPlanService.updateTrainingPlan(request.getId(), trainingPlan));
         responseObserver.onCompleted();
     }
 
     @Override
     public void deleteTrainingPlan(DeleteTrainingPlanRequest request, StreamObserver<Empty> responseObserver) {
+        authorization.checkDeleteTrainingPlan(callerIdentityResolver.requireUser(), request.getId());
         trainingPlanService.deleteTrainingPlan(request.getId());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();

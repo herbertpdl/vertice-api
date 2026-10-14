@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.exception.WorkoutExerciseHasRecordedDataException;
 import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,12 +80,15 @@ public class WorkoutService {
      * {@code Workout} under the target plan. Builds the whole graph in memory and saves once —
      * {@code cascade = CascadeType.ALL} on both {@code Workout#workoutExercises} and
      * {@code WorkoutExercise#exerciseSets} (already there for {@code workout-exercise-sets})
-     * persists everything transitively.
+     * persists everything transitively. A trainer only clones between their own plans, so the
+     * visibility check can only refuse an ADMIN copying across trainers.
      */
     public WorkoutResponse cloneWorkout(CloneWorkoutRequest request) {
         Workout source = findByIdOrThrow(request.getSourceWorkoutId());
         TrainingPlan targetPlan = trainingPlanRepository.findById(request.getTargetTrainingPlanId())
                 .orElseThrow(() -> new ResourceNotFoundException("TrainingPlan", request.getTargetTrainingPlanId()));
+        assertVisibleToPlanTrainer(targetPlan,
+                source.getWorkoutExercises().stream().map(WorkoutExercise::getExercise).toList());
 
         Workout clone = new Workout();
         clone.setName(request.getName());
@@ -143,10 +148,13 @@ public class WorkoutService {
      * check, not a diff against the submitted content, since a full replace can't tell a
      * resubmitted entry apart from a brand-new one). The current tree is loaded with one batched
      * fetch (§0/F8) so the cascading delete below doesn't lazy-load each {@code exerciseSets}
-     * collection individually.
+     * collection individually. The new tree is built (and its exercises checked) first: those
+     * checks are about the request, the recorded-data one about current state (spec
+     * exercise-starter-catalog §5.7).
      */
     public WorkoutResponse replaceWorkoutExercises(ReplaceWorkoutExercisesRequest request) {
         Workout workout = findByIdOrThrow(request.getWorkoutId());
+        List<WorkoutExercise> newTree = buildWorkoutExerciseTree(workout, request.getExercisesList());
 
         List<WorkoutExercise> currentTree =
                 workoutExerciseRepository.findByWorkoutIdWithExerciseSetsAndExercise(workout.getId());
@@ -160,7 +168,7 @@ public class WorkoutService {
         }
 
         workoutExerciseRepository.deleteAll(currentTree);
-        workoutExerciseRepository.saveAll(buildWorkoutExerciseTree(workout, request.getExercisesList()));
+        workoutExerciseRepository.saveAll(newTree);
 
         return workoutMapper.toResponse(workout);
     }
@@ -169,7 +177,8 @@ public class WorkoutService {
      * Shared by {@link #createWorkoutWithExercises} and {@link #replaceWorkoutExercises}: resolves
      * every {@code exercise_id} with one batch query (rather than one {@code findById} per entry)
      * and builds one {@link WorkoutExercise} per entry / one {@link ExerciseSet} per nested set
-     * entry, with {@code order}/{@code setNumber} derived from list position (R4, R5).
+     * entry, with {@code order}/{@code setNumber} derived from list position (R4, R5). Every
+     * exercise must be visible to the plan's trainer (spec exercise-starter-catalog PR9, R17).
      */
     private List<WorkoutExercise> buildWorkoutExerciseTree(Workout workout, List<WorkoutExerciseEntry> entries) {
         Set<Long> exerciseIds = entries.stream()
@@ -180,6 +189,7 @@ public class WorkoutService {
         if (exercisesById.size() < exerciseIds.size()) {
             throw new ConstraintViolationException("exercise_id: one or more referenced exercises do not exist", Set.of());
         }
+        assertVisibleToPlanTrainer(workout.getTrainingPlan(), exercisesById.values());
 
         List<WorkoutExercise> tree = new ArrayList<>();
         int order = 1;
@@ -199,6 +209,18 @@ public class WorkoutService {
             tree.add(workoutExercise);
         }
         return tree;
+    }
+
+    /** The first offender by ascending id is named, so the answer doesn't depend on request order. */
+    private static void assertVisibleToPlanTrainer(TrainingPlan plan, Collection<Exercise> exercises) {
+        Long trainerId = plan.getTrainer().getId();
+        exercises.stream()
+                .filter(exercise -> !exercise.isVisibleToTrainer(trainerId))
+                .map(Exercise::getId)
+                .min(Long::compare)
+                .ifPresent(id -> {
+                    throw PermissionDeniedException.noAccess("exercise", id);
+                });
     }
 
     private Workout findByIdOrThrow(Long id) {
