@@ -69,7 +69,9 @@ ids. Non-local test contexts must set a valid (≥32-byte, non-placeholder) `ver
 `UserService`'s `VerifyCredentials`, `CreatePasswordSetupToken`, `SetPasswordWithToken` and
 `ListUsersWithoutPassword` are service-level RPCs meant for vertice-bff only (login, first-access
 password links). Like every other RPC they're open to any valid token today; P1-01 restricts them.
-See `docs/specs/password-lifecycle/spec.md`.
+`CreatePasswordSetupToken` is effectively a password-reset primitive (a token for any user id lets
+its holder set that user's password), so it is the one P1-01 must lock down first. See
+`docs/specs/password-lifecycle/spec.md`.
 Under `local` (even combined, e.g. `local,prod`), `config/LocalProfileGuard` refuses to boot when
 `VERTICE_ENV` is set to anything but `local`/`dev`, or when `spring.datasource.url`'s host isn't
 `localhost`/`127.0.0.1`/`::1`/`postgres` (unparseable URLs fail closed), so `local`-profile tests

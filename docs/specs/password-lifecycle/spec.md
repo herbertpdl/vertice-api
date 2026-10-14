@@ -24,8 +24,11 @@ REL-API-007); `docs/specs/user-unification/spec.md`
   expires_at > now`, so two concurrent uses can't both win; the password is set in the same
   transaction. Unknown, expired and used tokens all return `UNAUTHENTICATED` "Invalid or expired
   password setup token" (a token is a bearer credential).
-- **Password policy**: 8–72 characters on every RPC that sets a password (bcrypt reads only 72
-  bytes). See the open point in §3.
+- **Password policy**: `@Password` (`common/validation`) on every RPC that sets a password: at
+  least 8 characters and at most 72 UTF-8 *bytes*, since bcrypt reads only 72 bytes and Spring's
+  encoder throws on longer input. A violation is `INVALID_ARGUMENT`.
+- **`SetUserPassword` revokes pending setup tokens**: once a password is set directly, an
+  outstanding first-access link would only be a second way in.
 - **Emails are trimmed and lower-cased on write**, matched with `lower(email) = ?`, and unique
   through an index on `lower(email)` instead of the case-sensitive `uq_users_email`. V25 refuses to
   run (listing only user ids) if existing rows collide once normalized; those must be fixed by hand.
@@ -33,7 +36,9 @@ REL-API-007); `docs/specs/user-unification/spec.md`
   tokens (P0-02 step 5). It's a separate RPC rather than a `ListUsers` flag, so access to it can
   be restricted on its own in P1-01.
 - **No new authorization.** The four new RPCs are service-level, meant for vertice-bff only; the
-  API doesn't authorize by role yet (P1-01).
+  API doesn't authorize by role yet (P1-01). **`CreatePasswordSetupToken` is effectively a
+  password-reset primitive**: whoever can call it for a user id gets a token that sets that user's
+  password, i.e. takes over the account. P1-01 must restrict it to the BFF's service identity.
 
 ## 1. Contract (`vertice.user.v1.UserService`)
 
@@ -56,6 +61,3 @@ REL-API-007); `docs/specs/user-unification/spec.md`
 - Clients created before this change hold a random-UUID hash, not NULL, so
   `ListUsersWithoutPassword` doesn't list them. Step 5's migration has to target them some other
   way (for example issue tokens to every CLIENT via `ListUsers(role=CLIENT)`); that's for the BFF/ops PR.
-- `@Size(max = 72)` counts characters, while bcrypt's limit is 72 *bytes*. A password of ≤72
-  characters but >72 UTF-8 bytes makes `encode` throw (→ gRPC `UNKNOWN`). P1-09 (password policy)
-  should check the byte length.
