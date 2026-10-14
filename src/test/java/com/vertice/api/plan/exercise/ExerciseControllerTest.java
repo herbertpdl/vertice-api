@@ -16,6 +16,7 @@ import com.vertice.api.generated.grpc.exercise.v1.ListMuscleGroupsResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
 import com.vertice.api.generated.grpc.exercise.v1.UpdateExerciseRequest;
 import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.grpc.ServiceSubject;
 import com.vertice.api.grpc.TestJwts;
 import com.vertice.api.user.Role;
 import io.grpc.ManagedChannel;
@@ -90,6 +91,16 @@ class ExerciseControllerTest {
         ListMuscleGroupsResponse response = anonymousStub.listMuscleGroups(ListMuscleGroupsRequest.getDefaultInstance());
 
         assertThat(response.getMuscleGroupsList()).containsExactly(PEITO);
+    }
+
+    @Test
+    void listMuscleGroups_withServiceToken_permissionDenied() {
+        assertThatThrownBy(() -> TestJwts.asService(anonymousStub, ServiceSubject.BFF)
+                .listMuscleGroups(ListMuscleGroupsRequest.getDefaultInstance()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.PERMISSION_DENIED);
+        verifyNoInteractions(exerciseService);
     }
 
     @Test

@@ -34,6 +34,8 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
 
     @Override
     public void listMuscleGroups(ListMuscleGroupsRequest request, StreamObserver<ListMuscleGroupsResponse> responseObserver) {
+        // Reference data: any user. A missing token only gets this far under `local`, as before.
+        callerIdentityResolver.requireUserOrAnonymous();
         responseObserver.onNext(ListMuscleGroupsResponse.newBuilder()
                 .addAllMuscleGroups(exerciseService.listMuscleGroups())
                 .build());

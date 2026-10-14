@@ -47,6 +47,18 @@ public class CallerIdentityResolver {
         };
     }
 
+    /**
+     * Any user, or no token at all (only possible under {@code local}); a service token is
+     * {@code PERMISSION_DENIED}. For reference data every signed-in screen needs.
+     */
+    public Caller requireUserOrAnonymous() {
+        Caller caller = resolve();
+        if (caller instanceof Caller.Service service) {
+            throw PermissionDeniedException.service(service.subject());
+        }
+        return caller;
+    }
+
     /** One of the {@code allowed} service identities; anything else is {@code PERMISSION_DENIED}. */
     public Caller.Service requireService(ServiceSubject... allowed) {
         return switch (resolve()) {

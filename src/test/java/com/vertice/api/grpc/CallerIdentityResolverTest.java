@@ -117,6 +117,23 @@ class CallerIdentityResolverTest {
     }
 
     @Test
+    void requireUserOrAnonymous_withUserOrNoToken_returnsIt() {
+        assertThat(resolver.requireUserOrAnonymous()).isEqualTo(Caller.Anonymous.INSTANCE);
+
+        authenticateWith(Map.of("sub", "42", "role", "CLIENT"));
+        assertThat(resolver.requireUserOrAnonymous()).isEqualTo(new CallerIdentity(42L, Role.CLIENT));
+    }
+
+    @Test
+    void requireUserOrAnonymous_withService_throwsPermissionDenied() {
+        authenticateWith(Map.of("sub", "service:ops", "role", "SERVICE"));
+
+        assertThatThrownBy(resolver::requireUserOrAnonymous)
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessage("service:ops is not allowed to call this RPC");
+    }
+
+    @Test
     void requireService_withAllowedService_returnsIt() {
         authenticateWith(Map.of("sub", "service:ops", "role", "SERVICE"));
 
