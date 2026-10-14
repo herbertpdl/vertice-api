@@ -41,7 +41,6 @@ dependencies {
 	compileOnly 'org.projectlombok:lombok'
 	implementation "org.mapstruct:mapstruct:${mapstructVersion}"
 	runtimeOnly 'org.postgresql:postgresql'
-	runtimeOnly 'commons-collections:commons-collections:3.2.1' // PROBE: known-critical, reverted next commit
 	annotationProcessor 'org.projectlombok:lombok'
 	annotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
