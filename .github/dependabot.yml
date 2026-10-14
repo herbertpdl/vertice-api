@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Reads build.gradle (plugins block, explicit versions and the ext properties). Boot-managed
+  # dependencies have no version here, so they move with the org.springframework.boot plugin.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      gradle-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch

@@ -26,6 +26,13 @@ docker compose up -d                                   # Postgres only, required
 
 There is no linter/formatter task configured (no Checkstyle/Spotless in `build.gradle`).
 
+CI (`.github/workflows/ci.yml`) has two jobs: `build-and-test` (`./gradlew build`; the required
+check, so don't rename it) and `dependency-scan` (Grype on the boot jar, fails on high/critical
+runtime advisories). A failing scan is usually fixed by bumping the Spring Boot plugin or, when
+Boot hasn't caught up, a `set('<lib>.version', …)` override in `build.gradle`'s `ext` block;
+drop the override once Boot manages that version. Dependabot (`.github/dependabot.yml`) covers
+gradle and github-actions weekly.
+
 ## Architecture
 
 ### Vertical slices, not layers-first packages
