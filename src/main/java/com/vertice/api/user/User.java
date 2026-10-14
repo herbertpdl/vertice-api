@@ -25,8 +25,10 @@ public class User {
     @Column(length = 20)
     private String cref;
 
+    // null until the user sets a password (e.g. a client created by a trainer, see
+    // PasswordSetupTokenService); such a user can't pass VerifyCredentials.
     @ToString.Exclude
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "password_hash")
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
