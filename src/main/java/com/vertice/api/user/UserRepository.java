@@ -1,5 +1,6 @@
 package com.vertice.api.user;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -18,7 +19,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select u.role from User u where u.id = :id")
     Optional<Role> findRoleById(Long id);
 
-    List<User> findByRole(Role role);
+    /** One {@code ListUsers} page: keyset over the primary key, so pages stay stable under inserts. */
+    List<User> findByIdGreaterThanOrderByIdAsc(Long afterId, Limit limit);
+
+    List<User> findByRoleAndIdGreaterThanOrderByIdAsc(Role role, Long afterId, Limit limit);
 
     List<User> findByPasswordHashIsNull();
 

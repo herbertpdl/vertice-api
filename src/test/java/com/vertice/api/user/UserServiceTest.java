@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Limit;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -109,7 +110,8 @@ class UserServiceTest {
                 .setCpf(VALID_CPF).setRole(Role.TRAINER).build();
 
         assertThatThrownBy(() -> service.createUser(request))
-                .isInstanceOf(DuplicateEmailException.class);
+                .isInstanceOf(DuplicateEmailException.class)
+                .hasMessage("Email already in use");
         verify(userRepository, never()).save(any());
     }
 
@@ -141,8 +143,11 @@ class UserServiceTest {
                 .setName("New Coach").setEmail("coach@vertice.com").setPassword("supersecret1")
                 .setCpf(VALID_CPF).setRole(Role.TRAINER).build();
 
+        // A fixed message: echoing the CPF would confirm it is registered (PRIV-BFF-002).
         assertThatThrownBy(() -> service.createUser(request))
-                .isInstanceOf(DuplicateCpfException.class);
+                .isInstanceOf(DuplicateCpfException.class)
+                .hasMessage("CPF already in use")
+                .message().doesNotContainPattern("\\d");
         verify(userRepository, never()).save(any());
     }
 
@@ -192,41 +197,41 @@ class UserServiceTest {
     }
 
     @Test
-    void listUsers_withRoleFilter_returnsOnlyThatRole() {
-        User trainer = new User();
-        trainer.setId(1L);
-        trainer.setName("Coach");
-        trainer.setEmail("coach@vertice.com");
-        trainer.setCpf(VALID_CPF);
-        trainer.setRole(com.vertice.api.user.Role.TRAINER);
-        when(userRepository.findByRole(com.vertice.api.user.Role.TRAINER)).thenReturn(List.of(trainer));
+    void listUsers_withRoleFilter_queriesThatRole_inTheContactView() {
+        User trainer = user(1L, com.vertice.api.user.Role.TRAINER, "coach@vertice.com", VALID_CPF);
+        trainer.setCref("123456-G/SP");
+        when(userRepository.findByRoleAndIdGreaterThanOrderByIdAsc(com.vertice.api.user.Role.TRAINER, 0L, Limit.of(11)))
+                .thenReturn(List.of(trainer));
 
-        var responses = service.listUsers(com.vertice.api.user.Role.TRAINER);
+        var page = service.listUsers(com.vertice.api.user.Role.TRAINER, 10, 0L);
 
-        assertThat(responses).hasSize(1);
+        assertThat(page.getUsersList()).containsExactly(UserResponse.newBuilder()
+                .setId(1L).setName("User 1").setEmail("coach@vertice.com").setRole(Role.TRAINER).build());
+        assertThat(page.getNextPageToken()).isEmpty();
     }
 
     @Test
-    void listUsers_withoutFilter_returnsAll() {
-        User trainer = new User();
-        trainer.setId(1L);
-        trainer.setName("Coach");
-        trainer.setEmail("coach@vertice.com");
-        trainer.setCpf(VALID_CPF);
-        trainer.setRole(com.vertice.api.user.Role.TRAINER);
+    void listUsers_withMoreRowsThanThePage_returnsThePageAndATokenForTheRest() {
+        when(userRepository.findByIdGreaterThanOrderByIdAsc(5L, Limit.of(3))).thenReturn(List.of(
+                user(6L, com.vertice.api.user.Role.CLIENT, "a@vertice.com", VALID_CPF),
+                user(8L, com.vertice.api.user.Role.CLIENT, "b@vertice.com", OTHER_VALID_CPF),
+                user(9L, com.vertice.api.user.Role.CLIENT, "c@vertice.com", VALID_CPF)));
 
-        User client = new User();
-        client.setId(2L);
-        client.setName("Client");
-        client.setEmail("client@vertice.com");
-        client.setCpf(OTHER_VALID_CPF);
-        client.setRole(com.vertice.api.user.Role.CLIENT);
+        var page = service.listUsers(null, 2, 5L);
 
-        when(userRepository.findAll()).thenReturn(List.of(trainer, client));
+        assertThat(page.getUsersList()).extracting(UserResponse::getId).containsExactly(6L, 8L);
+        assertThat(page.getUsersList()).extracting(UserResponse::getCpf).containsOnly("");
+        assertThat(page.getNextPageToken()).isEqualTo("8");
+    }
 
-        var responses = service.listUsers(null);
-
-        assertThat(responses).hasSize(2);
+    private static User user(long id, com.vertice.api.user.Role role, String email, String cpf) {
+        User user = new User();
+        user.setId(id);
+        user.setName("User " + id);
+        user.setEmail(email);
+        user.setCpf(cpf);
+        user.setRole(role);
+        return user;
     }
 
     @Test
@@ -330,7 +335,7 @@ class UserServiceTest {
         when(userRepository.findByRoleAndPasswordHashIsNull(com.vertice.api.user.Role.CLIENT)).thenReturn(List.of(client));
 
         assertThat(service.listUsersWithoutPassword(com.vertice.api.user.Role.CLIENT))
-                .extracting(UserResponse::getId).containsExactly(7L);
+                .containsExactly(UserResponse.newBuilder().setId(7L).setName(client.getName()).setRole(Role.CLIENT).build());
     }
 
     @Test

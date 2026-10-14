@@ -142,10 +142,10 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `VerifyCredentials` | `service:bff` (login); a user for their own stored email only (`POST /auth/password`) |
 | `CreateUser` | `service:bff` (register), never with role ADMIN |
 | `SetPasswordWithToken` | `service:bff` |
-| `ListUsers` | ADMIN, `service:ops`; anonymous under `local` (BFF `VERIFY_PASSWORDS=false` dev login) |
+| `ListUsers` | ADMIN, `service:ops`; anonymous under `local` (BFF `VERIFY_PASSWORDS=false` dev login). Paginated (`page_size` ≤ 100, default 100; `page_token`) |
 | `ListUsersWithoutPassword` | ADMIN (all); TRAINER, narrowed to their active clients (BFF setup-link reissue) |
 | `CreatePasswordSetupToken` | `service:ops`, ADMIN; TRAINER for their active client who has no password yet |
-| `GetUser` | self, ADMIN, the target's active trainer; a trainer with any plan for the target gets id, name and role only (dashboard names of former clients) |
+| `GetUser` | self, ADMIN, the target's active trainer (detail view); a trainer with any plan for the target gets the summary view (dashboard names of former clients) |
 | `UpdateUser` | ADMIN (anything); self or the target's active trainer, role unchanged |
 | `SetUserPassword` | self, ADMIN |
 | `DeleteUser` | self, ADMIN |
@@ -165,6 +165,18 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `CreateExercise`, `UpdateExercise`, `DeleteExercise` | TRAINER, on their own exercises only (the starter set is read-only) |
 | `ListMuscleGroups` | any user; anonymous under `local` |
 | `grpc.health.v1.Health/Check` | any valid token (anonymous under `local`); infrastructure, carries no data |
+
+**Personal data in responses (P1-03).** Every RPC returning a user picks one `user/UserView`; the
+`UserResponse` shape stays the same and the fields outside the view are empty, so older clients
+still decode it. Detail (email, CPF, CREF) only ever goes to the user themself, ADMIN or the
+target's active trainer; a list never carries a CPF or CREF. Duplicate email/CPF errors are fixed
+messages (`Email already in use`, `CPF already in use`) that never echo the value.
+
+| View | Fields | RPCs |
+| --- | --- | --- |
+| detail | everything | `GetUser` (self, ADMIN, active trainer), `UpdateUser`, `CreateClientForTrainer` |
+| contact | id, name, role, email | `ListUsers` (ops setup links, local dev login match by email), `ListClientsForTrainer` (the BFF roster still shows email; becomes summary once it doesn't), `CreateUser`, `VerifyCredentials` (the BFF's session) |
+| summary | id, name, role | `ListUsersWithoutPassword`, `GetUser` for a trainer who only has a plan with the target |
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,

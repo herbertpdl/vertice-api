@@ -12,6 +12,7 @@ import com.vertice.api.generated.grpc.trainerclient.v1.TrainerClientServiceGrpc;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
+import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
 import com.vertice.api.generated.grpc.user.v1.UpdateUserRequest;
 import com.vertice.api.generated.grpc.user.v1.UserRequest;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
@@ -165,7 +166,7 @@ class TrainerClientAuthorizationIntegrationTest {
                         .setRole(com.vertice.api.generated.grpc.user.v1.Role.CLIENT)).build()));
         assertDenied(() -> usersAsA.createPasswordSetupToken(
                 CreatePasswordSetupTokenRequest.newBuilder().setUserId(clientA.getId()).build()));
-        assertThat(usersAsA.listUsersWithoutPassword(ListUsersRequest.getDefaultInstance()).getUsersList())
+        assertThat(usersAsA.listUsersWithoutPassword(ListUsersWithoutPasswordRequest.getDefaultInstance()).getUsersList())
                 .extracting(UserResponse::getId).doesNotContain(clientA.getId());
         assertDenied(() -> as(trainerA, WorkoutSessionServiceGrpc::newBlockingStub).getExerciseProgress(
                 GetExerciseProgressRequest.newBuilder().setClientId(clientA.getId()).setExerciseId(1L).build()));

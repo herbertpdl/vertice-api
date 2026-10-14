@@ -137,6 +137,22 @@ class TrainerClientServiceTest {
         assertThat(response.getClientsList().getFirst().getId()).isEqualTo(2L);
     }
 
+    /** The roster never carries a CPF (P1-03); the email stays while the BFF roster shows it. */
+    @Test
+    void listClientsForTrainer_returnsTheContactView() {
+        TrainerClient relationship = new TrainerClient();
+        relationship.setTrainer(user(1L, com.vertice.api.user.Role.TRAINER));
+        User client = user(2L, com.vertice.api.user.Role.CLIENT);
+        client.setName("Client");
+        client.setEmail("client@vertice.com");
+        client.setCpf(VALID_CPF);
+        relationship.setClient(client);
+        when(trainerClientRepository.findByTrainerIdAndEndedAtIsNull(1L)).thenReturn(java.util.List.of(relationship));
+
+        assertThat(service.listClientsForTrainer(1L).getClientsList()).containsExactly(UserResponse.newBuilder()
+                .setId(2L).setName("Client").setEmail("client@vertice.com").setRole(Role.CLIENT).build());
+    }
+
     @Test
     void listClientsForTrainer_returnsEmptyWhenNoActiveClients() {
         when(trainerClientRepository.findByTrainerIdAndEndedAtIsNull(1L)).thenReturn(java.util.List.of());

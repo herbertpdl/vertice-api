@@ -9,6 +9,7 @@ import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
+import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.SetPasswordWithTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
@@ -26,6 +27,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -48,29 +50,29 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     public void listUsers(ListUsersRequest request, StreamObserver<ListUsersResponse> responseObserver) {
+        validator.validate(new PageValidation(request.getPageSize()));
+        long afterId = afterId(request.getPageToken());
         authorization.checkListUsers(callerIdentityResolver.resolve());
-        responseObserver.onNext(ListUsersResponse.newBuilder()
-                .addAllUsers(userService.listUsers(roleFilter(request)))
-                .build());
+        responseObserver.onNext(userService.listUsers(roleFilter(request.getRole()), pageSize(request.getPageSize()), afterId));
         responseObserver.onCompleted();
     }
 
     @Override
-    public void listUsersWithoutPassword(ListUsersRequest request, StreamObserver<ListUsersResponse> responseObserver) {
+    public void listUsersWithoutPassword(ListUsersWithoutPasswordRequest request,
+                                         StreamObserver<ListUsersResponse> responseObserver) {
         Caller caller = callerIdentityResolver.resolve();
+        com.vertice.api.user.Role roleFilter = roleFilter(request.getRole());
         List<UserResponse> users = authorization.checkListUsersWithoutPassword(caller)
-                .map(trainerId -> userService.listClientsWithoutPassword(trainerId, roleFilter(request)))
-                .orElseGet(() -> userService.listUsersWithoutPassword(roleFilter(request)));
+                .map(trainerId -> userService.listClientsWithoutPassword(trainerId, roleFilter))
+                .orElseGet(() -> userService.listUsersWithoutPassword(roleFilter));
         responseObserver.onNext(ListUsersResponse.newBuilder().addAllUsers(users).build());
         responseObserver.onCompleted();
     }
 
     @Override
     public void getUser(GetUserRequest request, StreamObserver<UserResponse> responseObserver) {
-        UserAuthorization.UserView view = authorization.checkGetUser(callerIdentityResolver.resolve(), request.getId());
-        UserResponse user = userService.getUser(request.getId());
-        responseObserver.onNext(view == UserAuthorization.UserView.FULL ? user : UserResponse.newBuilder()
-                .setId(user.getId()).setName(user.getName()).setRole(user.getRole()).build());
+        UserView view = authorization.checkGetUser(callerIdentityResolver.resolve(), request.getId());
+        responseObserver.onNext(view.restrict(userService.getUser(request.getId())));
         responseObserver.onCompleted();
     }
 
@@ -79,7 +81,8 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
         validator.validate(new CreateValidation(request.getName(), Emails.normalize(request.getEmail()), request.getPassword(), request.getCpf()));
         requireRole(request.getRole());
         authorization.checkCreateUser(callerIdentityResolver.resolve(), domainRole(request.getRole()));
-        responseObserver.onNext(userService.createUser(request));
+        // The BFF only needs the email for the new session; the CPF it just sent stays out.
+        responseObserver.onNext(UserView.CONTACT.restrict(userService.createUser(request)));
         responseObserver.onCompleted();
     }
 
@@ -113,7 +116,7 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     public void verifyCredentials(VerifyCredentialsRequest request, StreamObserver<UserResponse> responseObserver) {
         validator.validate(new CredentialsValidation(request.getEmail(), request.getPassword()));
         authorization.checkVerifyCredentials(callerIdentityResolver.resolve(), request.getEmail());
-        responseObserver.onNext(userService.verifyCredentials(request.getEmail(), request.getPassword()));
+        responseObserver.onNext(UserView.CONTACT.restrict(userService.verifyCredentials(request.getEmail(), request.getPassword())));
         responseObserver.onCompleted();
     }
 
@@ -135,12 +138,34 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
         responseObserver.onCompleted();
     }
 
-    private static com.vertice.api.user.Role roleFilter(ListUsersRequest request) {
-        return request.getRole() == Role.ROLE_UNSPECIFIED ? null : domainRole(request.getRole());
+    /** {@code ROLE_UNSPECIFIED} → {@code null}, i.e. no role filter. */
+    private static com.vertice.api.user.Role roleFilter(Role role) {
+        return role == Role.ROLE_UNSPECIFIED ? null : domainRole(role);
     }
 
     private static com.vertice.api.user.Role domainRole(Role role) {
         return com.vertice.api.user.Role.valueOf(role.name());
+    }
+
+    /** 0 is the default; anything larger than the maximum is lowered to it, not refused. */
+    private static int pageSize(int requested) {
+        return requested == 0 ? UserService.MAX_PAGE_SIZE : Math.min(requested, UserService.MAX_PAGE_SIZE);
+    }
+
+    /** The token is the last id of the previous page; empty means the first page. */
+    private static long afterId(String pageToken) {
+        if (pageToken.isEmpty()) {
+            return 0;
+        }
+        try {
+            long afterId = Long.parseLong(pageToken);
+            if (afterId > 0) {
+                return afterId;
+            }
+        } catch (NumberFormatException ignored) {
+            // falls through to the same error as a non-positive id
+        }
+        throw new ConstraintViolationException("page_token: invalid", Set.of());
     }
 
     /**
@@ -165,6 +190,9 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
             @NotBlank String name,
             @NotBlank @Email String email,
             @Cpf String cpf) {
+    }
+
+    private record PageValidation(@PositiveOrZero int pageSize) {
     }
 
     private record PasswordValidation(@NotBlank @Password String password) {

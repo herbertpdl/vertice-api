@@ -28,14 +28,6 @@ public class UserAuthorization {
     private final TrainerClientRepository trainerClientRepository;
     private final TrainingPlanRepository trainingPlanRepository;
 
-    /** How much of a user {@code GetUser} may return to this caller. */
-    public enum UserView {
-        /** Everything, contact data included. */
-        FULL,
-        /** id, name and role only: no email, CPF or CREF. */
-        SUMMARY
-    }
-
     /**
      * ADMIN or the ops scripts. Anonymous too: that's only reachable under {@code local}, where the
      * BFF's {@code VERIFY_PASSWORDS=false} dev login looks users up without a token.
@@ -65,14 +57,14 @@ public class UserAuthorization {
     }
 
     /**
-     * The user themself, ADMIN, or the target's active trainer see everything. A trainer who has
+     * The user themself, ADMIN, or the target's active trainer get the detail view. A trainer who has
      * (or had) a training plan with the target sees the summary only: their dashboard, feedback and
      * recent-workout screens name the client of every plan they wrote, including clients no longer
      * on their roster, and must not fail because one of them left.
      */
     public UserView checkGetUser(Caller caller, Long id) {
         if (caller.isUser(id) || caller.isAdmin() || isActiveTrainerOf(caller, id)) {
-            return UserView.FULL;
+            return UserView.DETAIL;
         }
         if (caller instanceof CallerIdentity user && user.role() == Role.TRAINER
                 && trainingPlanRepository.existsByTrainerIdAndClientId(user.userId(), id)) {

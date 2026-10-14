@@ -11,6 +11,8 @@ import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
 import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
+import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
+import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.SetPasswordWithTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
@@ -43,11 +45,13 @@ import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -121,23 +125,57 @@ class UserControllerTest {
     }
 
     @Test
-    void listUsers_returnsAll() {
-        UserResponse user = UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).build();
-        when(userService.listUsers(null)).thenReturn(java.util.List.of(user));
+    void listUsers_returnsTheServicePage() {
+        ListUsersResponse page = ListUsersResponse.newBuilder()
+                .addUsers(UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setRole(Role.TRAINER))
+                .setNextPageToken("1")
+                .build();
+        when(userService.listUsers(null, UserService.MAX_PAGE_SIZE, 0L)).thenReturn(page);
 
-        var response = admin.listUsers(ListUsersRequest.newBuilder().build());
-
-        assertThat(response.getUsersList()).containsExactly(user);
+        assertThat(admin.listUsers(ListUsersRequest.newBuilder().build())).isEqualTo(page);
     }
 
     @Test
     void listUsers_withRoleFilter_passesFilterThrough() {
-        UserResponse trainer = UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).build();
-        when(userService.listUsers(com.vertice.api.user.Role.TRAINER)).thenReturn(java.util.List.of(trainer));
+        when(userService.listUsers(com.vertice.api.user.Role.TRAINER, UserService.MAX_PAGE_SIZE, 0L))
+                .thenReturn(ListUsersResponse.getDefaultInstance());
 
-        var response = admin.listUsers(ListUsersRequest.newBuilder().setRole(Role.TRAINER).build());
+        admin.listUsers(ListUsersRequest.newBuilder().setRole(Role.TRAINER).build());
 
-        assertThat(response.getUsersList()).containsExactly(trainer);
+        verify(userService).listUsers(com.vertice.api.user.Role.TRAINER, UserService.MAX_PAGE_SIZE, 0L);
+    }
+
+    @Test
+    void listUsers_passesPageSizeAndTokenThrough() {
+        when(userService.listUsers(null, 20, 42L)).thenReturn(ListUsersResponse.getDefaultInstance());
+
+        admin.listUsers(ListUsersRequest.newBuilder().setPageSize(20).setPageToken("42").build());
+
+        verify(userService).listUsers(null, 20, 42L);
+    }
+
+    @Test
+    void listUsers_pageSizeAboveTheMaximum_isLoweredToIt() {
+        when(userService.listUsers(null, UserService.MAX_PAGE_SIZE, 0L)).thenReturn(ListUsersResponse.getDefaultInstance());
+
+        admin.listUsers(ListUsersRequest.newBuilder().setPageSize(UserService.MAX_PAGE_SIZE + 1).build());
+        admin.listUsers(ListUsersRequest.newBuilder().setPageSize(Integer.MAX_VALUE).build());
+
+        verify(userService, times(2)).listUsers(null, UserService.MAX_PAGE_SIZE, 0L);
+    }
+
+    @Test
+    void listUsers_negativePageSize_isInvalidArgument() {
+        assertInvalidArgument(() -> admin.listUsers(ListUsersRequest.newBuilder().setPageSize(-1).build()));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void listUsers_malformedPageToken_isInvalidArgument() {
+        for (String token : List.of("abc", "0", "-5", "1.5", "99999999999999999999")) {
+            assertInvalidArgument(() -> admin.listUsers(ListUsersRequest.newBuilder().setPageToken(token).build()));
+        }
+        verifyNoInteractions(userService);
     }
 
     @Test
@@ -160,26 +198,17 @@ class UserControllerTest {
                 .isEqualTo(Status.Code.NOT_FOUND);
     }
 
+    /** The BFF only needs the email for the new session: the contact view, no CPF or CREF. */
     @Test
-    void createUser_withValidRequest_returnsCreated() {
-        UserResponse created = UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).build();
-        when(userService.createUser(any())).thenReturn(created);
-
-        UserResponse response = bff.createUser(UserCreateRequest.newBuilder()
-                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build());
-
-        assertThat(response).isEqualTo(created);
-    }
-
-    @Test
-    void createUser_withCref_returnsCreated() {
+    void createUser_withValidRequest_returnsTheContactView() {
         UserResponse created = UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).setCref("123456-G/SP").build();
         when(userService.createUser(any())).thenReturn(created);
 
         UserResponse response = bff.createUser(UserCreateRequest.newBuilder()
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).setCref("123456-G/SP").build());
 
-        assertThat(response.getCref()).isEqualTo("123456-G/SP");
+        assertThat(response).isEqualTo(UserResponse.newBuilder()
+                .setId(1L).setName("Coach").setEmail("coach@vertice.com").setRole(Role.TRAINER).build());
     }
 
     @Test
@@ -214,7 +243,7 @@ class UserControllerTest {
 
     @Test
     void createUser_withDuplicateEmail_throwsAlreadyExists() {
-        when(userService.createUser(any())).thenThrow(new DuplicateEmailException("coach@vertice.com"));
+        when(userService.createUser(any())).thenThrow(new DuplicateEmailException());
 
         assertThatThrownBy(() -> bff.createUser(UserCreateRequest.newBuilder()
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build()))
@@ -224,8 +253,19 @@ class UserControllerTest {
     }
 
     @Test
+    void createUser_withDuplicateEmailOrCpf_descriptionDoesNotEchoTheValue() {
+        when(userService.createUser(any())).thenThrow(new DuplicateEmailException()).thenThrow(new DuplicateCpfException());
+        UserCreateRequest request = UserCreateRequest.newBuilder()
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build();
+
+        assertThat(List.of(descriptionOf(() -> bff.createUser(request)), descriptionOf(() -> bff.createUser(request))))
+                .containsExactly("Email already in use", "CPF already in use")
+                .allSatisfy(description -> assertThat(description).doesNotContainPattern("\\d").doesNotContain("@"));
+    }
+
+    @Test
     void createUser_withDuplicateCpf_throwsAlreadyExists() {
-        when(userService.createUser(any())).thenThrow(new DuplicateCpfException(VALID_CPF));
+        when(userService.createUser(any())).thenThrow(new DuplicateCpfException());
 
         assertThatThrownBy(() -> bff.createUser(UserCreateRequest.newBuilder()
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build()))
@@ -372,13 +412,15 @@ class UserControllerTest {
     }
 
     @Test
-    void verifyCredentials_withValidCredentials_returnsUser() {
-        UserResponse user = UserResponse.newBuilder().setId(1L).setEmail("coach@vertice.com").setRole(Role.TRAINER).build();
+    void verifyCredentials_withValidCredentials_returnsTheContactView() {
+        UserResponse user = UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com")
+                .setCpf(VALID_CPF).setCref("123456-G/SP").setRole(Role.TRAINER).build();
         when(userService.verifyCredentials("coach@vertice.com", "supersecret1")).thenReturn(user);
 
         assertThat(bff.verifyCredentials(VerifyCredentialsRequest.newBuilder()
                 .setEmail("coach@vertice.com").setPassword("supersecret1").build()))
-                .isEqualTo(user);
+                .isEqualTo(UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com")
+                        .setRole(Role.TRAINER).build());
     }
 
     @Test
@@ -480,17 +522,19 @@ class UserControllerTest {
         UserResponse client = UserResponse.newBuilder().setId(3L).setRole(Role.CLIENT).build();
         when(userService.listUsersWithoutPassword(com.vertice.api.user.Role.CLIENT)).thenReturn(java.util.List.of(client));
 
-        assertThat(admin.listUsersWithoutPassword(ListUsersRequest.newBuilder().setRole(Role.CLIENT).build()).getUsersList())
+        assertThat(admin.listUsersWithoutPassword(ListUsersWithoutPasswordRequest.newBuilder().setRole(Role.CLIENT).build()).getUsersList())
                 .containsExactly(client);
     }
 
     // --- Authorization (P1-01). Each RPC: who is allowed, and who gets PERMISSION_DENIED. ---
 
     private static final ListUsersRequest ALL_USERS = ListUsersRequest.getDefaultInstance();
+    private static final ListUsersWithoutPasswordRequest ALL_WITHOUT_PASSWORD = ListUsersWithoutPasswordRequest.getDefaultInstance();
 
     @Test
     void listUsers_asOps_isAllowed() {
-        when(userService.listUsers(com.vertice.api.user.Role.CLIENT)).thenReturn(List.of());
+        when(userService.listUsers(com.vertice.api.user.Role.CLIENT, UserService.MAX_PAGE_SIZE, 0L))
+                .thenReturn(ListUsersResponse.getDefaultInstance());
 
         assertThat(ops.listUsers(ListUsersRequest.newBuilder().setRole(Role.CLIENT).build()).getUsersList()).isEmpty();
     }
@@ -498,7 +542,7 @@ class UserControllerTest {
     @Test
     void listUsers_anonymousUnderLocal_isAllowed() {
         // Only the local profile lets a call through without a token: the BFF's VERIFY_PASSWORDS=false dev login.
-        when(userService.listUsers(null)).thenReturn(List.of());
+        when(userService.listUsers(null, UserService.MAX_PAGE_SIZE, 0L)).thenReturn(ListUsersResponse.getDefaultInstance());
 
         assertThat(anonymous.listUsers(ALL_USERS).getUsersList()).isEmpty();
     }
@@ -519,7 +563,7 @@ class UserControllerTest {
     @Test
     void listUsersWithoutPassword_asOps_isPermissionDenied() {
         // The ops script lists clients through ListUsers; its token is scoped to that and CreatePasswordSetupToken.
-        assertPermissionDenied(() -> ops.listUsersWithoutPassword(ALL_USERS));
+        assertPermissionDenied(() -> ops.listUsersWithoutPassword(ALL_WITHOUT_PASSWORD));
         verifyNoInteractions(userService);
     }
 
@@ -528,15 +572,15 @@ class UserControllerTest {
         UserResponse own = UserResponse.newBuilder().setId(CLIENT_ID).setRole(Role.CLIENT).build();
         when(userService.listClientsWithoutPassword(TRAINER_ID, com.vertice.api.user.Role.CLIENT)).thenReturn(List.of(own));
 
-        assertThat(trainer.listUsersWithoutPassword(ListUsersRequest.newBuilder().setRole(Role.CLIENT).build()).getUsersList())
+        assertThat(trainer.listUsersWithoutPassword(ListUsersWithoutPasswordRequest.newBuilder().setRole(Role.CLIENT).build()).getUsersList())
                 .containsExactly(own);
         verify(userService, never()).listUsersWithoutPassword(any());
     }
 
     @Test
     void listUsersWithoutPassword_asClientOrBffService_isPermissionDenied() {
-        assertPermissionDenied(() -> client.listUsersWithoutPassword(ALL_USERS));
-        assertPermissionDenied(() -> bff.listUsersWithoutPassword(ALL_USERS));
+        assertPermissionDenied(() -> client.listUsersWithoutPassword(ALL_WITHOUT_PASSWORD));
+        assertPermissionDenied(() -> bff.listUsersWithoutPassword(ALL_WITHOUT_PASSWORD));
         verifyNoInteractions(userService);
     }
 
@@ -796,6 +840,10 @@ class UserControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(code);
+    }
+
+    private static String descriptionOf(ThrowingCallable callable) {
+        return catchThrowableOfType(StatusRuntimeException.class, callable).getStatus().getDescription();
     }
 
     private void assertPermissionDenied(ThrowingCallable callable) {

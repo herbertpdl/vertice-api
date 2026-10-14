@@ -12,6 +12,7 @@ import com.vertice.api.user.User;
 import com.vertice.api.user.UserMapper;
 import com.vertice.api.user.UserRepository;
 import com.vertice.api.user.UserService;
+import com.vertice.api.user.UserView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,11 +59,16 @@ public class TrainerClientService {
         return createdClient;
     }
 
+    /**
+     * In the {@link UserView#CONTACT} view: no CPF or CREF. The email stays only while
+     * vertice-bff's roster still shows and searches it (P1-03); then this becomes the summary.
+     */
     @Transactional(readOnly = true)
     public ListClientsForTrainerResponse listClientsForTrainer(Long trainerId) {
         var clients = trainerClientRepository.findByTrainerIdAndEndedAtIsNull(trainerId).stream()
                 .map(TrainerClient::getClient)
                 .map(userMapper::toResponse)
+                .map(UserView.CONTACT::restrict)
                 .toList();
         return ListClientsForTrainerResponse.newBuilder().addAllClients(clients).build();
     }
