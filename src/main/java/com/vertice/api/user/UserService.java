@@ -25,6 +25,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordSetupTokenRepository passwordSetupTokenRepository;
     /**
      * Compared against when there's no real hash to check (unknown email, no password set), so
      * those cases cost the same bcrypt round as a wrong password and timing doesn't reveal which
@@ -32,10 +33,12 @@ public class UserService {
      */
     private final String dummyPasswordHash;
 
-    public UserService(UserRepository userRepository, UserMapper userMapper, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, UserMapper userMapper, PasswordEncoder passwordEncoder,
+                       PasswordSetupTokenRepository passwordSetupTokenRepository) {
         this.userRepository = userRepository;
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
+        this.passwordSetupTokenRepository = passwordSetupTokenRepository;
         this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
@@ -102,10 +105,12 @@ public class UserService {
         userRepository.delete(user);
     }
 
+    /** A password set directly makes any pending setup link pointless, so those are revoked. */
     public void setPassword(Long id, String rawPassword) {
         User user = findByIdOrThrow(id);
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
         userRepository.save(user);
+        passwordSetupTokenRepository.deleteUnusedByUserId(id);
     }
 
     private User findByIdOrThrow(Long id) {

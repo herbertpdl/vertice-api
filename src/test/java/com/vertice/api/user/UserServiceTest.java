@@ -40,13 +40,16 @@ class UserServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private PasswordSetupTokenRepository tokenRepository;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private UserService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserService(userRepository, Mappers.getMapper(UserMapper.class), passwordEncoder);
+        service = new UserService(userRepository, Mappers.getMapper(UserMapper.class), passwordEncoder, tokenRepository);
     }
 
     @Test
@@ -255,6 +258,7 @@ class UserServiceTest {
 
         assertThat(existing.getPasswordHash()).isNotEqualTo("$2a$10$oldHash");
         assertThat(passwordEncoder.matches("brandNewPassword1", existing.getPasswordHash())).isTrue();
+        verify(tokenRepository).deleteUnusedByUserId(1L);
     }
 
     @Test
@@ -369,7 +373,7 @@ class UserServiceTest {
     @Test
     void verifyCredentials_withUnknownEmail_throwsSameErrorAfterADummyCompare() {
         PasswordEncoder encoder = spy(new BCryptPasswordEncoder());
-        UserService spiedService = new UserService(userRepository, Mappers.getMapper(UserMapper.class), encoder);
+        UserService spiedService = new UserService(userRepository, Mappers.getMapper(UserMapper.class), encoder, tokenRepository);
         when(userRepository.findByEmail("nobody@vertice.com")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> spiedService.verifyCredentials("nobody@vertice.com", "supersecret1"))
@@ -381,7 +385,7 @@ class UserServiceTest {
     @Test
     void verifyCredentials_withNoPasswordSet_throwsSameErrorAfterADummyCompare() {
         PasswordEncoder encoder = spy(new BCryptPasswordEncoder());
-        UserService spiedService = new UserService(userRepository, Mappers.getMapper(UserMapper.class), encoder);
+        UserService spiedService = new UserService(userRepository, Mappers.getMapper(UserMapper.class), encoder, tokenRepository);
         when(userRepository.findByEmail("client@vertice.com")).thenReturn(Optional.of(userWithPassword(2L, null)));
 
         assertThatThrownBy(() -> spiedService.verifyCredentials("client@vertice.com", "supersecret1"))

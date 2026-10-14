@@ -4,6 +4,7 @@ import com.vertice.api.common.exception.InvalidPasswordSetupTokenException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
+import com.vertice.api.grpc.ProtoInstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -54,7 +55,7 @@ public class PasswordSetupTokenService {
 
         return CreatePasswordSetupTokenResponse.newBuilder()
                 .setToken(rawToken)
-                .setExpiresAt(token.getExpiresAt().toString())
+                .setExpiresAt(ProtoInstants.instantToString(token.getExpiresAt()))
                 .build();
     }
 
