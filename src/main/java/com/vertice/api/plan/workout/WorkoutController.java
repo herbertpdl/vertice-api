@@ -15,6 +15,8 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseEntry;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutResponse;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
@@ -35,9 +37,12 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
 
     private final WorkoutService workoutService;
     private final GrpcRequestValidator validator;
+    private final CallerIdentityResolver callerIdentityResolver;
+    private final WorkoutAuthorization authorization;
 
     @Override
     public void listWorkouts(ListWorkoutsRequest request, StreamObserver<ListWorkoutsResponse> responseObserver) {
+        authorization.checkReadPlan(callerIdentityResolver.requireUser(), request.getTrainingPlanId());
         responseObserver.onNext(ListWorkoutsResponse.newBuilder()
                 .addAllWorkouts(workoutService.listWorkouts(request.getTrainingPlanId()))
                 .build());
@@ -46,28 +51,34 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
 
     @Override
     public void getWorkout(GetWorkoutRequest request, StreamObserver<WorkoutResponse> responseObserver) {
+        authorization.checkReadWorkout(callerIdentityResolver.requireUser(), request.getId());
         responseObserver.onNext(workoutService.getWorkout(request.getId()));
         responseObserver.onCompleted();
     }
 
     @Override
     public void createWorkout(WorkoutCreateRequest request, StreamObserver<WorkoutResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validator.validate(new WorkoutValidation(request.getName()));
         requireDayOfWeek(request.getDayOfWeek());
+        authorization.checkWritePlan(caller, request.getTrainingPlanId());
         responseObserver.onNext(workoutService.createWorkout(request));
         responseObserver.onCompleted();
     }
 
     @Override
     public void updateWorkout(UpdateWorkoutRequest request, StreamObserver<WorkoutResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validator.validate(new WorkoutValidation(request.getWorkout().getName()));
         requireDayOfWeek(request.getWorkout().getDayOfWeek());
+        authorization.checkWriteWorkout(caller, request.getId());
         responseObserver.onNext(workoutService.updateWorkout(request.getId(), request.getWorkout()));
         responseObserver.onCompleted();
     }
 
     @Override
     public void deleteWorkout(DeleteWorkoutRequest request, StreamObserver<Empty> responseObserver) {
+        authorization.checkWriteWorkout(callerIdentityResolver.requireUser(), request.getId());
         workoutService.deleteWorkout(request.getId());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
@@ -75,24 +86,30 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
 
     @Override
     public void cloneWorkout(CloneWorkoutRequest request, StreamObserver<WorkoutResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validator.validate(new WorkoutValidation(request.getName()));
         requireDayOfWeek(request.getDayOfWeek());
+        authorization.checkCloneWorkout(caller, request.getSourceWorkoutId(), request.getTargetTrainingPlanId());
         responseObserver.onNext(workoutService.cloneWorkout(request));
         responseObserver.onCompleted();
     }
 
     @Override
     public void createWorkoutWithExercises(CreateWorkoutWithExercisesRequest request, StreamObserver<WorkoutResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validator.validate(new WorkoutValidation(request.getName()));
         requireDayOfWeek(request.getDayOfWeek());
         validateExerciseEntries(request.getExercisesList());
+        authorization.checkWritePlan(caller, request.getTrainingPlanId());
         responseObserver.onNext(workoutService.createWorkoutWithExercises(request));
         responseObserver.onCompleted();
     }
 
     @Override
     public void replaceWorkoutExercises(ReplaceWorkoutExercisesRequest request, StreamObserver<WorkoutResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validateExerciseEntries(request.getExercisesList());
+        authorization.checkWriteWorkout(caller, request.getWorkoutId());
         responseObserver.onNext(workoutService.replaceWorkoutExercises(request));
         responseObserver.onCompleted();
     }

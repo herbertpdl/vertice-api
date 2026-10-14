@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.exception.WorkoutExerciseHasRecordedDataException;
 import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
@@ -17,6 +18,7 @@ import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.exercise.ExerciseRepository;
 import com.vertice.api.plan.session.SetLog;
 import com.vertice.api.plan.session.SetLogRepository;
+import com.vertice.api.user.User;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class WorkoutServiceTest {
+
+    /** The trainer every plan built by {@link #newPlan()} belongs to. */
+    private static final long TRAINER_ID = 10L;
+    private static final long OTHER_TRAINER_ID = 11L;
 
     @Mock
     private WorkoutRepository workoutRepository;
@@ -65,7 +71,7 @@ class WorkoutServiceTest {
 
     @Test
     void createWorkout_setsTrainingPlanAndSaves() {
-        TrainingPlan trainingPlan = new TrainingPlan();
+        TrainingPlan trainingPlan = newPlan();
         trainingPlan.setId(1L);
         when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(trainingPlan));
         when(workoutRepository.save(any(Workout.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -100,7 +106,7 @@ class WorkoutServiceTest {
 
     @Test
     void updateWorkout_updatesNameAndDayOfWeek() {
-        TrainingPlan trainingPlan = new TrainingPlan();
+        TrainingPlan trainingPlan = newPlan();
         trainingPlan.setId(1L);
         Workout existing = new Workout();
         existing.setId(1L);
@@ -132,7 +138,7 @@ class WorkoutServiceTest {
 
     @Test
     void listWorkouts_returnsWorkoutsForTrainingPlan() {
-        TrainingPlan trainingPlan = new TrainingPlan();
+        TrainingPlan trainingPlan = newPlan();
         trainingPlan.setId(1L);
         Workout workout = new Workout();
         workout.setId(1L);
@@ -167,7 +173,7 @@ class WorkoutServiceTest {
 
     @Test
     void cloneWorkout_deepCopiesWorkoutExercisesAndSets() {
-        TrainingPlan sourcePlan = new TrainingPlan();
+        TrainingPlan sourcePlan = newPlan();
         sourcePlan.setId(1L);
         Workout source = new Workout();
         source.setId(1L);
@@ -196,7 +202,7 @@ class WorkoutServiceTest {
         sourceWorkoutExercise.getExerciseSets().add(sourceSet);
         source.getWorkoutExercises().add(sourceWorkoutExercise);
 
-        TrainingPlan targetPlan = new TrainingPlan();
+        TrainingPlan targetPlan = newPlan();
         targetPlan.setId(2L);
 
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(source));
@@ -232,7 +238,7 @@ class WorkoutServiceTest {
 
     @Test
     void cloneWorkout_allowsCloningWorkoutWithNoExercises() {
-        TrainingPlan sourcePlan = new TrainingPlan();
+        TrainingPlan sourcePlan = newPlan();
         sourcePlan.setId(1L);
         Workout source = new Workout();
         source.setId(1L);
@@ -273,7 +279,7 @@ class WorkoutServiceTest {
     void cloneWorkout_throwsWhenTargetPlanMissing() {
         Workout source = new Workout();
         source.setId(1L);
-        source.setTrainingPlan(new TrainingPlan());
+        source.setTrainingPlan(newPlan());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(source));
         when(trainingPlanRepository.findById(99L)).thenReturn(Optional.empty());
 
@@ -289,7 +295,7 @@ class WorkoutServiceTest {
 
     @Test
     void createWorkoutWithExercises_withNoExercises_producesSameWorkoutAsCreateWorkout() {
-        TrainingPlan trainingPlan = new TrainingPlan();
+        TrainingPlan trainingPlan = newPlan();
         trainingPlan.setId(1L);
         when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(trainingPlan));
         when(workoutRepository.save(any(Workout.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -313,7 +319,7 @@ class WorkoutServiceTest {
 
     @Test
     void createWorkoutWithExercises_persistsFullGraphWithOrderAndSetNumberFromPosition() {
-        TrainingPlan trainingPlan = new TrainingPlan();
+        TrainingPlan trainingPlan = newPlan();
         trainingPlan.setId(1L);
         when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(trainingPlan));
 
@@ -369,7 +375,7 @@ class WorkoutServiceTest {
 
     @Test
     void createWorkoutWithExercises_throwsWhenExerciseIdDoesNotExist() {
-        TrainingPlan trainingPlan = new TrainingPlan();
+        TrainingPlan trainingPlan = newPlan();
         trainingPlan.setId(1L);
         when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(trainingPlan));
         when(exerciseRepository.findAllById(any())).thenReturn(List.of());
@@ -399,7 +405,7 @@ class WorkoutServiceTest {
 
     @Test
     void replaceWorkoutExercises_withNoRecordedData_replacesOldTreeWithNewOne() {
-        TrainingPlan trainingPlan = new TrainingPlan();
+        TrainingPlan trainingPlan = newPlan();
         trainingPlan.setId(1L);
         Workout workout = new Workout();
         workout.setId(1L);
@@ -447,6 +453,7 @@ class WorkoutServiceTest {
     void replaceWorkoutExercises_throwsAndDoesNotWriteWhenRecordedDataExists() {
         Workout workout = new Workout();
         workout.setId(1L);
+        workout.setTrainingPlan(newPlan());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout));
         when(workoutExerciseRepository.findByWorkoutIdWithExerciseSetsAndExercise(1L)).thenReturn(List.of());
 
@@ -485,5 +492,125 @@ class WorkoutServiceTest {
         assertThatThrownBy(() -> service.replaceWorkoutExercises(request))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(workoutExerciseRepository, never()).deleteAll(anyIterable());
+    }
+
+    // Exercise visibility (spec exercise-starter-catalog PR9, R17): only starter rows and the plan
+    // trainer's own exercises may go into a workout.
+
+    @Test
+    void createWorkoutWithExercises_withAnotherTrainersExercise_isPermissionDeniedAndWritesNothing() {
+        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(newPlan()));
+        when(exerciseRepository.findAllById(any())).thenReturn(List.of(
+                exercise(30L, OTHER_TRAINER_ID), exercise(20L, OTHER_TRAINER_ID), exercise(5L, null)));
+
+        CreateWorkoutWithExercisesRequest request = CreateWorkoutWithExercisesRequest.newBuilder()
+                .setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY)
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(30L).build())
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(20L).build())
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(5L).build())
+                .build();
+
+        assertThatThrownBy(() -> service.createWorkoutWithExercises(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessage("You do not have access to exercise 20");
+        verify(workoutRepository, never()).save(any());
+    }
+
+    @Test
+    void createWorkoutWithExercises_withStarterAndOwnExercises_succeeds() {
+        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(newPlan()));
+        when(exerciseRepository.findAllById(any())).thenReturn(List.of(exercise(5L, null), exercise(30L, TRAINER_ID)));
+        when(workoutRepository.save(any(Workout.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateWorkoutWithExercisesRequest request = CreateWorkoutWithExercisesRequest.newBuilder()
+                .setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY)
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(5L).build())
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(30L).build())
+                .build();
+
+        service.createWorkoutWithExercises(request);
+
+        verify(workoutRepository).save(any(Workout.class));
+    }
+
+    @Test
+    void createWorkoutWithExercises_withMissingExercise_isStillInvalidArgument() {
+        when(trainingPlanRepository.findById(1L)).thenReturn(Optional.of(newPlan()));
+        when(exerciseRepository.findAllById(any())).thenReturn(List.of(exercise(20L, OTHER_TRAINER_ID)));
+
+        CreateWorkoutWithExercisesRequest request = CreateWorkoutWithExercisesRequest.newBuilder()
+                .setName("Day 1").setTrainingPlanId(1L).setDayOfWeek(DayOfWeek.MONDAY)
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(20L).build())
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(999L).build())
+                .build();
+
+        assertThatThrownBy(() -> service.createWorkoutWithExercises(request))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void replaceWorkoutExercises_withAnotherTrainersExercise_isPermissionDeniedBeforeTheRecordedDataCheck() {
+        Workout workout = new Workout();
+        workout.setId(1L);
+        workout.setTrainingPlan(newPlan());
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout));
+        when(exerciseRepository.findAllById(any())).thenReturn(List.of(exercise(20L, OTHER_TRAINER_ID)));
+
+        ReplaceWorkoutExercisesRequest request = ReplaceWorkoutExercisesRequest.newBuilder()
+                .setWorkoutId(1L)
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(20L).build())
+                .build();
+
+        assertThatThrownBy(() -> service.replaceWorkoutExercises(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessage("You do not have access to exercise 20");
+        verify(setLogRepository, never()).findByWorkoutId(any());
+        verify(workoutExerciseRepository, never()).deleteAll(anyIterable());
+        verify(workoutExerciseRepository, never()).saveAll(anyIterable());
+    }
+
+    /** Only reachable by an ADMIN (a trainer clones between their own plans): judged by the target's trainer. */
+    @Test
+    void cloneWorkout_intoAPlanWhoseTrainerCannotSeeAnExercise_isPermissionDenied() {
+        Workout source = new Workout();
+        source.setId(1L);
+        source.setTrainingPlan(newPlan());
+        WorkoutExercise sourceExercise = new WorkoutExercise();
+        sourceExercise.setExercise(exercise(20L, TRAINER_ID));
+        source.getWorkoutExercises().add(sourceExercise);
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(source));
+        TrainingPlan otherTrainersPlan = newPlan();
+        otherTrainersPlan.getTrainer().setId(OTHER_TRAINER_ID);
+        when(trainingPlanRepository.findById(2L)).thenReturn(Optional.of(otherTrainersPlan));
+
+        CloneWorkoutRequest request = CloneWorkoutRequest.newBuilder()
+                .setSourceWorkoutId(1L).setTargetTrainingPlanId(2L).setName("Copy").setDayOfWeek(DayOfWeek.MONDAY)
+                .build();
+
+        assertThatThrownBy(() -> service.cloneWorkout(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessage("You do not have access to exercise 20");
+        verify(workoutRepository, never()).save(any());
+    }
+
+    private static TrainingPlan newPlan() {
+        User trainer = new User();
+        trainer.setId(TRAINER_ID);
+        TrainingPlan plan = new TrainingPlan();
+        plan.setTrainer(trainer);
+        return plan;
+    }
+
+    /** @param ownerId {@code null} = starter row */
+    private static Exercise exercise(long id, Long ownerId) {
+        Exercise exercise = new Exercise();
+        exercise.setId(id);
+        exercise.setName("Exercise " + id);
+        if (ownerId != null) {
+            User owner = new User();
+            owner.setId(ownerId);
+            exercise.setOwner(owner);
+        }
+        return exercise;
     }
 }

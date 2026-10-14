@@ -7,6 +7,7 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutResponse;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
+import com.vertice.api.grpc.TestJwts;
 import com.vertice.api.plan.TrainingPlan;
 import com.vertice.api.plan.TrainingPlanRepository;
 import com.vertice.api.plan.exercise.Exercise;
@@ -89,6 +90,9 @@ class ReplaceWorkoutExercisesIntegrationTest {
 
         trainer = userRepository.save(newUser("Trainer", Role.TRAINER));
         client = userRepository.save(newUser("Client", Role.CLIENT));
+        // As the callers P1-01's rules let through: the plan's trainer edits, its client logs.
+        workoutStub = TestJwts.asCaller(workoutStub, trainer.getId(), Role.TRAINER);
+        sessionStub = TestJwts.asCaller(sessionStub, client.getId(), Role.CLIENT);
 
         trainingPlan = new TrainingPlan();
         trainingPlan.setName("Plan");

@@ -747,7 +747,13 @@ R35.
 
 ### 5.7 Increment 2 — workout-side guards
 
-PR9's design; not built yet (§10). All four run inside the existing `@Transactional` service methods; every new check precedes the
+Built in P1-01 API PR B, with three deviations: plan/workout ownership lives in
+`WorkoutAuthorization` (called by the controller, before the service loads anything) and is
+`PERMISSION_DENIED` for a missing workout/plan too (no existence oracle; ADMIN still gets
+`NOT_FOUND`); ADMIN keeps its bypass, so visibility is judged against the plan's trainer
+(`Exercise#isVisibleToTrainer`), which for a TRAINER caller is the caller; `CloneWorkout` also
+checks every copied exercise against the target plan's trainer (only ever refuses an ADMIN copying
+across trainers). The design as first written: All four run inside the existing `@Transactional` service methods; every new check precedes the
 first write. Controllers gain only the `require()` call and the extra `CallerIdentity` argument.
 
 **`WorkoutExerciseService#createWorkoutExercise(caller, request)`**
@@ -1030,7 +1036,7 @@ No test for E10-style concurrency, pagination or metrics — not built (§0).
 | PR6 | Exercise RPCs require identity; role, ownership and starter-set rules | 1 | §4 identity/role/ownership rows, §5.2 steps 1, 3 + owner scoping, §5.3–5.6 (minus in-use) | PR2, PR3; **BFF Increment 0 on `main` and deployed before this deploys** | verification.md §1.6 |
 | PR7 | `DeleteExercise` refuses an exercise a workout uses | 1 | §5.6 step 6, §6 `ExerciseInUseException` | PR6 | verification.md §1.7 |
 | PR8 | `ListExercises` group filter, name search and R47–R50 ordering | 1 | §5.2 steps 2, 4–6, §6 `findVisible` | PR5, PR6 | verification.md §1.8 |
-| PR9 | Workout-side guards R17–R19 on four RPCs (not built yet) | 2 | §5.7 | PR6; Increment 1 live on api, bff, web | verification.md §1.9 |
+| PR9 | Workout-side guards R17–R19 on four RPCs (built in P1-01 API PR B, see §5.7) | 2 | §5.7 | PR6; Increment 1 live on api, bff, web | verification.md §1.9 |
 
 ### PR1 — Shared-secret HS256 `JwtDecoder`; local profile accepts an optional bearer token
 Branch: `feat/exercise-starter-catalog-jwt-decoder`. Scope: `config/HmacJwtDecoder`,

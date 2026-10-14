@@ -10,6 +10,8 @@ import com.vertice.api.generated.grpc.plan.v1.ListExerciseSetsRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListExerciseSetsResponse;
 import com.vertice.api.generated.grpc.plan.v1.SetStrategy;
 import com.vertice.api.generated.grpc.plan.v1.UpdateExerciseSetRequest;
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
@@ -25,9 +27,12 @@ public class ExerciseSetController extends ExerciseSetServiceGrpc.ExerciseSetSer
 
     private final ExerciseSetService exerciseSetService;
     private final GrpcRequestValidator validator;
+    private final CallerIdentityResolver callerIdentityResolver;
+    private final WorkoutAuthorization authorization;
 
     @Override
     public void listExerciseSets(ListExerciseSetsRequest request, StreamObserver<ListExerciseSetsResponse> responseObserver) {
+        authorization.checkReadWorkoutExercise(callerIdentityResolver.requireUser(), request.getWorkoutExerciseId());
         responseObserver.onNext(ListExerciseSetsResponse.newBuilder()
                 .addAllExerciseSets(exerciseSetService.listExerciseSets(request.getWorkoutExerciseId()))
                 .build());
@@ -36,31 +41,37 @@ public class ExerciseSetController extends ExerciseSetServiceGrpc.ExerciseSetSer
 
     @Override
     public void getExerciseSet(GetExerciseSetRequest request, StreamObserver<ExerciseSetResponse> responseObserver) {
+        authorization.checkReadExerciseSet(callerIdentityResolver.requireUser(), request.getId());
         responseObserver.onNext(exerciseSetService.getExerciseSet(request.getId()));
         responseObserver.onCompleted();
     }
 
     @Override
     public void createExerciseSet(ExerciseSetCreateRequest request, StreamObserver<ExerciseSetResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validator.validate(new ExerciseSetValidation(
                 request.getSetNumber(), request.getReps(), request.getDurationSeconds(), request.getRestSeconds()));
         requireStrategy(request.getStrategy());
+        authorization.checkWriteWorkoutExercise(caller, request.getWorkoutExerciseId());
         responseObserver.onNext(exerciseSetService.createExerciseSet(request));
         responseObserver.onCompleted();
     }
 
     @Override
     public void updateExerciseSet(UpdateExerciseSetRequest request, StreamObserver<ExerciseSetResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         var exerciseSet = request.getExerciseSet();
         validator.validate(new ExerciseSetValidation(
                 exerciseSet.getSetNumber(), exerciseSet.getReps(), exerciseSet.getDurationSeconds(), exerciseSet.getRestSeconds()));
         requireStrategy(exerciseSet.getStrategy());
+        authorization.checkWriteExerciseSet(caller, request.getId());
         responseObserver.onNext(exerciseSetService.updateExerciseSet(request.getId(), exerciseSet));
         responseObserver.onCompleted();
     }
 
     @Override
     public void deleteExerciseSet(DeleteExerciseSetRequest request, StreamObserver<Empty> responseObserver) {
+        authorization.checkWriteExerciseSet(callerIdentityResolver.requireUser(), request.getId());
         exerciseSetService.deleteExerciseSet(request.getId());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();

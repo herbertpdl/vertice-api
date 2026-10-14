@@ -1,10 +1,13 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseRequest;
 import com.vertice.api.plan.exercise.Exercise;
+import com.vertice.api.plan.TrainingPlan;
 import com.vertice.api.plan.exercise.ExerciseRepository;
+import com.vertice.api.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,16 +45,60 @@ class WorkoutExerciseServiceTest {
                 workoutRepository, exerciseRepository);
     }
 
+    private static final long TRAINER_ID = 10L;
+    private static final long OTHER_TRAINER_ID = 11L;
+
+    /** A workout in a plan of {@link #TRAINER_ID}. */
     private static Workout workout(long id) {
+        User trainer = new User();
+        trainer.setId(TRAINER_ID);
+        TrainingPlan plan = new TrainingPlan();
+        plan.setTrainer(trainer);
         Workout workout = new Workout();
         workout.setId(id);
+        workout.setTrainingPlan(plan);
         return workout;
     }
 
+    /** A starter exercise. */
     private static Exercise exercise(long id) {
         Exercise exercise = new Exercise();
         exercise.setId(id);
         return exercise;
+    }
+
+    private static Exercise ownedExercise(long id, long ownerId) {
+        User owner = new User();
+        owner.setId(ownerId);
+        Exercise exercise = exercise(id);
+        exercise.setOwner(owner);
+        return exercise;
+    }
+
+    @Test
+    void createWorkoutExercise_withAnotherTrainersExercise_isPermissionDenied() {
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
+        when(exerciseRepository.findById(2L)).thenReturn(Optional.of(ownedExercise(2L, OTHER_TRAINER_ID)));
+
+        WorkoutExerciseCreateRequest request = WorkoutExerciseCreateRequest.newBuilder()
+                .setWorkoutId(1L).setExerciseId(2L).setOrder(1).build();
+
+        assertThatThrownBy(() -> service.createWorkoutExercise(request))
+                .isInstanceOf(PermissionDeniedException.class)
+                .hasMessage("You do not have access to exercise 2");
+        verify(workoutExerciseRepository, never()).save(any());
+    }
+
+    @Test
+    void createWorkoutExercise_withThePlanTrainersOwnExercise_succeeds() {
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
+        when(exerciseRepository.findById(2L)).thenReturn(Optional.of(ownedExercise(2L, TRAINER_ID)));
+        when(workoutExerciseRepository.save(any(WorkoutExercise.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.createWorkoutExercise(WorkoutExerciseCreateRequest.newBuilder()
+                .setWorkoutId(1L).setExerciseId(2L).setOrder(1).build());
+
+        assertThat(response.getExerciseId()).isEqualTo(2L);
     }
 
     @Test

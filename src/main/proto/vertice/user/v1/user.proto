@@ -13,7 +13,8 @@ service UserService {
 
   // ADMIN or service:ops (anonymous only under the local profile).
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
-  // The user themself, ADMIN, or the target's active trainer.
+  // The user themself, ADMIN, or the target's active trainer. A trainer with any training plan
+  // for the target (e.g. a former client) gets id, name and role only: email, cpf and cref empty.
   rpc GetUser(GetUserRequest) returns (UserResponse);
   // service:bff only (registration), and never with role ADMIN.
   rpc CreateUser(UserCreateRequest) returns (UserResponse);

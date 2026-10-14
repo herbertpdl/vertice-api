@@ -100,10 +100,26 @@ turns the token into a `grpc/Caller` (sealed): a user (`CallerIdentity`: numeric
 or `Caller.Anonymous` (no token, only reachable under `local`). Any other subject/role is
 `UNAUTHENTICATED`. Controllers call `resolve()`, `requireUser()` (service → `PERMISSION_DENIED`,
 anonymous → `UNAUTHENTICATED`) or `requireService(...)` and pass the caller on; the rules themselves
-throw `PermissionDeniedException` → `PERMISSION_DENIED`. The user domain's rules live in
-`user/UserAuthorization` (one `check*` per RPC, called by `UserController` after request
-validation). The exercise RPCs use `requireUser()`. Plans, workouts, sessions, feedback and
-trainer-client RPCs still trust caller-supplied ids until P1-01 PR B/C.
+throw `PermissionDeniedException` → `PERMISSION_DENIED`. Each aggregate has an authorization
+class called by its controller after request validation: `user/UserAuthorization` (one `check*`
+per RPC), `plan/TrainingPlanAuthorization`, `plan/workout/WorkoutAuthorization` (workouts,
+workout exercises, sets) and `plan/session/WorkoutSessionAuthorization` (logs, set logs,
+feedback). The plan-tree ones are built from `plan/PlanAccess` over `plan/PlanAccessRepository`
+(one projection query: the plan's trainer and client for any id in the tree). The exercise RPCs
+use `requireUser()`. Trainer-client RPCs still trust caller-supplied ids until P1-01 PR C.
+
+Plan-tree conventions: every RPC needs a user token (`requireUser()`: service → `PERMISSION_DENIED`,
+no token → `UNAUTHENTICATED`). A plan's trainer reads and writes it and everything under it, its
+client only reads, ADMIN bypasses. A workout log belongs to its client: only they (or ADMIN)
+record sets, complete it or send feedback; the plan's trainer reads it. A `trainer_id`/`client_id`
+in a request is the caller's own for a caller with that role (`0` means "me" where `0` is
+accepted); any other id is `PERMISSION_DENIED`, never silently rewritten. **No existence oracle:**
+to anyone but ADMIN a missing id and someone else's id are the same `PERMISSION_DENIED` (`You do
+not have access to <resource> <id>`), decided before the service loads anything; ADMIN skips the
+lookup and gets the service's `NOT_FOUND`. An exercise put into a workout must be visible to the
+plan's trainer (starter set or their own, `Exercise#isVisibleToTrainer`; spec
+exercise-starter-catalog PR9): another trainer's is `PERMISSION_DENIED`, a missing one keeps its
+existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those apart).
 
 | RPC | Allowed callers |
 | --- | --- |
@@ -113,10 +129,20 @@ trainer-client RPCs still trust caller-supplied ids until P1-01 PR B/C.
 | `ListUsers` | ADMIN, `service:ops`; anonymous under `local` (BFF `VERIFY_PASSWORDS=false` dev login) |
 | `ListUsersWithoutPassword` | ADMIN, `service:ops` (all); TRAINER, narrowed to their active clients (BFF setup-link reissue) |
 | `CreatePasswordSetupToken` | `service:ops`, ADMIN; TRAINER for their active client who has no password yet |
-| `GetUser` | self, ADMIN, the target's active trainer |
+| `GetUser` | self, ADMIN, the target's active trainer; a trainer with any plan for the target gets id, name and role only (dashboard names of former clients) |
 | `UpdateUser` | ADMIN (anything); self or the target's active trainer, role unchanged |
 | `SetUserPassword` | self, ADMIN |
 | `DeleteUser` | self, ADMIN |
+| `ListTrainingPlans` | TRAINER (own plans), CLIENT (plans for them), ADMIN (as filtered) |
+| `GetTrainingPlan`, `ListWorkouts`, `GetWorkout`, `ListWorkoutExercises`, `GetWorkoutExercise`, `ListExerciseSets`, `GetExerciseSet` | the plan's trainer or client, ADMIN |
+| `CreateTrainingPlan` | TRAINER as themself (client on their active roster), ADMIN |
+| `UpdateTrainingPlan`, `DeleteTrainingPlan`, `CreateWorkout`, `CreateWorkoutWithExercises`, `UpdateWorkout`, `DeleteWorkout`, `ReplaceWorkoutExercises`, `CreateWorkoutExercise`, `UpdateWorkoutExercise`, `DeleteWorkoutExercise`, `CreateExerciseSet`, `UpdateExerciseSet`, `DeleteExerciseSet` | the plan's trainer, ADMIN |
+| `CloneWorkout` | the trainer of both the source workout's plan and the target plan, ADMIN |
+| `GetOrStartWorkoutLog`, `ListWorkoutLogs`, `GetLastSetLogs` | the plan's trainer, the plan's client (as themself), ADMIN |
+| `GetWorkoutLog` | the log's client, the plan's trainer, ADMIN |
+| `RecordSetLog`, `CompleteWorkoutLog`, `SubmitWorkoutFeedback` | the log's client, ADMIN |
+| `GetExerciseProgress` | the client themself, their active trainer, ADMIN |
+| `ListWorkoutFeedback` | TRAINER for their own `trainer_id`, ADMIN |
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,

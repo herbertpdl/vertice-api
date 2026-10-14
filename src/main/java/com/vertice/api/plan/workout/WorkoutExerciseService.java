@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseRequest;
@@ -39,6 +40,10 @@ public class WorkoutExerciseService {
                 .orElseThrow(() -> new ResourceNotFoundException("Workout", request.getWorkoutId()));
         Exercise exercise = exerciseRepository.findById(request.getExerciseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Exercise", request.getExerciseId()));
+        // Spec exercise-starter-catalog PR9 (R17): another trainer's private exercise never goes in.
+        if (!exercise.isVisibleToTrainer(workout.getTrainingPlan().getTrainer().getId())) {
+            throw PermissionDeniedException.noAccess("exercise", exercise.getId());
+        }
         WorkoutExercise workoutExercise = workoutExerciseMapper.toEntity(request);
         workoutExercise.setWorkout(workout);
         workoutExercise.setExercise(exercise);

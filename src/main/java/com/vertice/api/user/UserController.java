@@ -67,8 +67,10 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     public void getUser(GetUserRequest request, StreamObserver<UserResponse> responseObserver) {
-        authorization.checkGetUser(callerIdentityResolver.resolve(), request.getId());
-        responseObserver.onNext(userService.getUser(request.getId()));
+        UserAuthorization.UserView view = authorization.checkGetUser(callerIdentityResolver.resolve(), request.getId());
+        UserResponse user = userService.getUser(request.getId());
+        responseObserver.onNext(view == UserAuthorization.UserView.FULL ? user : UserResponse.newBuilder()
+                .setId(user.getId()).setName(user.getName()).setRole(user.getRole()).build());
         responseObserver.onCompleted();
     }
 

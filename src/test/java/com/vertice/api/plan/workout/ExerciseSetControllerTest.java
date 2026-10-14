@@ -12,6 +12,8 @@ import com.vertice.api.generated.grpc.plan.v1.ListExerciseSetsRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListExerciseSetsResponse;
 import com.vertice.api.generated.grpc.plan.v1.SetStrategy;
 import com.vertice.api.generated.grpc.plan.v1.UpdateExerciseSetRequest;
+import com.vertice.api.plan.PlanAccessRepository;
+import com.vertice.api.plan.PlanCallers;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -23,8 +25,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.plan.PlanCallers.PARTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
@@ -33,20 +37,39 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
+/**
+ * Validation, error mapping and {@link WorkoutAuthorization} over a real gRPC call, with the
+ * service and the ownership lookup mocked. {@code stub} is ADMIN, who bypasses ownership, so the
+ * request-shape tests stay about the request; the authorization tests try every caller.
+ */
 @SpringBootTest(properties = {"spring.grpc.server.port=19099", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class ExerciseSetControllerTest {
 
+    /** A workout exercise and a set in {@link PlanCallers#PARTIES}' plan. */
+    private static final long WORKOUT_EXERCISE_ID = 6L;
+    private static final long EXERCISE_SET_ID = 7L;
+
     @MockitoBean
     private ExerciseSetService exerciseSetService;
 
+    @MockitoBean
+    private PlanAccessRepository planAccessRepository;
+
     private ManagedChannel channel;
     private ExerciseSetServiceGrpc.ExerciseSetServiceBlockingStub stub;
+    private PlanCallers<ExerciseSetServiceGrpc.ExerciseSetServiceBlockingStub> callers;
 
     @BeforeEach
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19099").usePlaintext().build();
-        stub = ExerciseSetServiceGrpc.newBlockingStub(channel);
+        callers = PlanCallers.of(ExerciseSetServiceGrpc.newBlockingStub(channel));
+        stub = callers.admin();
+        when(planAccessRepository.findByWorkoutExerciseId(WORKOUT_EXERCISE_ID)).thenReturn(Optional.of(PARTIES));
+        when(planAccessRepository.findByExerciseSetId(EXERCISE_SET_ID)).thenReturn(Optional.of(PARTIES));
+        when(exerciseSetService.getExerciseSet(any())).thenReturn(exerciseSet().build());
+        when(exerciseSetService.createExerciseSet(any())).thenReturn(exerciseSet().build());
+        when(exerciseSetService.updateExerciseSet(any(), any())).thenReturn(exerciseSet().build());
     }
 
     @AfterEach
@@ -189,5 +212,38 @@ class ExerciseSetControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    // Authorization: owner, another trainer, the plan's client, another client, ADMIN.
+
+    @Test
+    void listExerciseSets_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.listExerciseSets(ListExerciseSetsRequest.newBuilder().setWorkoutExerciseId(WORKOUT_EXERCISE_ID).build()));
+    }
+
+    @Test
+    void getExerciseSet_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.getExerciseSet(GetExerciseSetRequest.newBuilder().setId(EXERCISE_SET_ID).build()));
+    }
+
+    @Test
+    void createExerciseSet_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.createExerciseSet(validCreateRequest().setWorkoutExerciseId(WORKOUT_EXERCISE_ID).build()));
+    }
+
+    @Test
+    void updateExerciseSet_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.updateExerciseSet(UpdateExerciseSetRequest.newBuilder().setId(EXERCISE_SET_ID)
+                .setExerciseSet(ExerciseSetRequest.newBuilder().setSetNumber(1).setStrategy(SetStrategy.STRAIGHT)).build()));
+    }
+
+    @Test
+    void deleteExerciseSet_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.deleteExerciseSet(DeleteExerciseSetRequest.newBuilder().setId(EXERCISE_SET_ID).build()));
+    }
+
+    @Test
+    void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
+        callers.assertNoServiceOrAnonymous(c -> c.getExerciseSet(GetExerciseSetRequest.newBuilder().setId(EXERCISE_SET_ID).build()));
     }
 }

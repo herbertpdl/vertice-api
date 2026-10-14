@@ -17,6 +17,9 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseEntry;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutResponse;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
+import com.vertice.api.plan.PlanAccessRepository;
+import com.vertice.api.plan.PlanCallers;
+import com.vertice.api.plan.PlanParties;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -28,11 +31,17 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
+import static com.vertice.api.plan.PlanCallers.OTHER_CLIENT_ID;
+import static com.vertice.api.plan.PlanCallers.OTHER_TRAINER_ID;
+import static com.vertice.api.plan.PlanCallers.PARTIES;
+import static com.vertice.api.plan.PlanCallers.assertAllowed;
+import static com.vertice.api.plan.PlanCallers.assertDenied;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -40,20 +49,47 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Validation, error mapping and {@link WorkoutAuthorization} over a real gRPC call, with the
+ * service and the ownership lookup mocked. {@code stub} is ADMIN, who bypasses ownership, so the
+ * request-shape tests stay about the request; the authorization tests try every caller.
+ */
 @SpringBootTest(properties = {"spring.grpc.server.port=19097", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class WorkoutControllerTest {
 
+    /** {@link PlanCallers#PARTIES}' plan and a workout in it. */
+    private static final long PLAN_ID = 1L;
+    private static final long WORKOUT_ID = 2L;
+    /** A plan of {@link PlanCallers#OTHER_TRAINER_ID}. */
+    private static final long OTHER_PLAN_ID = 3L;
+
     @MockitoBean
     private WorkoutService workoutService;
 
+    @MockitoBean
+    private PlanAccessRepository planAccessRepository;
+
     private ManagedChannel channel;
     private WorkoutServiceGrpc.WorkoutServiceBlockingStub stub;
+    private PlanCallers<WorkoutServiceGrpc.WorkoutServiceBlockingStub> callers;
 
     @BeforeEach
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19097").usePlaintext().build();
-        stub = WorkoutServiceGrpc.newBlockingStub(channel);
+        callers = PlanCallers.of(WorkoutServiceGrpc.newBlockingStub(channel));
+        stub = callers.admin();
+        when(planAccessRepository.findByPlanId(PLAN_ID)).thenReturn(Optional.of(PARTIES));
+        when(planAccessRepository.findByWorkoutId(WORKOUT_ID)).thenReturn(Optional.of(PARTIES));
+        when(planAccessRepository.findByPlanId(OTHER_PLAN_ID))
+                .thenReturn(Optional.of(new PlanParties(OTHER_TRAINER_ID, OTHER_CLIENT_ID)));
+        WorkoutResponse workout = WorkoutResponse.newBuilder().setId(WORKOUT_ID).build();
+        when(workoutService.getWorkout(any())).thenReturn(workout);
+        when(workoutService.createWorkout(any())).thenReturn(workout);
+        when(workoutService.updateWorkout(any(), any())).thenReturn(workout);
+        when(workoutService.cloneWorkout(any())).thenReturn(workout);
+        when(workoutService.createWorkoutWithExercises(any())).thenReturn(workout);
+        when(workoutService.replaceWorkoutExercises(any())).thenReturn(workout);
     }
 
     @AfterEach
@@ -422,5 +458,78 @@ class WorkoutControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.FAILED_PRECONDITION);
+    }
+
+    // Authorization: owner, another trainer, the plan's client, another client, ADMIN.
+
+    @Test
+    void listWorkouts_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.listWorkouts(ListWorkoutsRequest.newBuilder().setTrainingPlanId(PLAN_ID).build()));
+    }
+
+    @Test
+    void getWorkout_followsThePlanReadRule() {
+        callers.assertReadRule(c -> c.getWorkout(GetWorkoutRequest.newBuilder().setId(WORKOUT_ID).build()));
+    }
+
+    @Test
+    void createWorkout_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.createWorkout(WorkoutCreateRequest.newBuilder()
+                .setName("Day 1").setTrainingPlanId(PLAN_ID).setDayOfWeek(DayOfWeek.MONDAY).build()));
+    }
+
+    @Test
+    void updateWorkout_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.updateWorkout(UpdateWorkoutRequest.newBuilder().setId(WORKOUT_ID)
+                .setWorkout(WorkoutRequest.newBuilder().setName("Day 1").setDayOfWeek(DayOfWeek.MONDAY)).build()));
+    }
+
+    @Test
+    void deleteWorkout_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.deleteWorkout(DeleteWorkoutRequest.newBuilder().setId(WORKOUT_ID).build()));
+    }
+
+    @Test
+    void createWorkoutWithExercises_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.createWorkoutWithExercises(CreateWorkoutWithExercisesRequest.newBuilder()
+                .setName("Day 1").setTrainingPlanId(PLAN_ID).setDayOfWeek(DayOfWeek.MONDAY).build()));
+    }
+
+    @Test
+    void replaceWorkoutExercises_followsThePlanWriteRule() {
+        callers.assertWriteRule(c -> c.replaceWorkoutExercises(
+                ReplaceWorkoutExercisesRequest.newBuilder().setWorkoutId(WORKOUT_ID).build()));
+    }
+
+    @Test
+    void cloneWorkout_followsThePlanWriteRuleOnTheSource() {
+        callers.assertWriteRule(c -> c.cloneWorkout(cloneRequest(WORKOUT_ID, PLAN_ID)));
+    }
+
+    @Test
+    void cloneWorkout_intoAnotherTrainersPlan_orFromAnotherTrainersWorkout_isPermissionDenied() {
+        assertDenied(() -> callers.trainer().cloneWorkout(cloneRequest(WORKOUT_ID, OTHER_PLAN_ID)));
+        assertDenied(() -> callers.otherTrainer().cloneWorkout(cloneRequest(WORKOUT_ID, OTHER_PLAN_ID)));
+        verify(workoutService, never()).cloneWorkout(any());
+
+        assertAllowed(() -> callers.admin().cloneWorkout(cloneRequest(WORKOUT_ID, OTHER_PLAN_ID)));
+    }
+
+    /** A missing id answers a non-admin exactly like someone else's: no existence oracle. */
+    @Test
+    void getWorkout_missingId_isPermissionDeniedForAClient() {
+        assertDenied(() -> callers.client().getWorkout(GetWorkoutRequest.newBuilder().setId(99L).build()));
+    }
+
+    @Test
+    void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
+        callers.assertNoServiceOrAnonymous(c -> c.getWorkout(GetWorkoutRequest.newBuilder().setId(WORKOUT_ID).build()));
+        callers.assertNoServiceOrAnonymous(c -> c.cloneWorkout(cloneRequest(WORKOUT_ID, PLAN_ID)));
+    }
+
+    private static CloneWorkoutRequest cloneRequest(long sourceWorkoutId, long targetTrainingPlanId) {
+        return CloneWorkoutRequest.newBuilder()
+                .setSourceWorkoutId(sourceWorkoutId).setTargetTrainingPlanId(targetTrainingPlanId)
+                .setName("Copy").setDayOfWeek(DayOfWeek.MONDAY).build();
     }
 }

@@ -22,6 +22,7 @@ import com.vertice.api.generated.grpc.user.v1.UpdateUserRequest;
 import com.vertice.api.generated.grpc.user.v1.VerifyCredentialsRequest;
 import com.vertice.api.grpc.ServiceSubject;
 import com.vertice.api.grpc.TestJwts;
+import com.vertice.api.plan.TrainingPlanRepository;
 import com.vertice.api.trainerclient.TrainerClientRepository;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -81,6 +82,9 @@ class UserControllerTest {
 
     @MockitoBean
     private TrainerClientRepository trainerClientRepository;
+
+    @MockitoBean
+    private TrainingPlanRepository trainingPlanRepository;
 
     private ManagedChannel channel;
     private UserServiceGrpc.UserServiceBlockingStub anonymous;
@@ -556,6 +560,27 @@ class UserControllerTest {
     void getUser_anotherTrainersClient_isPermissionDenied() {
         assertPermissionDenied(() -> trainer.getUser(GetUserRequest.newBuilder().setId(OTHER_CLIENT_ID).build()));
         verifyNoInteractions(userService);
+    }
+
+    /** The dashboard names the client of every plan a trainer wrote, including clients who left. */
+    @Test
+    void getUser_trainerWithAPlanForAFormerClient_getsIdNameAndRoleOnly() {
+        when(trainingPlanRepository.existsByTrainerIdAndClientId(TRAINER_ID, OTHER_CLIENT_ID)).thenReturn(true);
+        when(userService.getUser(OTHER_CLIENT_ID)).thenReturn(UserResponse.newBuilder()
+                .setId(OTHER_CLIENT_ID).setName("Former").setEmail("former@vertice.com").setCpf(VALID_CPF)
+                .setRole(Role.CLIENT).build());
+
+        UserResponse response = trainer.getUser(GetUserRequest.newBuilder().setId(OTHER_CLIENT_ID).build());
+
+        assertThat(response).isEqualTo(UserResponse.newBuilder()
+                .setId(OTHER_CLIENT_ID).setName("Former").setRole(Role.CLIENT).build());
+    }
+
+    @Test
+    void getUser_clientWithAPlanFromTheTarget_isStillPermissionDenied() {
+        when(trainingPlanRepository.existsByTrainerIdAndClientId(CLIENT_ID, TRAINER_ID)).thenReturn(true);
+
+        assertPermissionDenied(() -> client.getUser(GetUserRequest.newBuilder().setId(TRAINER_ID).build()));
     }
 
     @Test
