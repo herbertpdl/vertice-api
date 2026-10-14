@@ -2,10 +2,13 @@ package com.vertice.api.config;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jwt.SignedJWT;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtValidationException;
@@ -18,7 +21,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.text.ParseException;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Verifies the BFF-minted HS256 JWT with the shared {@code JWT_SECRET}.
@@ -28,14 +34,26 @@ import java.util.Map;
  * (see docs/specs/exercise-starter-catalog/spec.md §0 D1). {@link JwtSecretGuard} makes sure a short
  * secret never reaches a non-local deployment. Nimbus is still used to parse the compact form;
  * only the signature check is done here.
+ *
+ * <p>Every token must be scoped to this API: issued by the BFF ({@code iss}), for vertice-api
+ * ({@code aud}), and expiring ({@code exp}), so a token minted for anything else, or one that never
+ * expires, is rejected (SEC-API-004). The same checks apply under {@code local} whenever a token is
+ * sent at all, so local runs and tests behave like production.
  */
 public class HmacJwtDecoder implements JwtDecoder {
+
+    public static final String ISSUER = "vertice-bff";
+    public static final String AUDIENCE = "vertice-api";
 
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
     private final SecretKeySpec key;
     private final MappedJwtClaimSetConverter claimSetConverter = MappedJwtClaimSetConverter.withDefaults(Map.of());
-    private final OAuth2TokenValidator<Jwt> validator = JwtValidators.createDefault();
+    private final OAuth2TokenValidator<Jwt> validator = new DelegatingOAuth2TokenValidator<>(
+            JwtValidators.createDefault(), // exp/nbf, when present
+            new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull),
+            new JwtClaimValidator<String>(JwtClaimNames.ISS, ISSUER::equals),
+            new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(AUDIENCE)));
 
     public HmacJwtDecoder(String secret) {
         this.key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM);

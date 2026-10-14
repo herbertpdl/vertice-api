@@ -35,7 +35,8 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 /**
  * Proves the {@code local}-profile semantics of D1 over a real call: a bearer token is decoded
  * into a {@link CallerIdentity} when present, an absent token is anonymous (so only RPCs that call
- * {@link CallerIdentityResolver#require()} fail), and an invalid token is always refused.
+ * {@link CallerIdentityResolver#requireUser()} fail), and an invalid or mis-scoped token is always
+ * refused, exactly as outside {@code local}.
  */
 @SpringBootTest(properties = {"spring.grpc.server.port=19104", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
@@ -93,6 +94,25 @@ class GrpcCallerIdentityTest {
                 .isEqualTo(Status.Code.UNAUTHENTICATED);
     }
 
+    @Test
+    void call_withUnscopedToken_failsUnauthenticated() {
+        // A pre-P1-01 token: right secret, but no iss/aud/exp.
+        String unscoped = TestJwts.sign(TestJwts.LOCAL_SECRET, "{\"sub\":\"42\",\"id\":42,\"role\":\"TRAINER\"}");
+
+        assertThatThrownBy(() -> call(PING, unscoped))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.UNAUTHENTICATED);
+    }
+
+    @Test
+    void call_withServiceToken_onUserOnlyRpc_failsPermissionDenied() {
+        assertThatThrownBy(() -> call(WHO_AM_I, TestJwts.serviceToken(ServiceSubject.BFF)))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.PERMISSION_DENIED);
+    }
+
     private StringValue call(MethodDescriptor<Empty, StringValue> method, String token) {
         if (token == null) {
             return ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, Empty.getDefaultInstance());
@@ -119,7 +139,7 @@ class GrpcCallerIdentityTest {
         @Bean
         BindableService identityService(CallerIdentityResolver resolver) {
             ServerCalls.UnaryMethod<Empty, StringValue> whoAmI = (request, responseObserver) -> {
-                CallerIdentity caller = resolver.require();
+                CallerIdentity caller = resolver.requireUser();
                 responseObserver.onNext(StringValue.of(caller.userId() + ":" + caller.role()));
                 responseObserver.onCompleted();
             };
