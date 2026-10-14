@@ -9,6 +9,9 @@ import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerResp
 import com.vertice.api.generated.grpc.trainerclient.v1.TrainerClientServiceGrpc;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
+import com.vertice.api.grpc.ServiceSubject;
+import com.vertice.api.grpc.TestJwts;
+import com.vertice.api.plan.PlanCallers;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -21,6 +24,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+
+import static com.vertice.api.plan.PlanCallers.assertAllowed;
+import static com.vertice.api.plan.PlanCallers.assertDenied;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,17 +42,22 @@ import static org.mockito.Mockito.when;
 class TrainerClientControllerTest {
 
     private static final String VALID_CPF = "11144477735";
+    private static final long TRAINER_ID = PlanCallers.TRAINER_ID;
+    private static final long CLIENT_ID = PlanCallers.CLIENT_ID;
 
     @MockitoBean
     private TrainerClientService trainerClientService;
 
     private ManagedChannel channel;
+    /** Calls as trainer {@link #TRAINER_ID}, the trainer the requests below name. */
     private TrainerClientServiceGrpc.TrainerClientServiceBlockingStub stub;
+    private PlanCallers<TrainerClientServiceGrpc.TrainerClientServiceBlockingStub> callers;
 
     @BeforeEach
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19102").usePlaintext().build();
-        stub = TrainerClientServiceGrpc.newBlockingStub(channel);
+        callers = PlanCallers.of(TrainerClientServiceGrpc.newBlockingStub(channel));
+        stub = callers.trainer();
     }
 
     @AfterEach
@@ -55,7 +67,7 @@ class TrainerClientControllerTest {
 
     private static CreateClientForTrainerRequest.Builder validCreateRequest() {
         return CreateClientForTrainerRequest.newBuilder()
-                .setTrainerId(1L).setName("New Client").setEmail("client@vertice.com")
+                .setTrainerId(TRAINER_ID).setName("New Client").setEmail("client@vertice.com")
                 .setPassword("supersecret1").setCpf(VALID_CPF);
     }
 
@@ -130,10 +142,10 @@ class TrainerClientControllerTest {
     }
 
     @Test
-    void createClientForTrainer_withMissingTrainer_throwsNotFound() {
+    void createClientForTrainer_adminNamingAMissingTrainer_throwsNotFound() {
         when(trainerClientService.createClientForTrainer(any())).thenThrow(new ResourceNotFoundException("Trainer", 99L));
 
-        assertThatThrownBy(() -> stub.createClientForTrainer(validCreateRequest().setTrainerId(99L).build()))
+        assertThatThrownBy(() -> callers.admin().createClientForTrainer(validCreateRequest().setTrainerId(99L).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
@@ -143,42 +155,90 @@ class TrainerClientControllerTest {
     void listClientsForTrainer_returnsClients() {
         UserResponse client = UserResponse.newBuilder().setId(2L).setName("Client")
                 .setEmail("client@vertice.com").setCpf(VALID_CPF).setRole(Role.CLIENT).build();
-        when(trainerClientService.listClientsForTrainer(1L))
+        when(trainerClientService.listClientsForTrainer(TRAINER_ID))
                 .thenReturn(ListClientsForTrainerResponse.newBuilder().addClients(client).build());
 
-        var response = stub.listClientsForTrainer(ListClientsForTrainerRequest.newBuilder().setTrainerId(1L).build());
+        var response = stub.listClientsForTrainer(ListClientsForTrainerRequest.newBuilder().setTrainerId(TRAINER_ID).build());
 
         assertThat(response.getClientsList()).containsExactly(client);
     }
 
     @Test
     void listClientsForTrainer_withNoClients_returnsEmpty() {
-        when(trainerClientService.listClientsForTrainer(1L))
+        when(trainerClientService.listClientsForTrainer(TRAINER_ID))
                 .thenReturn(ListClientsForTrainerResponse.newBuilder().build());
 
-        var response = stub.listClientsForTrainer(ListClientsForTrainerRequest.newBuilder().setTrainerId(1L).build());
+        var response = stub.listClientsForTrainer(ListClientsForTrainerRequest.newBuilder().setTrainerId(TRAINER_ID).build());
 
         assertThat(response.getClientsList()).isEmpty();
     }
 
     @Test
     void isTrainersClient_whenActiveRelationshipExists_returnsTrue() {
-        when(trainerClientService.isTrainersClient(eq(1L), eq(2L)))
+        when(trainerClientService.isTrainersClient(eq(TRAINER_ID), eq(CLIENT_ID)))
                 .thenReturn(IsTrainersClientResponse.newBuilder().setIsClient(true).build());
 
-        var response = stub.isTrainersClient(IsTrainersClientRequest.newBuilder().setTrainerId(1L).setClientId(2L).build());
+        var response = stub.isTrainersClient(IsTrainersClientRequest.newBuilder().setTrainerId(TRAINER_ID).setClientId(CLIENT_ID).build());
 
         assertThat(response.getIsClient()).isTrue();
     }
 
     @Test
     void isTrainersClient_whenNoRelationshipExists_returnsFalse() {
-        when(trainerClientService.isTrainersClient(eq(1L), eq(3L)))
+        when(trainerClientService.isTrainersClient(eq(TRAINER_ID), eq(3L)))
                 .thenReturn(IsTrainersClientResponse.newBuilder().setIsClient(false).build());
 
-        var response = stub.isTrainersClient(IsTrainersClientRequest.newBuilder().setTrainerId(1L).setClientId(3L).build());
+        var response = stub.isTrainersClient(IsTrainersClientRequest.newBuilder().setTrainerId(TRAINER_ID).setClientId(3L).build());
 
         assertThat(response.getIsClient()).isFalse();
+    }
+
+    // --- Authorization (P1-01): a TRAINER names only themself, ADMIN anyone; CLIENTs, other
+    // trainers and service identities get nothing, and the service is never reached.
+
+    @Test
+    void createClientForTrainer_authorization() {
+        when(trainerClientService.createClientForTrainer(any())).thenReturn(UserResponse.newBuilder().setId(2L).build());
+        CreateClientForTrainerRequest request = validCreateRequest().build();
+
+        assertTrainerAsThemselfOrAdminRule(stub -> stub.createClientForTrainer(request));
+    }
+
+    @Test
+    void listClientsForTrainer_authorization() {
+        when(trainerClientService.listClientsForTrainer(TRAINER_ID)).thenReturn(ListClientsForTrainerResponse.getDefaultInstance());
+        ListClientsForTrainerRequest request = ListClientsForTrainerRequest.newBuilder().setTrainerId(TRAINER_ID).build();
+
+        assertTrainerAsThemselfOrAdminRule(stub -> stub.listClientsForTrainer(request));
+    }
+
+    @Test
+    void isTrainersClient_authorization() {
+        when(trainerClientService.isTrainersClient(TRAINER_ID, CLIENT_ID)).thenReturn(IsTrainersClientResponse.getDefaultInstance());
+        IsTrainersClientRequest request = IsTrainersClientRequest.newBuilder().setTrainerId(TRAINER_ID).setClientId(CLIENT_ID).build();
+
+        assertTrainerAsThemselfOrAdminRule(stub -> stub.isTrainersClient(request));
+    }
+
+    @Test
+    void anotherTrainer_namingTheTrainer_neverReachesTheService() {
+        var otherTrainer = callers.otherTrainer();
+
+        assertDenied(() -> otherTrainer.createClientForTrainer(validCreateRequest().build()));
+        assertDenied(() -> otherTrainer.listClientsForTrainer(ListClientsForTrainerRequest.newBuilder().setTrainerId(TRAINER_ID).build()));
+        assertDenied(() -> otherTrainer.isTrainersClient(
+                IsTrainersClientRequest.newBuilder().setTrainerId(TRAINER_ID).setClientId(CLIENT_ID).build()));
+        verifyNoInteractions(trainerClientService);
+    }
+
+    private void assertTrainerAsThemselfOrAdminRule(Consumer<TrainerClientServiceGrpc.TrainerClientServiceBlockingStub> call) {
+        assertAllowed(() -> call.accept(callers.trainer()));
+        assertAllowed(() -> call.accept(callers.admin()));
+        assertDenied(() -> call.accept(callers.otherTrainer()));
+        assertDenied(() -> call.accept(callers.client()));
+        assertDenied(() -> call.accept(callers.otherClient()));
+        callers.assertNoServiceOrAnonymous(call);
+        assertDenied(() -> call.accept(TestJwts.asService(callers.anonymous(), ServiceSubject.OPS)));
     }
 
     private void assertInvalidArgument(org.assertj.core.api.ThrowableAssert.ThrowingCallable callable) {

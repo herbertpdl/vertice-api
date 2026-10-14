@@ -515,12 +515,10 @@ class UserControllerTest {
     }
 
     @Test
-    void listUsersWithoutPassword_asOps_isUnscoped() {
-        when(userService.listUsersWithoutPassword(null)).thenReturn(List.of());
-
-        ops.listUsersWithoutPassword(ALL_USERS);
-
-        verify(userService).listUsersWithoutPassword(null);
+    void listUsersWithoutPassword_asOps_isPermissionDenied() {
+        // The ops script lists clients through ListUsers; its token is scoped to that and CreatePasswordSetupToken.
+        assertPermissionDenied(() -> ops.listUsersWithoutPassword(ALL_USERS));
+        verifyNoInteractions(userService);
     }
 
     @Test

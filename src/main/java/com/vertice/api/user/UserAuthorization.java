@@ -48,13 +48,14 @@ public class UserAuthorization {
     }
 
     /**
-     * ADMIN and the ops scripts see everyone; a TRAINER sees only their own active clients (the BFF
-     * re-issues a setup link only to a client still without a password).
+     * ADMIN sees everyone; a TRAINER sees only their own active clients (the BFF re-issues a setup
+     * link only to a client still without a password). The ops scripts don't call this: they list
+     * clients through {@code ListUsers}, so {@code service:ops} is refused here.
      *
      * @return the trainer to scope the list to, or empty for an unscoped list
      */
     public Optional<Long> checkListUsersWithoutPassword(Caller caller) {
-        if (caller.isAdmin() || caller.isService(ServiceSubject.OPS)) {
+        if (caller.isAdmin()) {
             return Optional.empty();
         }
         if (caller instanceof CallerIdentity user && user.role() == Role.TRAINER) {
