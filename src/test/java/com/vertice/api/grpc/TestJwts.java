@@ -1,5 +1,6 @@
 package com.vertice.api.grpc;
 
+import com.vertice.api.config.HmacJwtDecoder;
 import com.vertice.api.user.Role;
 import io.grpc.Metadata;
 import io.grpc.stub.AbstractStub;
@@ -9,10 +10,13 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.time.Instant;
 import java.util.Base64;
 
 /**
- * Mints HS256 tokens shaped like the BFF's ({@code id}, {@code role} claims) for tests. Signs by
+ * Mints HS256 tokens shaped like the BFF's for tests: scoped ({@code iss}, {@code aud}, {@code exp}),
+ * user tokens with {@code sub}, the legacy {@code id} and {@code role}, service tokens with
+ * {@code sub: "service:…"} and {@code role: "SERVICE"} (vertice-bff {@code src/lib/jwt.ts}). Signs by
  * hand with {@link Mac} because Nimbus' own signer refuses secrets under 32 bytes, which some tests
  * use on purpose — the same reason {@code HmacJwtDecoder} exists.
  */
@@ -33,7 +37,28 @@ public final class TestJwts {
     }
 
     public static String token(String secret, long userId, Role role) {
-        return sign(secret, HS256_HEADER, "{\"id\":%d,\"role\":\"%s\"}".formatted(userId, role.name()));
+        return sign(secret, "{\"sub\":\"%d\",\"id\":%d,\"role\":\"%s\",%s}"
+                .formatted(userId, userId, role.name(), scopeClaims()));
+    }
+
+    public static String serviceToken(ServiceSubject subject) {
+        return serviceToken(LOCAL_SECRET, subject);
+    }
+
+    public static String serviceToken(String secret, ServiceSubject subject) {
+        return sign(secret, "{\"sub\":\"%s\",\"role\":\"SERVICE\",%s}".formatted(subject.subject(), scopeClaims()));
+    }
+
+    /** {@code "iss":…,"aud":…,"iat":…,"exp":…} for a token valid for the next hour, to splice into a payload. */
+    public static String scopeClaims() {
+        long now = Instant.now().getEpochSecond();
+        return "\"iss\":\"%s\",\"aud\":\"%s\",\"iat\":%d,\"exp\":%d"
+                .formatted(HmacJwtDecoder.ISSUER, HmacJwtDecoder.AUDIENCE, now, now + 3600);
+    }
+
+    /** Signs {@code payloadJson} under the standard HS256 header. */
+    public static String sign(String secret, String payloadJson) {
+        return sign(secret, HS256_HEADER, payloadJson);
     }
 
     public static String sign(String secret, String headerJson, String payloadJson) {
@@ -51,6 +76,10 @@ public final class TestJwts {
 
     public static <S extends AbstractStub<S>> S asCaller(S stub, long userId, Role role) {
         return withBearer(stub, token(userId, role));
+    }
+
+    public static <S extends AbstractStub<S>> S asService(S stub, ServiceSubject subject) {
+        return withBearer(stub, serviceToken(subject));
     }
 
     private static byte[] hmacSha256(String secret, String signingInput) {

@@ -42,7 +42,7 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
 
     @Override
     public void listExercises(ListExercisesRequest request, StreamObserver<ListExercisesResponse> responseObserver) {
-        CallerIdentity caller = callerIdentityResolver.require();
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         String search = request.getSearch().strip();
         validator.validate(new ListExercisesValidation(search));
         responseObserver.onNext(ListExercisesResponse.newBuilder()
@@ -53,13 +53,13 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
 
     @Override
     public void getExercise(GetExerciseRequest request, StreamObserver<ExerciseResponse> responseObserver) {
-        responseObserver.onNext(exerciseService.getExercise(callerIdentityResolver.require(), request.getId()));
+        responseObserver.onNext(exerciseService.getExercise(callerIdentityResolver.requireUser(), request.getId()));
         responseObserver.onCompleted();
     }
 
     @Override
     public void createExercise(ExerciseRequest request, StreamObserver<ExerciseResponse> responseObserver) {
-        CallerIdentity caller = callerIdentityResolver.require();
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validate(request);
         responseObserver.onNext(exerciseService.createExercise(caller, request));
         responseObserver.onCompleted();
@@ -67,7 +67,7 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
 
     @Override
     public void updateExercise(UpdateExerciseRequest request, StreamObserver<ExerciseResponse> responseObserver) {
-        CallerIdentity caller = callerIdentityResolver.require();
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validate(request.getExercise());
         responseObserver.onNext(exerciseService.updateExercise(caller, request.getId(), request.getExercise()));
         responseObserver.onCompleted();
@@ -75,7 +75,7 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
 
     @Override
     public void deleteExercise(DeleteExerciseRequest request, StreamObserver<Empty> responseObserver) {
-        exerciseService.deleteExercise(callerIdentityResolver.require(), request.getId());
+        exerciseService.deleteExercise(callerIdentityResolver.requireUser(), request.getId());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }

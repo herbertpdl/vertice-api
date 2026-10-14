@@ -61,6 +61,15 @@ public class UserService {
         return users.stream().map(userMapper::toResponse).toList();
     }
 
+    /** {@link #listUsersWithoutPassword} narrowed to {@code trainerId}'s active clients. */
+    @Transactional(readOnly = true)
+    public List<UserResponse> listClientsWithoutPassword(Long trainerId, com.vertice.api.user.Role roleFilter) {
+        if (roleFilter != null && roleFilter != com.vertice.api.user.Role.CLIENT) {
+            return List.of();
+        }
+        return userRepository.findActiveClientsWithoutPassword(trainerId).stream().map(userMapper::toResponse).toList();
+    }
+
     /** An empty password creates the user without one; they set it later with a setup token. */
     public UserResponse createUser(UserCreateRequest request) {
         String email = Emails.normalize(request.getEmail());

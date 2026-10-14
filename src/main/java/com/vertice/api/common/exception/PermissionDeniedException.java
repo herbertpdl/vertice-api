@@ -1,5 +1,6 @@
 package com.vertice.api.common.exception;
 
+import com.vertice.api.grpc.ServiceSubject;
 import com.vertice.api.user.Role;
 
 /**
@@ -23,5 +24,9 @@ public class PermissionDeniedException extends RuntimeException {
 
     public static PermissionDeniedException role(Role role, String action) {
         return new PermissionDeniedException("Role %s is not allowed to %s".formatted(role, action));
+    }
+
+    public static PermissionDeniedException service(ServiceSubject subject) {
+        return new PermissionDeniedException("%s is not allowed to call this RPC".formatted(subject.subject()));
     }
 }

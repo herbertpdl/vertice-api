@@ -5,8 +5,8 @@ import com.vertice.api.user.Role;
 
 import java.util.Arrays;
 
-/** Who is calling, as stated by the BFF's JWT ({@code id} and {@code role} claims). */
-public record CallerIdentity(Long userId, Role role) {
+/** A user calling through the BFF, as stated by its JWT ({@code sub} and {@code role} claims). */
+public record CallerIdentity(Long userId, Role role) implements Caller {
 
     /**
      * @param action completes "Role X is not allowed to ...", e.g. {@code "list exercises"}
