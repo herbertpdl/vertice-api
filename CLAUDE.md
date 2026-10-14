@@ -32,6 +32,8 @@ runtime advisories). A failing scan is usually fixed by bumping the Spring Boot 
 Boot hasn't caught up, a `set('<lib>.version', …)` override in `build.gradle`'s `ext` block;
 drop the override once Boot manages that version. Dependabot (`.github/dependabot.yml`) covers
 gradle and github-actions weekly.
+Third-party actions (anything outside `actions/*`) are pinned by full commit SHA with a version
+comment; Dependabot bumps both together.
 
 ## Architecture
 
