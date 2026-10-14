@@ -9,6 +9,8 @@ import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerRequ
 import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.TrainerClientServiceGrpc;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
+import com.vertice.api.grpc.CallerIdentity;
+import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import com.vertice.api.user.Emails;
 import io.grpc.stub.StreamObserver;
@@ -24,23 +26,29 @@ public class TrainerClientController extends TrainerClientServiceGrpc.TrainerCli
 
     private final TrainerClientService trainerClientService;
     private final GrpcRequestValidator validator;
+    private final CallerIdentityResolver callerIdentityResolver;
+    private final TrainerClientAuthorization authorization;
 
     @Override
     public void createClientForTrainer(CreateClientForTrainerRequest request, StreamObserver<UserResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
         validator.validate(new CreateValidation(request.getTrainerId(), request.getName(),
                 Emails.normalize(request.getEmail()), emptyToNull(request.getPassword()), request.getCpf()));
+        authorization.checkCreateClientForTrainer(caller, request.getTrainerId());
         responseObserver.onNext(trainerClientService.createClientForTrainer(request));
         responseObserver.onCompleted();
     }
 
     @Override
     public void listClientsForTrainer(ListClientsForTrainerRequest request, StreamObserver<ListClientsForTrainerResponse> responseObserver) {
+        authorization.checkListClientsForTrainer(callerIdentityResolver.requireUser(), request.getTrainerId());
         responseObserver.onNext(trainerClientService.listClientsForTrainer(request.getTrainerId()));
         responseObserver.onCompleted();
     }
 
     @Override
     public void isTrainersClient(IsTrainersClientRequest request, StreamObserver<IsTrainersClientResponse> responseObserver) {
+        authorization.checkIsTrainersClient(callerIdentityResolver.requireUser(), request.getTrainerId());
         responseObserver.onNext(trainerClientService.isTrainersClient(request.getTrainerId(), request.getClientId()));
         responseObserver.onCompleted();
     }
