@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = {"spring.grpc.server.port=19102", "spring.datasource.hikari.maximum-pool-size=3"})
@@ -100,6 +101,13 @@ class TrainerClientControllerTest {
     @Test
     void createClientForTrainer_withPasswordOver72Chars_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createClientForTrainer(validCreateRequest().setPassword("x".repeat(73)).build()));
+    }
+
+    @Test
+    void createClientForTrainer_withPasswordOver72Bytes_throwsInvalidArgument() {
+        // 40 characters but 80 UTF-8 bytes: over bcrypt's 72-byte limit.
+        assertInvalidArgument(() -> stub.createClientForTrainer(validCreateRequest().setPassword("é".repeat(40)).build()));
+        verifyNoInteractions(trainerClientService);
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.vertice.api.user;
 
 import com.google.protobuf.Empty;
 import com.vertice.api.common.validation.Cpf;
+import com.vertice.api.common.validation.Password;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
 import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
@@ -23,7 +24,6 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -133,7 +133,7 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     private record CreateValidation(
             @NotBlank String name,
             @NotBlank @Email String email,
-            @NotBlank @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH) String password,
+            @NotBlank @Password String password,
             @Cpf String cpf) {
     }
 
@@ -143,7 +143,7 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
             @Cpf String cpf) {
     }
 
-    private record PasswordValidation(@NotBlank @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH) String password) {
+    private record PasswordValidation(@NotBlank @Password String password) {
     }
 
     // No format or length rules on the password here: a login attempt only needs to fail, and rules
@@ -156,6 +156,6 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
 
     private record TokenPasswordValidation(
             @NotBlank String token,
-            @NotBlank @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH) String password) {
+            @NotBlank @Password String password) {
     }
 }

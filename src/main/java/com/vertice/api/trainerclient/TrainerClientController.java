@@ -1,6 +1,7 @@
 package com.vertice.api.trainerclient;
 
 import com.vertice.api.common.validation.Cpf;
+import com.vertice.api.common.validation.Password;
 import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientResponse;
@@ -10,12 +11,10 @@ import com.vertice.api.generated.grpc.trainerclient.v1.TrainerClientServiceGrpc;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import com.vertice.api.user.Emails;
-import com.vertice.api.user.PasswordPolicy;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -50,7 +49,7 @@ public class TrainerClientController extends TrainerClientServiceGrpc.TrainerCli
             @Min(1) long trainerId,
             @NotBlank String name,
             @NotBlank @Email String email,
-            @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH) String password,
+            @Password String password,
             @Cpf String cpf) {
     }
 

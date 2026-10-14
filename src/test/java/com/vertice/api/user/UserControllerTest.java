@@ -290,6 +290,38 @@ class UserControllerTest {
                 .setId(1L).setPassword("x".repeat(73)).build()));
     }
 
+    /** 40 characters, 80 UTF-8 bytes: within a character limit of 72 but over bcrypt's 72 bytes. */
+    private static final String MULTI_BYTE_PASSWORD = "é".repeat(40);
+
+    @Test
+    void createUser_withPasswordOver72Bytes_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createUser(UserCreateRequest.newBuilder()
+                .setName("Coach").setEmail("coach@vertice.com").setPassword(MULTI_BYTE_PASSWORD).setCpf(VALID_CPF).setRole(Role.TRAINER).build()));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void setUserPassword_withPasswordOver72Bytes_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.setUserPassword(SetUserPasswordRequest.newBuilder()
+                .setId(1L).setPassword(MULTI_BYTE_PASSWORD).build()));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void setPasswordWithToken_withPasswordOver72Bytes_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.setPasswordWithToken(SetPasswordWithTokenRequest.newBuilder()
+                .setToken("abc").setPassword(MULTI_BYTE_PASSWORD).build()));
+        verifyNoInteractions(passwordSetupTokenService);
+    }
+
+    @Test
+    void setPasswordWithToken_withMultiBytePasswordOf72Bytes_succeeds() {
+        stub.setPasswordWithToken(SetPasswordWithTokenRequest.newBuilder()
+                .setToken("abc").setPassword("é".repeat(36)).build());
+
+        verify(passwordSetupTokenService).setPasswordWithToken("abc", "é".repeat(36));
+    }
+
     @Test
     void verifyCredentials_withValidCredentials_returnsUser() {
         UserResponse user = UserResponse.newBuilder().setId(1L).setEmail("coach@vertice.com").setRole(Role.TRAINER).build();
