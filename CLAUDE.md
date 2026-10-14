@@ -70,7 +70,7 @@ valid token on every call. Under the `local` profile REST auth is disabled entir
 (`config/LocalSecurityConfig`), and gRPC (`grpc/GrpcSecurityConfig`'s `local`-profile bean)
 permits every call but still decodes a bearer token when one is present — an absent token is
 anonymous, a present but invalid one is `UNAUTHENTICATED`. The decoder requires every token to be
-scoped: HS256 only, `exp` present, `iss == "vertice-bff"`, `aud` containing `"vertice-api"`
+scoped: HS256 only, `typ` absent or `JWT`, `exp` present (60 s clock skew), `iss == "vertice-bff"`, `aud` containing `"vertice-api"`
 (`HmacJwtDecoder.ISSUER`/`AUDIENCE`); the same checks run under `local` whenever a token is sent.
 Tests mint scoped tokens with `src/test/.../grpc/TestJwts` (`token`, `serviceToken`, `asCaller`,
 `asService`).
@@ -99,14 +99,23 @@ turns the token into a `grpc/Caller` (sealed): a user (`CallerIdentity`: numeric
 (`Caller.Service`: `sub` `service:bff` or `service:ops` with `role` `SERVICE`, see `ServiceSubject`),
 or `Caller.Anonymous` (no token, only reachable under `local`). Any other subject/role is
 `UNAUTHENTICATED`. Controllers call `resolve()`, `requireUser()` (service → `PERMISSION_DENIED`,
-anonymous → `UNAUTHENTICATED`) or `requireService(...)` and pass the caller on; the rules themselves
-throw `PermissionDeniedException` → `PERMISSION_DENIED`. Each aggregate has an authorization
-class called by its controller after request validation: `user/UserAuthorization` (one `check*`
-per RPC), `plan/TrainingPlanAuthorization`, `plan/workout/WorkoutAuthorization` (workouts,
-workout exercises, sets) and `plan/session/WorkoutSessionAuthorization` (logs, set logs,
-feedback). The plan-tree ones are built from `plan/PlanAccess` over `plan/PlanAccessRepository`
-(one projection query: the plan's trainer and client for any id in the tree). The exercise RPCs
-use `requireUser()`. Trainer-client RPCs still trust caller-supplied ids until P1-01 PR C.
+anonymous → `UNAUTHENTICATED`), `requireUserOrAnonymous()` (reference data) or
+`requireService(...)` and pass the caller on; the rules themselves throw
+`PermissionDeniedException` → `PERMISSION_DENIED`. Each aggregate has an authorization class
+called by its controller after request validation: `user/UserAuthorization` (one `check*` per
+RPC), `trainerclient/TrainerClientAuthorization`, `plan/TrainingPlanAuthorization`,
+`plan/workout/WorkoutAuthorization` (workouts, workout exercises, sets) and
+`plan/session/WorkoutSessionAuthorization` (logs, set logs, feedback). The plan-tree ones are
+built from `plan/PlanAccess` over `plan/PlanAccessRepository` (one projection query: the plan's
+trainer and client for any id in the tree). The exercise RPCs pass the `requireUser()` caller to
+`ExerciseService`, which applies the catalog's role and ownership rules.
+
+**Every RPC must ask who is calling.** `grpc/RpcAuthorizationCoverageTest` reads every method of
+every bound service and calls it under `local` with no token, as `service:bff` and as
+`service:ops`; anything the matrix doesn't allow must answer `UNAUTHENTICATED`/`PERMISSION_DENIED`.
+A new RPC is covered automatically: resolve the caller before validating (or add a valid request
+to `VALID_REQUESTS`), and add it to `ALLOWED` only if the token contract lets a service or no
+token call it. Its owner/non-owner rules still need their own controller and integration tests.
 
 Plan-tree conventions: every RPC needs a user token (`requireUser()`: service → `PERMISSION_DENIED`,
 no token → `UNAUTHENTICATED`). A plan's trainer reads and writes it and everything under it, its
@@ -143,6 +152,12 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `RecordSetLog`, `CompleteWorkoutLog`, `SubmitWorkoutFeedback` | the log's client, ADMIN |
 | `GetExerciseProgress` | the client themself, their active trainer, ADMIN |
 | `ListWorkoutFeedback` | TRAINER for their own `trainer_id`, ADMIN |
+| `CreateClientForTrainer`, `ListClientsForTrainer`, `IsTrainersClient` | TRAINER for their own `trainer_id`, ADMIN (any trainer); never a CLIENT or a service |
+| `ListExercises` | TRAINER (starter set + own), ADMIN (starter set) |
+| `GetExercise` | TRAINER (starter set or own), ADMIN (starter set), a CLIENT for an exercise in one of their workouts |
+| `CreateExercise`, `UpdateExercise`, `DeleteExercise` | TRAINER, on their own exercises only (the starter set is read-only) |
+| `ListMuscleGroups` | any user; anonymous under `local` |
+| `grpc.health.v1.Health/Check` | any valid token (anonymous under `local`); infrastructure, carries no data |
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,
