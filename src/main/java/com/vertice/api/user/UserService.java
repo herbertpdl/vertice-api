@@ -4,6 +4,9 @@ import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.common.time.DbInstants;
+import com.vertice.api.generated.grpc.user.v1.ConsentState;
+import com.vertice.api.generated.grpc.user.v1.ConsentType;
 import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.UserCreateRequest;
@@ -97,15 +100,22 @@ public class UserService {
         return users.stream().map(user -> UserView.SUMMARY.restrict(userMapper.toResponse(user))).toList();
     }
 
-    /** An empty password creates the user without one; they set it later with a setup token. */
+    /**
+     * An empty password creates the user without one; they set it later with a setup token. A
+     * non-empty {@code accepted_terms_version} is recorded as accepted now.
+     */
     public UserResponse createUser(UserCreateRequest request) {
         String email = Emails.normalize(request.getEmail());
         assertEmailAvailable(email, null);
+        assertCpfRequiredForTrainer(request.getCpf(), request.getRole());
         assertCpfAvailable(request.getCpf(), null);
         assertCrefOnlyForTrainer(request.getCref(), request.getRole());
         User user = userMapper.toEntity(request);
         user.setEmail(email);
         user.setPasswordHash(request.getPassword().isEmpty() ? null : passwordEncoder.encode(request.getPassword()));
+        if (!request.getAcceptedTermsVersion().isEmpty()) {
+            user.acceptTerms(request.getAcceptedTermsVersion(), DbInstants.now());
+        }
         return userMapper.toResponse(userRepository.save(user));
     }
 
@@ -113,6 +123,7 @@ public class UserService {
         User user = findByIdOrThrow(id);
         String email = Emails.normalize(request.getEmail());
         assertEmailAvailable(email, id);
+        assertCpfRequiredForTrainer(request.getCpf(), request.getRole());
         assertCpfAvailable(request.getCpf(), id);
         assertCrefOnlyForTrainer(request.getCref(), request.getRole());
         userMapper.updateEntityFromRequest(request, user);
@@ -134,6 +145,18 @@ public class UserService {
             throw new InvalidCredentialsException();
         }
         return userMapper.toResponse(user.get());
+    }
+
+    /** Records {@code type} as consented to now, in {@code version}, replacing any earlier record. */
+    public ConsentState recordConsent(Long userId, ConsentType type, String version) {
+        User user = findByIdOrThrow(userId);
+        switch (type) {
+            case TERMS -> user.acceptTerms(version, DbInstants.now());
+            case HEALTH_DATA -> user.consentToHealthData(version, DbInstants.now());
+            // The controller refuses both before calling.
+            case CONSENT_TYPE_UNSPECIFIED, UNRECOGNIZED -> throw new IllegalArgumentException("consent type must be set");
+        }
+        return userMapper.toConsentState(userRepository.save(user));
     }
 
     public void deleteUser(Long id) {
@@ -162,12 +185,27 @@ public class UserService {
                 });
     }
 
+    /** Users without a CPF never collide (V27's partial unique index only covers set values). */
     private void assertCpfAvailable(String cpf, Long excludingId) {
+        if (cpf.isEmpty()) {
+            return;
+        }
         userRepository.findByCpf(cpf)
                 .filter(existing -> !existing.getId().equals(excludingId))
                 .ifPresent(existing -> {
                     throw new DuplicateCpfException();
                 });
+    }
+
+    /**
+     * A TRAINER needs a CPF (identity, CREF checks and invoicing); a CLIENT doesn't (data
+     * minimisation, P1-04 — pending legal review, see docs/data-inventory.md). V27's
+     * {@code ck_users_trainer_cpf} is the database backstop.
+     */
+    private void assertCpfRequiredForTrainer(String cpf, Role role) {
+        if (cpf.isEmpty() && role == Role.TRAINER) {
+            throw new ConstraintViolationException("cpf: required for TRAINER-role users", Set.of());
+        }
     }
 
     /**

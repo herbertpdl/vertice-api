@@ -3,6 +3,8 @@ package com.vertice.api.user;
 import com.google.protobuf.Empty;
 import com.vertice.api.common.validation.Cpf;
 import com.vertice.api.common.validation.Password;
+import com.vertice.api.generated.grpc.user.v1.ConsentState;
+import com.vertice.api.generated.grpc.user.v1.ConsentType;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
 import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
@@ -10,6 +12,7 @@ import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
 import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
+import com.vertice.api.generated.grpc.user.v1.RecordConsentRequest;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.SetPasswordWithTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
@@ -21,14 +24,18 @@ import com.vertice.api.generated.grpc.user.v1.VerifyCredentialsRequest;
 import com.vertice.api.grpc.Caller;
 import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
+import com.vertice.api.grpc.ProtoStrings;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.grpc.server.service.GrpcService;
 
 import java.util.List;
@@ -40,13 +47,18 @@ import java.util.Set;
  */
 @GrpcService
 @RequiredArgsConstructor
+@EnableConfigurationProperties(ConsentProperties.class)
 public class UserController extends UserServiceGrpc.UserServiceImplBase {
+
+    /** A consent text version: what the client was shown, e.g. {@code 2026-10-14} or {@code v1.2}. */
+    private static final String CONSENT_VERSION = "[A-Za-z0-9._-]{1,32}";
 
     private final UserService userService;
     private final PasswordSetupTokenService passwordSetupTokenService;
     private final GrpcRequestValidator validator;
     private final CallerIdentityResolver callerIdentityResolver;
     private final UserAuthorization authorization;
+    private final ConsentProperties consentProperties;
 
     @Override
     public void listUsers(ListUsersRequest request, StreamObserver<ListUsersResponse> responseObserver) {
@@ -78,8 +90,13 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     public void createUser(UserCreateRequest request, StreamObserver<UserResponse> responseObserver) {
-        validator.validate(new CreateValidation(request.getName(), Emails.normalize(request.getEmail()), request.getPassword(), request.getCpf()));
+        validator.validate(new CreateValidation(request.getName(), Emails.normalize(request.getEmail()), request.getPassword(),
+                request.getCpf(), ProtoStrings.emptyToNull(request.getAcceptedTermsVersion())));
         requireRole(request.getRole());
+        // TODO(P1-04 follow-up): always required once vertice-bff sends it; then drop the switch.
+        if (consentProperties.termsRequiredOnRegistration() && request.getAcceptedTermsVersion().isEmpty()) {
+            throw new ConstraintViolationException("accepted_terms_version: must be set", Set.of());
+        }
         authorization.checkCreateUser(callerIdentityResolver.resolve(), domainRole(request.getRole()));
         // The BFF only needs the email for the new session; the CPF it just sent stays out.
         responseObserver.onNext(UserView.CONTACT.restrict(userService.createUser(request)));
@@ -91,7 +108,7 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
         validator.validate(new UpdateValidation(request.getUser().getName(), Emails.normalize(request.getUser().getEmail()), request.getUser().getCpf()));
         requireRole(request.getUser().getRole());
         authorization.checkUpdateUser(callerIdentityResolver.resolve(), request.getId(), domainRole(request.getUser().getRole()));
-        responseObserver.onNext(userService.updateUser(request.getId(), request.getUser()));
+        responseObserver.onNext(UserView.DETAIL.restrict(userService.updateUser(request.getId(), request.getUser())));
         responseObserver.onCompleted();
     }
 
@@ -135,6 +152,18 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
         authorization.checkSetPasswordWithToken(callerIdentityResolver.resolve());
         passwordSetupTokenService.setPasswordWithToken(request.getToken(), request.getPassword());
         responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    /** The caller is resolved first: the request has no user id, the token says whose consent it is. */
+    @Override
+    public void recordConsent(RecordConsentRequest request, StreamObserver<ConsentState> responseObserver) {
+        long userId = authorization.checkRecordConsent(callerIdentityResolver.resolve());
+        validator.validate(new ConsentValidation(request.getVersion()));
+        if (request.getType() == ConsentType.CONSENT_TYPE_UNSPECIFIED || request.getType() == ConsentType.UNRECOGNIZED) {
+            throw new ConstraintViolationException("type: must be set", Set.of());
+        }
+        responseObserver.onNext(userService.recordConsent(userId, request.getType(), request.getVersion()));
         responseObserver.onCompleted();
     }
 
@@ -183,7 +212,11 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
             @NotBlank String name,
             @NotBlank @Email String email,
             @NotBlank @Password String password,
-            @Cpf String cpf) {
+            @Cpf String cpf,
+            @Pattern(regexp = CONSENT_VERSION) String acceptedTermsVersion) {
+    }
+
+    private record ConsentValidation(@NotNull @Pattern(regexp = CONSENT_VERSION) String version) {
     }
 
     private record UpdateValidation(

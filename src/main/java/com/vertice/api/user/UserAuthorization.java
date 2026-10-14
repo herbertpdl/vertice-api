@@ -57,13 +57,17 @@ public class UserAuthorization {
     }
 
     /**
-     * The user themself, ADMIN, or the target's active trainer get the detail view. A trainer who has
+     * The user themself gets the self view (their consent state included). ADMIN or the target's
+     * active trainer get the detail view. A trainer who has
      * (or had) a training plan with the target sees the summary only: their dashboard, feedback and
      * recent-workout screens name the client of every plan they wrote, including clients no longer
      * on their roster, and must not fail because one of them left.
      */
     public UserView checkGetUser(Caller caller, Long id) {
-        if (caller.isUser(id) || caller.isAdmin() || isActiveTrainerOf(caller, id)) {
+        if (caller.isUser(id)) {
+            return UserView.SELF;
+        }
+        if (caller.isAdmin() || isActiveTrainerOf(caller, id)) {
             return UserView.DETAIL;
         }
         if (caller instanceof CallerIdentity user && user.role() == Role.TRAINER
@@ -151,6 +155,19 @@ public class UserAuthorization {
         if (hasPassword) {
             throw new PermissionDeniedException("User %d has already set a password".formatted(userId));
         }
+    }
+
+    /**
+     * The calling user, for themself only: a consent is the data subject's own act, so not even an
+     * ADMIN records one for someone else. The request carries no user id at all.
+     *
+     * @return the user whose consent is recorded
+     */
+    public long checkRecordConsent(Caller caller) {
+        if (caller instanceof CallerIdentity user) {
+            return user.userId();
+        }
+        throw denied(caller, "record a consent");
     }
 
     /** First access through a setup link: the BFF's service identity only. */

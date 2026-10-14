@@ -87,7 +87,7 @@ class RpcAuthorizationCoverageTest {
 
     private static final Map<String, Message> VALID_REQUESTS = Map.of(
             USERS + "CreateUser", UserCreateRequest.newBuilder().setName("Probe").setEmail(PROBE_EMAIL)
-                    .setPassword(PASSWORD).setCpf(VALID_CPF).setRole(Role.CLIENT).build(),
+                    .setPassword(PASSWORD).setCpf(VALID_CPF).setRole(Role.CLIENT).setAcceptedTermsVersion("probe").build(),
             USERS + "UpdateUser", UpdateUserRequest.newBuilder().setId(NO_SUCH_USER).setUser(UserRequest.newBuilder()
                     .setName("Probe").setEmail(PROBE_EMAIL).setCpf(VALID_CPF).setRole(Role.CLIENT)).build(),
             USERS + "SetUserPassword", SetUserPasswordRequest.newBuilder().setId(NO_SUCH_USER).setPassword(PASSWORD).build(),

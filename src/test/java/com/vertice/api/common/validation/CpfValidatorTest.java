@@ -28,14 +28,20 @@ class CpfValidatorTest {
             "1114447773",  // too short
             "111444777355", // too long
             "1114447773a", // non-digit
-            "",
+            " ",           // blank is not "absent"
     })
     void invalidCpf_fails(String cpf) {
         assertThat(validator.validate(new Probe(cpf))).isNotEmpty();
     }
 
+    // Absent is valid (P1-04): a CLIENT needs no CPF, and UserService requires one for a TRAINER.
     @Test
-    void nullCpf_fails() {
-        assertThat(validator.validate(new Probe(null))).isNotEmpty();
+    void nullCpf_passes() {
+        assertThat(validator.validate(new Probe(null))).isEmpty();
+    }
+
+    @Test
+    void emptyCpf_passes() {
+        assertThat(validator.validate(new Probe(""))).isEmpty();
     }
 }

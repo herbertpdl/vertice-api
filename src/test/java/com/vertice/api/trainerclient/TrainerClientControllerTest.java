@@ -141,6 +141,15 @@ class TrainerClientControllerTest {
         assertThat(stub.createClientForTrainer(validCreateRequest().setEmail(" Client@Vertice.com ").build())).isEqualTo(created);
     }
 
+    /** P1-04: a client's CPF is optional (data minimisation). */
+    @Test
+    void createClientForTrainer_withoutCpf_isAccepted() {
+        UserResponse created = UserResponse.newBuilder().setId(2L).setRole(Role.CLIENT).build();
+        when(trainerClientService.createClientForTrainer(any())).thenReturn(created);
+
+        assertThat(stub.createClientForTrainer(validCreateRequest().setCpf("").build())).isEqualTo(created);
+    }
+
     @Test
     void createClientForTrainer_withInvalidCpf_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createClientForTrainer(validCreateRequest().setCpf("00000000000").build()));

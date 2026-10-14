@@ -24,6 +24,7 @@ message CreateClientForTrainerRequest {
   // Optional. Empty creates the client without a password; they set one with a password setup
   // token (UserService.CreatePasswordSetupToken).
   string password = 4;
+  // Optional (P1-04): empty creates the client without a CPF. Validated when set.
   string cpf = 5;
 }
 

@@ -7,8 +7,10 @@ import com.vertice.api.generated.grpc.user.v1.UserResponse;
  * older clients still decode it; the fields outside the view are left empty.
  *
  * <ul>
- *   <li>{@link #DETAIL}: {@code GetUser} for the user themself, ADMIN or the target's active
- *       trainer; {@code UpdateUser}; {@code CreateClientForTrainer}.</li>
+ *   <li>{@link #SELF}: {@code GetUser} for the user themself (P1-04: the consent state drives the
+ *       first-access notice).</li>
+ *   <li>{@link #DETAIL}: {@code GetUser} for ADMIN or the target's active trainer;
+ *       {@code UpdateUser}; {@code CreateClientForTrainer}.</li>
  *   <li>{@link #CONTACT}: {@code ListUsers} (the ops setup-link script and the local dev login
  *       match by email), {@code CreateUser} and {@code VerifyCredentials} (the BFF puts the
  *       email in the session).</li>
@@ -18,7 +20,9 @@ import com.vertice.api.generated.grpc.user.v1.UserResponse;
  * </ul>
  */
 public enum UserView {
-    /** Every field: email, CPF and CREF included. */
+    /** Every field, the consent state included. */
+    SELF,
+    /** Every field but the consent state: email, CPF and CREF included. */
     DETAIL,
     /** id, name, role and email: no CPF or CREF. */
     CONTACT,
@@ -27,7 +31,8 @@ public enum UserView {
 
     public UserResponse restrict(UserResponse user) {
         return switch (this) {
-            case DETAIL -> user;
+            case SELF -> user;
+            case DETAIL -> user.toBuilder().clearConsent().build();
             case CONTACT -> summary(user).setEmail(user.getEmail()).build();
             case SUMMARY -> summary(user).build();
         };

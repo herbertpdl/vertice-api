@@ -1,8 +1,10 @@
 package com.vertice.api.user;
 
+import com.vertice.api.generated.grpc.user.v1.ConsentState;
 import com.vertice.api.generated.grpc.user.v1.UserCreateRequest;
 import com.vertice.api.generated.grpc.user.v1.UserRequest;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
+import com.vertice.api.grpc.ProtoInstants;
 import com.vertice.api.grpc.ProtoStrings;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -18,11 +20,20 @@ import org.mapstruct.ValueMapping;
  * in practice this is unreachable, but MapStruct requires every source constant to be accounted
  * for.
  */
-@Mapper(componentModel = "spring", uses = ProtoStrings.class)
+@Mapper(componentModel = "spring", uses = {ProtoStrings.class, ProtoInstants.class})
 public interface UserMapper {
 
+    // Consent and timestamps are server-set (UserService, User's lifecycle callbacks), never copied
+    // from a request. An empty CPF is stored as NULL so V27's partial unique index allows many.
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "passwordHash", ignore = true)
+    @Mapping(target = "cpf", qualifiedByName = "emptyToNull")
+    @Mapping(target = "acceptedTermsVersion", ignore = true)
+    @Mapping(target = "termsAcceptedAt", ignore = true)
+    @Mapping(target = "healthDataConsentVersion", ignore = true)
+    @Mapping(target = "healthDataConsentAt", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
     User toEntity(UserCreateRequest request);
 
     // cref is the only nullable string column on User (see docs/specs/trainer-cref/spec.md) — a
@@ -30,10 +41,25 @@ public interface UserMapper {
     // protobuf string setters reject null (ProtoStrings' own doc comment), so this needs the same
     // nullToEmpty treatment TrainingPlanMapper already uses for its nullable description field.
     @Mapping(target = "cref", qualifiedByName = "nullToEmpty")
+    @Mapping(target = "cpf", qualifiedByName = "nullToEmpty")
+    @Mapping(target = "consent", source = "user")
     UserResponse toResponse(User user);
+
+    @Mapping(target = "acceptedTermsVersion", qualifiedByName = "nullToEmpty")
+    @Mapping(target = "termsAcceptedAt", qualifiedByName = "instantToString")
+    @Mapping(target = "healthDataConsentVersion", qualifiedByName = "nullToEmpty")
+    @Mapping(target = "healthDataConsentAt", qualifiedByName = "instantToString")
+    ConsentState toConsentState(User user);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "passwordHash", ignore = true)
+    @Mapping(target = "cpf", qualifiedByName = "emptyToNull")
+    @Mapping(target = "acceptedTermsVersion", ignore = true)
+    @Mapping(target = "termsAcceptedAt", ignore = true)
+    @Mapping(target = "healthDataConsentVersion", ignore = true)
+    @Mapping(target = "healthDataConsentAt", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
     void updateEntityFromRequest(UserRequest request, @MappingTarget User user);
 
     @ValueMapping(source = "ROLE_UNSPECIFIED", target = MappingConstants.NULL)

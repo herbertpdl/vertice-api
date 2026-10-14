@@ -7,9 +7,13 @@ public class CpfValidator implements ConstraintValidator<Cpf, String> {
 
     private static final int LENGTH = 11;
 
+    /** An absent CPF (null or empty, proto3's "unset") is valid: whether one is required is the caller's rule. */
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
-        if (value == null || value.length() != LENGTH || !value.chars().allMatch(Character::isDigit)) {
+        if (value == null || value.isEmpty()) {
+            return true;
+        }
+        if (value.length() != LENGTH || !value.chars().allMatch(Character::isDigit)) {
             return false;
         }
         if (isAllSameDigit(value)) {
