@@ -12,6 +12,7 @@ import com.vertice.api.generated.grpc.plan.v1.TrainingPlanRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanResponse;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.UpdateTrainingPlanRequest;
+import com.vertice.api.user.UserRepository;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -60,6 +61,9 @@ class TrainingPlanControllerTest {
     private TrainingPlanService trainingPlanService;
 
     @MockitoBean
+    private UserRepository userRepository;
+
+    @MockitoBean
     private PlanAccessRepository planAccessRepository;
 
     private ManagedChannel channel;
@@ -70,6 +74,7 @@ class TrainingPlanControllerTest {
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19096").usePlaintext().build();
         callers = PlanCallers.of(TrainingPlanServiceGrpc.newBlockingStub(channel));
+        PlanCallers.storeUsers(userRepository);
         stub = callers.admin();
         when(planAccessRepository.findByPlanId(PLAN_ID)).thenReturn(Optional.of(PARTIES));
         when(trainingPlanService.getTrainingPlan(any())).thenReturn(plan().build());

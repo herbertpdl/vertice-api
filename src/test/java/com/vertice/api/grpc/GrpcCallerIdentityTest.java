@@ -3,6 +3,7 @@ package com.vertice.api.grpc;
 import com.google.protobuf.Empty;
 import com.google.protobuf.StringValue;
 import com.vertice.api.user.Role;
+import com.vertice.api.user.UserRepository;
 import io.grpc.BindableService;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptors;
@@ -25,18 +26,24 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Proves the {@code local}-profile semantics of D1 over a real call: a bearer token is decoded
  * into a {@link CallerIdentity} when present, an absent token is anonymous (so only RPCs that call
  * {@link CallerIdentityResolver#requireUser()} fail), and an invalid or mis-scoped token is always
- * refused, exactly as outside {@code local}.
+ * refused, exactly as outside {@code local}. The token's user must exist with its role, looked up
+ * once per call however often the handler resolves the caller.
  */
 @SpringBootTest(properties = {"spring.grpc.server.port=19104", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
@@ -48,11 +55,15 @@ class GrpcCallerIdentityTest {
     private static final MethodDescriptor<Empty, StringValue> WHO_AM_I = method("WhoAmI");
     private static final MethodDescriptor<Empty, StringValue> PING = method("Ping");
 
+    @MockitoBean
+    private UserRepository userRepository;
+
     private ManagedChannel channel;
 
     @BeforeEach
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19104").usePlaintext().build();
+        when(userRepository.findRoleById(42L)).thenReturn(Optional.of(Role.TRAINER));
     }
 
     @AfterEach
@@ -65,6 +76,24 @@ class GrpcCallerIdentityTest {
         StringValue response = call(WHO_AM_I, TestJwts.token(42L, Role.TRAINER));
 
         assertThat(response.getValue()).isEqualTo("42:TRAINER");
+    }
+
+    @Test
+    void call_resolvingTheCallerRepeatedly_looksTheUserUpOncePerCall() {
+        call(WHO_AM_I, TestJwts.token(42L, Role.TRAINER));
+        call(WHO_AM_I, TestJwts.token(42L, Role.TRAINER));
+
+        verify(userRepository, times(2)).findRoleById(42L);
+    }
+
+    @Test
+    void call_withTokenOfDemotedUser_failsUnauthenticated() {
+        assertThatThrownBy(() -> call(WHO_AM_I, TestJwts.token(42L, Role.ADMIN)))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("Session no longer valid");
+                });
     }
 
     @Test
@@ -139,6 +168,7 @@ class GrpcCallerIdentityTest {
         @Bean
         BindableService identityService(CallerIdentityResolver resolver) {
             ServerCalls.UnaryMethod<Empty, StringValue> whoAmI = (request, responseObserver) -> {
+                resolver.resolve();
                 CallerIdentity caller = resolver.requireUser();
                 responseObserver.onNext(StringValue.of(caller.userId() + ":" + caller.role()));
                 responseObserver.onCompleted();

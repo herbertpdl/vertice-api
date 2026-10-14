@@ -8,6 +8,7 @@ import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.plan.PlanAccessRepository;
 import com.vertice.api.plan.PlanCallers;
+import com.vertice.api.user.UserRepository;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -51,6 +52,9 @@ class WorkoutFeedbackControllerTest {
     private WorkoutFeedbackService workoutFeedbackService;
 
     @MockitoBean
+    private UserRepository userRepository;
+
+    @MockitoBean
     private PlanAccessRepository planAccessRepository;
 
     private ManagedChannel channel;
@@ -61,6 +65,7 @@ class WorkoutFeedbackControllerTest {
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19101").usePlaintext().build();
         callers = PlanCallers.of(WorkoutFeedbackServiceGrpc.newBlockingStub(channel));
+        PlanCallers.storeUsers(userRepository);
         stub = callers.admin();
         when(planAccessRepository.findByWorkoutLogId(WORKOUT_LOG_ID)).thenReturn(Optional.of(PARTIES));
         when(workoutFeedbackService.submitWorkoutFeedback(any())).thenReturn(WorkoutFeedbackResponse.getDefaultInstance());

@@ -12,6 +12,7 @@ import com.vertice.api.generated.grpc.user.v1.UserResponse;
 import com.vertice.api.grpc.ServiceSubject;
 import com.vertice.api.grpc.TestJwts;
 import com.vertice.api.plan.PlanCallers;
+import com.vertice.api.user.UserRepository;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -48,6 +49,9 @@ class TrainerClientControllerTest {
     @MockitoBean
     private TrainerClientService trainerClientService;
 
+    @MockitoBean
+    private UserRepository userRepository;
+
     private ManagedChannel channel;
     /** Calls as trainer {@link #TRAINER_ID}, the trainer the requests below name. */
     private TrainerClientServiceGrpc.TrainerClientServiceBlockingStub stub;
@@ -57,6 +61,7 @@ class TrainerClientControllerTest {
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19102").usePlaintext().build();
         callers = PlanCallers.of(TrainerClientServiceGrpc.newBlockingStub(channel));
+        PlanCallers.storeUsers(userRepository);
         stub = callers.trainer();
     }
 

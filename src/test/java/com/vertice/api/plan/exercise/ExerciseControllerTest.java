@@ -19,6 +19,7 @@ import com.vertice.api.grpc.CallerIdentity;
 import com.vertice.api.grpc.ServiceSubject;
 import com.vertice.api.grpc.TestJwts;
 import com.vertice.api.user.Role;
+import com.vertice.api.user.UserRepository;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -33,6 +34,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,11 +54,15 @@ import static org.mockito.Mockito.when;
 class ExerciseControllerTest {
 
     private static final long TRAINER_ID = 10L;
+    private static final long CLIENT_ID = 20L;
     private static final MuscleGroupResponse PEITO = MuscleGroupResponse.newBuilder().setId(1L).setName("Peito").build();
     private static final MuscleGroupResponse QUADRICEPS = MuscleGroupResponse.newBuilder().setId(7L).setName("Quadríceps").build();
 
     @MockitoBean
     private ExerciseService exerciseService;
+
+    @MockitoBean
+    private UserRepository userRepository;
 
     private ManagedChannel channel;
     /** Calls as trainer {@link #TRAINER_ID}; {@link #anonymousStub} sends no token. */
@@ -68,6 +74,9 @@ class ExerciseControllerTest {
         channel = NettyChannelBuilder.forTarget("localhost:19095").usePlaintext().build();
         anonymousStub = ExerciseServiceGrpc.newBlockingStub(channel);
         stub = TestJwts.asCaller(anonymousStub, TRAINER_ID, Role.TRAINER);
+        // Every caller must still exist with its token's role (CallerIdentityResolver).
+        when(userRepository.findRoleById(TRAINER_ID)).thenReturn(Optional.of(Role.TRAINER));
+        when(userRepository.findRoleById(CLIENT_ID)).thenReturn(Optional.of(Role.CLIENT));
     }
 
     @AfterEach
@@ -132,10 +141,10 @@ class ExerciseControllerTest {
 
     @Test
     void listExercises_clientToken_permissionDenied() {
-        when(exerciseService.listExercises(new CallerIdentity(20L, Role.CLIENT), 0, ""))
+        when(exerciseService.listExercises(new CallerIdentity(CLIENT_ID, Role.CLIENT), 0, ""))
                 .thenThrow(PermissionDeniedException.role(Role.CLIENT, "list exercises"));
 
-        assertPermissionDenied(() -> TestJwts.asCaller(anonymousStub, 20L, Role.CLIENT)
+        assertPermissionDenied(() -> TestJwts.asCaller(anonymousStub, CLIENT_ID, Role.CLIENT)
                         .listExercises(ListExercisesRequest.getDefaultInstance()),
                 "Role CLIENT is not allowed to list exercises");
     }

@@ -95,6 +95,7 @@ class OwnershipInvariantsIntegrationTest {
     private User trainer;
     private User client;
     private User otherClient;
+    private User admin;
     private TrainerClient link;
     private Exercise exercise;
     private final List<Long> planIds = new ArrayList<>();
@@ -110,6 +111,7 @@ class OwnershipInvariantsIntegrationTest {
         trainer = userRepository.save(newUser("Trainer", Role.TRAINER));
         client = userRepository.save(newUser("Client", Role.CLIENT));
         otherClient = userRepository.save(newUser("Other", Role.CLIENT));
+        admin = userRepository.save(newUser("Admin", Role.ADMIN));
 
         link = new TrainerClient();
         link.setTrainer(trainer);
@@ -141,6 +143,7 @@ class OwnershipInvariantsIntegrationTest {
         planIds.forEach(trainingPlanRepository::deleteById);
         exerciseRepository.deleteById(exercise.getId());
         trainerClientRepository.delete(link);
+        userRepository.deleteById(admin.getId());
         userRepository.deleteById(otherClient.getId());
         userRepository.deleteById(client.getId());
         userRepository.deleteById(trainer.getId());
@@ -207,8 +210,8 @@ class OwnershipInvariantsIntegrationTest {
         assertThat(fetched.getClientId()).isEqualTo(client.getId());
         assertThat(fetched.getWorkoutId()).isEqualTo(workout.getId());
 
-        var admin = TestJwts.asCaller(sessionStub, 1L, Role.ADMIN);
-        assertThatThrownBy(() -> admin.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(Long.MAX_VALUE).build()))
+        var asAdmin = TestJwts.asCaller(sessionStub, admin.getId(), Role.ADMIN);
+        assertThatThrownBy(() -> asAdmin.getWorkoutLog(GetWorkoutLogRequest.newBuilder().setId(Long.MAX_VALUE).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);
