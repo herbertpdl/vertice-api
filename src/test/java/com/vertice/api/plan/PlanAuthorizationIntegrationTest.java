@@ -1,20 +1,30 @@
 package com.vertice.api.plan;
 
+import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.CreateWorkoutWithExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
+import com.vertice.api.generated.grpc.plan.v1.DeleteExerciseSetRequest;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetEntry;
+import com.vertice.api.generated.grpc.plan.v1.ExerciseSetRequest;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetServiceGrpc;
+import com.vertice.api.generated.grpc.plan.v1.GetExerciseSetRequest;
 import com.vertice.api.generated.grpc.plan.v1.GetTrainingPlanRequest;
+import com.vertice.api.generated.grpc.plan.v1.GetWorkoutExerciseRequest;
 import com.vertice.api.generated.grpc.plan.v1.GetWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListExerciseSetsRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListTrainingPlansRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListWorkoutExercisesRequest;
+import com.vertice.api.generated.grpc.plan.v1.ListWorkoutsRequest;
 import com.vertice.api.generated.grpc.plan.v1.ReplaceWorkoutExercisesRequest;
+import com.vertice.api.generated.grpc.plan.v1.SetStrategy;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanResponse;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanServiceGrpc;
+import com.vertice.api.generated.grpc.plan.v1.UpdateExerciseSetRequest;
+import com.vertice.api.generated.grpc.plan.v1.UpdateWorkoutExerciseRequest;
 import com.vertice.api.generated.grpc.plan.v1.UpdateWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseEntry;
+import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutResponse;
@@ -95,6 +105,7 @@ class PlanAuthorizationIntegrationTest {
     private Exercise privateExerciseOfB;
     private long planA;
     private long workoutA;
+    private long workoutExerciseA;
     private long setA;
 
     @BeforeEach
@@ -117,7 +128,7 @@ class PlanAuthorizationIntegrationTest {
                         .addExercises(entry(ownExerciseOfA.getId()))
                         .build());
         workoutA = workout.getId();
-        long workoutExerciseA = as(clientA, WorkoutExerciseServiceGrpc::newBlockingStub).listWorkoutExercises(
+        workoutExerciseA = as(clientA, WorkoutExerciseServiceGrpc::newBlockingStub).listWorkoutExercises(
                 ListWorkoutExercisesRequest.newBuilder().setWorkoutId(workoutA).build()).getWorkoutExercises(0).getId();
         setA = as(clientA, ExerciseSetServiceGrpc::newBlockingStub).listExerciseSets(
                 ListExerciseSetsRequest.newBuilder().setWorkoutExerciseId(workoutExerciseA).build()).getExerciseSets(0).getId();
@@ -168,6 +179,41 @@ class PlanAuthorizationIntegrationTest {
         assertThat(as(trainerA, TrainingPlanServiceGrpc::newBlockingStub)
                 .listTrainingPlans(ListTrainingPlansRequest.getDefaultInstance()).getTrainingPlansList())
                 .extracting(TrainingPlanResponse::getId).containsExactly(planA);
+    }
+
+    /**
+     * The writes keyed by a set or workout-exercise id resolve the plan through
+     * {@code PlanAccessRepository.findByExerciseSetId}/{@code findByWorkoutExerciseId}; CloneWorkout
+     * checks both ends. Trainer B's requests are valid (B's own clone succeeds), so each refusal is
+     * the ownership rule, and trainer A's tree is left as it was.
+     */
+    @Test
+    void anotherTrainer_isPermissionDenied_onSetAndWorkoutExerciseWrites_andCannotCloneIntoOrOutOfThePlan() {
+        long planB = seedPlan(trainerB, clientB);
+        WorkoutServiceGrpc.WorkoutServiceBlockingStub workoutsAsB = as(trainerB, WorkoutServiceGrpc::newBlockingStub);
+        long workoutB = workoutsAsB.createWorkoutWithExercises(CreateWorkoutWithExercisesRequest.newBuilder()
+                .setName("B Day").setTrainingPlanId(planB).setDayOfWeek(DayOfWeek.MONDAY)
+                .addExercises(entry(privateExerciseOfB.getId())).build()).getId();
+        ExerciseSetServiceGrpc.ExerciseSetServiceBlockingStub setsAsB = as(trainerB, ExerciseSetServiceGrpc::newBlockingStub);
+
+        assertDenied(() -> setsAsB.updateExerciseSet(UpdateExerciseSetRequest.newBuilder().setId(setA)
+                .setExerciseSet(ExerciseSetRequest.newBuilder().setSetNumber(1).setReps(20).setStrategy(SetStrategy.STRAIGHT)).build()));
+        assertDenied(() -> setsAsB.deleteExerciseSet(DeleteExerciseSetRequest.newBuilder().setId(setA).build()));
+        assertDenied(() -> as(trainerB, WorkoutExerciseServiceGrpc::newBlockingStub).updateWorkoutExercise(
+                UpdateWorkoutExerciseRequest.newBuilder().setId(workoutExerciseA)
+                        .setWorkoutExercise(WorkoutExerciseRequest.newBuilder().setOrder(9)).build()));
+        assertDenied(() -> workoutsAsB.cloneWorkout(clone(workoutB, planA)));
+        assertDenied(() -> workoutsAsB.cloneWorkout(clone(workoutA, planB)));
+
+        assertThat(workoutsAsB.cloneWorkout(clone(workoutB, planB)).getTrainingPlanId()).isEqualTo(planB);
+        assertThat(as(trainerA, ExerciseSetServiceGrpc::newBlockingStub)
+                .getExerciseSet(GetExerciseSetRequest.newBuilder().setId(setA).build()).getReps()).isEqualTo(5);
+        assertThat(as(trainerA, WorkoutExerciseServiceGrpc::newBlockingStub)
+                .getWorkoutExercise(GetWorkoutExerciseRequest.newBuilder().setId(workoutExerciseA).build()).getOrder())
+                .isEqualTo(1);
+        assertThat(as(trainerA, WorkoutServiceGrpc::newBlockingStub)
+                .listWorkouts(ListWorkoutsRequest.newBuilder().setTrainingPlanId(planA).build()).getWorkoutsList())
+                .extracting(WorkoutResponse::getId).containsExactly(workoutA);
     }
 
     @Test
@@ -269,6 +315,11 @@ class PlanAuthorizationIntegrationTest {
     private UpdateWorkoutRequest renameWorkout(String name) {
         return UpdateWorkoutRequest.newBuilder().setId(workoutA)
                 .setWorkout(WorkoutRequest.newBuilder().setName(name).setDayOfWeek(DayOfWeek.MONDAY)).build();
+    }
+
+    private static CloneWorkoutRequest clone(long sourceWorkoutId, long targetPlanId) {
+        return CloneWorkoutRequest.newBuilder().setSourceWorkoutId(sourceWorkoutId)
+                .setTargetTrainingPlanId(targetPlanId).setName("Copy").setDayOfWeek(DayOfWeek.FRIDAY).build();
     }
 
     private GetOrStartWorkoutLogRequest startLog(User client) {
