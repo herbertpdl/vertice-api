@@ -10,10 +10,11 @@ import com.vertice.api.generated.grpc.user.v1.UserResponse;
  *   <li>{@link #DETAIL}: {@code GetUser} for the user themself, ADMIN or the target's active
  *       trainer; {@code UpdateUser}; {@code CreateClientForTrainer}.</li>
  *   <li>{@link #CONTACT}: {@code ListUsers} (the ops setup-link script and the local dev login
- *       match by email), {@code ListClientsForTrainer} (vertice-bff's roster still shows email),
- *       {@code CreateUser} and {@code VerifyCredentials} (the BFF puts the email in the session).</li>
- *   <li>{@link #SUMMARY}: {@code ListUsersWithoutPassword}; {@code GetUser} for a trainer who only
- *       has a training plan with the target.</li>
+ *       match by email), {@code CreateUser} and {@code VerifyCredentials} (the BFF puts the
+ *       email in the session).</li>
+ *   <li>{@link #SUMMARY}: {@code ListClientsForTrainer} (vertice-bff's roster);
+ *       {@code ListUsersWithoutPassword}; {@code GetUser} for a trainer who only has a training
+ *       plan with the target.</li>
  * </ul>
  */
 public enum UserView {

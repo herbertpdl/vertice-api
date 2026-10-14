@@ -60,15 +60,15 @@ public class TrainerClientService {
     }
 
     /**
-     * In the {@link UserView#CONTACT} view: no CPF or CREF. The email stays only while
-     * vertice-bff's roster still shows and searches it (P1-03); then this becomes the summary.
+     * In the {@link UserView#SUMMARY} view: id, name and role only, no email, CPF or CREF (P1-03).
+     * vertice-bff's roster needs nothing more.
      */
     @Transactional(readOnly = true)
     public ListClientsForTrainerResponse listClientsForTrainer(Long trainerId) {
         var clients = trainerClientRepository.findByTrainerIdAndEndedAtIsNull(trainerId).stream()
                 .map(TrainerClient::getClient)
                 .map(userMapper::toResponse)
-                .map(UserView.CONTACT::restrict)
+                .map(UserView.SUMMARY::restrict)
                 .toList();
         return ListClientsForTrainerResponse.newBuilder().addAllClients(clients).build();
     }
