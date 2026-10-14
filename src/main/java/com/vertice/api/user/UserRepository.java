@@ -19,4 +19,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByPasswordHashIsNull();
 
     List<User> findByRoleAndPasswordHashIsNull(Role role);
+
+    /** {@code trainerId}'s active clients who haven't set a password yet. */
+    @Query("""
+            select tc.client from TrainerClient tc
+            where tc.trainer.id = :trainerId
+              and tc.endedAt is null
+              and tc.client.role = com.vertice.api.user.Role.CLIENT
+              and tc.client.passwordHash is null
+            """)
+    List<User> findActiveClientsWithoutPassword(Long trainerId);
 }
