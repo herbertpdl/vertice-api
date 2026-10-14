@@ -136,7 +136,7 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `CreateUser` | `service:bff` (register), never with role ADMIN |
 | `SetPasswordWithToken` | `service:bff` |
 | `ListUsers` | ADMIN, `service:ops`; anonymous under `local` (BFF `VERIFY_PASSWORDS=false` dev login) |
-| `ListUsersWithoutPassword` | ADMIN, `service:ops` (all); TRAINER, narrowed to their active clients (BFF setup-link reissue) |
+| `ListUsersWithoutPassword` | ADMIN (all); TRAINER, narrowed to their active clients (BFF setup-link reissue) |
 | `CreatePasswordSetupToken` | `service:ops`, ADMIN; TRAINER for their active client who has no password yet |
 | `GetUser` | self, ADMIN, the target's active trainer; a trainer with any plan for the target gets id, name and role only (dashboard names of former clients) |
 | `UpdateUser` | ADMIN (anything); self or the target's active trainer, role unchanged |

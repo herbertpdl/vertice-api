@@ -83,7 +83,7 @@ class RpcAuthorizationCoverageTest {
     private static final Map<Probe, Set<String>> ALLOWED = Map.of(
             Probe.ANONYMOUS, Set.of(USERS + "ListUsers", "vertice.exercise.v1.ExerciseService/ListMuscleGroups"),
             Probe.BFF, Set.of(USERS + "VerifyCredentials", USERS + "CreateUser", USERS + "SetPasswordWithToken"),
-            Probe.OPS, Set.of(USERS + "ListUsers", USERS + "ListUsersWithoutPassword", USERS + "CreatePasswordSetupToken"));
+            Probe.OPS, Set.of(USERS + "ListUsers", USERS + "CreatePasswordSetupToken"));
 
     private static final Map<String, Message> VALID_REQUESTS = Map.of(
             USERS + "CreateUser", UserCreateRequest.newBuilder().setName("Probe").setEmail(PROBE_EMAIL)
