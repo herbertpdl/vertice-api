@@ -28,6 +28,12 @@ class PasswordValidatorTest {
     }
 
     @Test
+    void rejectsBlankPasswordsOfAnyLength() {
+        assertThat(validator.isValid(" ".repeat(8), null)).isFalse();
+        assertThat(validator.isValid("\t \n".repeat(4), null)).isFalse();
+    }
+
+    @Test
     void nullIsLeftToNotBlank() {
         assertThat(validator.isValid(null, null)).isTrue();
     }

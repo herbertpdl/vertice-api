@@ -24,7 +24,7 @@ REL-API-007); `docs/specs/user-unification/spec.md`
   expires_at > now`, so two concurrent uses can't both win; the password is set in the same
   transaction. Unknown, expired and used tokens all return `UNAUTHENTICATED` "Invalid or expired
   password setup token" (a token is a bearer credential).
-- **Password policy**: `@Password` (`common/validation`) on every RPC that sets a password: at
+- **Password policy**: `@Password` (`common/validation`) on every RPC that sets a password: not blank, at
   least 8 characters and at most 72 UTF-8 *bytes*, since bcrypt reads only 72 bytes and Spring's
   encoder throws on longer input. A violation is `INVALID_ARGUMENT`.
 - **`SetUserPassword` revokes pending setup tokens**: once a password is set directly, an

@@ -125,6 +125,17 @@ class PasswordSetupTokenIntegrationTest {
     }
 
     @Test
+    void setUserPassword_revokesAPendingToken() {
+        String token = tokenService.createToken(clientId).getToken();
+
+        userService.setPassword(clientId, "directPassword1");
+
+        assertThatThrownBy(() -> tokenService.setPasswordWithToken(token, "tokenPassword1"))
+                .isInstanceOf(InvalidPasswordSetupTokenException.class);
+        assertThat(userService.verifyCredentials(email, "directPassword1").getId()).isEqualTo(clientId);
+    }
+
+    @Test
     void unknownToken_isRejectedWithTheSameError() {
         assertThatThrownBy(() -> tokenService.setPasswordWithToken("not-a-real-token", "myNewPassword1"))
                 .isInstanceOf(InvalidPasswordSetupTokenException.class)

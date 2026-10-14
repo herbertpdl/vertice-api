@@ -15,6 +15,8 @@ public class PasswordValidator implements ConstraintValidator<Password, String> 
         if (value == null) {
             return true;
         }
-        return value.length() >= MIN_CHARS && value.getBytes(StandardCharsets.UTF_8).length <= MAX_BYTES;
+        return !value.isBlank()
+                && value.length() >= MIN_CHARS
+                && value.getBytes(StandardCharsets.UTF_8).length <= MAX_BYTES;
     }
 }

@@ -104,6 +104,12 @@ class TrainerClientControllerTest {
     }
 
     @Test
+    void createClientForTrainer_withBlankPassword_throwsInvalidArgument() {
+        assertInvalidArgument(() -> stub.createClientForTrainer(validCreateRequest().setPassword(" ".repeat(8)).build()));
+        verifyNoInteractions(trainerClientService);
+    }
+
+    @Test
     void createClientForTrainer_withPasswordOver72Bytes_throwsInvalidArgument() {
         // 40 characters but 80 UTF-8 bytes: over bcrypt's 72-byte limit.
         assertInvalidArgument(() -> stub.createClientForTrainer(validCreateRequest().setPassword("é".repeat(40)).build()));
