@@ -9,4 +9,6 @@ public interface TrainingPlanRepository extends JpaRepository<TrainingPlan, Long
     List<TrainingPlan> findByTrainerId(Long trainerId);
 
     List<TrainingPlan> findByClientId(Long clientId);
+
+    boolean existsByTrainerIdAndClientId(Long trainerId, Long clientId);
 }

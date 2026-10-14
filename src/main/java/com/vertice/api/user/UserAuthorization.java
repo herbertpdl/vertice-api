@@ -5,6 +5,7 @@ import com.vertice.api.common.exception.UnauthenticatedException;
 import com.vertice.api.grpc.Caller;
 import com.vertice.api.grpc.CallerIdentity;
 import com.vertice.api.grpc.ServiceSubject;
+import com.vertice.api.plan.TrainingPlanRepository;
 import com.vertice.api.trainerclient.TrainerClientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,15 @@ public class UserAuthorization {
 
     private final UserRepository userRepository;
     private final TrainerClientRepository trainerClientRepository;
+    private final TrainingPlanRepository trainingPlanRepository;
+
+    /** How much of a user {@code GetUser} may return to this caller. */
+    public enum UserView {
+        /** Everything, contact data included. */
+        FULL,
+        /** id, name and role only: no email, CPF or CREF. */
+        SUMMARY
+    }
 
     /**
      * ADMIN or the ops scripts. Anonymous too: that's only reachable under {@code local}, where the
@@ -53,10 +63,19 @@ public class UserAuthorization {
         throw denied(caller, "list users without a password");
     }
 
-    /** The user themself, ADMIN, or the target's active trainer. */
-    public void checkGetUser(Caller caller, Long id) {
+    /**
+     * The user themself, ADMIN, or the target's active trainer see everything. A trainer who has
+     * (or had) a training plan with the target sees the summary only: their dashboard, feedback and
+     * recent-workout screens name the client of every plan they wrote, including clients no longer
+     * on their roster, and must not fail because one of them left.
+     */
+    public UserView checkGetUser(Caller caller, Long id) {
         if (caller.isUser(id) || caller.isAdmin() || isActiveTrainerOf(caller, id)) {
-            return;
+            return UserView.FULL;
+        }
+        if (caller instanceof CallerIdentity user && user.role() == Role.TRAINER
+                && trainingPlanRepository.existsByTrainerIdAndClientId(user.userId(), id)) {
+            return UserView.SUMMARY;
         }
         throw noAccess(caller, id);
     }
