@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.1.0'
+	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'com.google.protobuf' version '0.9.6'
 }
@@ -21,6 +21,10 @@ repositories {
 
 ext {
 	mapstructVersion = '1.6.3'
+	// Patch overrides of Boot-managed versions for high/critical advisories still open in Boot 4.1.1
+	// (Tomcat < 11.0.25, Jackson 3 < 3.1.7). Drop each once a Boot release manages that version or newer.
+	set('tomcat.version', '11.0.27')
+	set('jackson-bom.version', '3.1.7')
 }
 
 dependencies {
