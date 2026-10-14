@@ -13,6 +13,7 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseResponse;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseServiceGrpc;
 import com.vertice.api.plan.PlanAccessRepository;
 import com.vertice.api.plan.PlanCallers;
+import com.vertice.api.user.UserRepository;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -53,6 +54,9 @@ class WorkoutExerciseControllerTest {
     private WorkoutExerciseService workoutExerciseService;
 
     @MockitoBean
+    private UserRepository userRepository;
+
+    @MockitoBean
     private PlanAccessRepository planAccessRepository;
 
     private ManagedChannel channel;
@@ -63,6 +67,7 @@ class WorkoutExerciseControllerTest {
     void setUp() {
         channel = NettyChannelBuilder.forTarget("localhost:19098").usePlaintext().build();
         callers = PlanCallers.of(WorkoutExerciseServiceGrpc.newBlockingStub(channel));
+        PlanCallers.storeUsers(userRepository);
         stub = callers.admin();
         when(planAccessRepository.findByWorkoutId(WORKOUT_ID)).thenReturn(Optional.of(PARTIES));
         when(planAccessRepository.findByWorkoutExerciseId(WORKOUT_EXERCISE_ID)).thenReturn(Optional.of(PARTIES));

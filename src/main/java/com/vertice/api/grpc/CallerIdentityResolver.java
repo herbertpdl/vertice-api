@@ -3,6 +3,7 @@ package com.vertice.api.grpc;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.UnauthenticatedException;
 import com.vertice.api.user.Role;
+import com.vertice.api.user.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Reads the caller the gRPC security interceptor bound for this call. Controllers resolve it and
@@ -21,6 +23,13 @@ import java.util.Optional;
  * when present; a service has {@code sub} {@code service:bff} or {@code service:ops} and {@code role}
  * {@code SERVICE}. A token that is neither is {@code UNAUTHENTICATED}, even on RPCs that would
  * accept any caller.
+ *
+ * <p>A user token is only as good as the user behind it: the user must still exist and still have
+ * the token's role, checked against the database (one primary-key lookup of the role) every call,
+ * so a deleted or re-roled user loses access at once instead of when the token expires. Otherwise
+ * the call is {@code UNAUTHENTICATED} ("Session no longer valid"), which the BFF turns into a 401
+ * that logs the user out. The result is kept for the rest of the call by
+ * {@link CallerScopeInterceptor}, never across calls.
  */
 @Component
 public class CallerIdentityResolver {
@@ -29,13 +38,24 @@ public class CallerIdentityResolver {
     private static final String LEGACY_ID_CLAIM = "id";
     private static final String SERVICE_PREFIX = "service:";
 
+    private final UserRepository userRepository;
+
+    public CallerIdentityResolver(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
     /** The caller, or {@link Caller.Anonymous} when no token was sent (only possible under {@code local}). */
     public Caller resolve() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
-            return Caller.Anonymous.INSTANCE;
+        AtomicReference<Caller> resolved = CallerScopeInterceptor.RESOLVED_CALLER.get();
+        if (resolved == null) {
+            return resolveFromSecurityContext();
         }
-        return fromToken(jwtAuthentication.getToken());
+        Caller caller = resolved.get();
+        if (caller == null) {
+            caller = resolveFromSecurityContext();
+            resolved.set(caller);
+        }
+        return caller;
     }
 
     /** A user caller; a service token is {@code PERMISSION_DENIED}, no token {@code UNAUTHENTICATED}. */
@@ -67,6 +87,26 @@ public class CallerIdentityResolver {
             case CallerIdentity user -> throw PermissionDeniedException.role(user.role(), "call this RPC");
             case Caller.Anonymous anonymous -> throw new UnauthenticatedException();
         };
+    }
+
+    private Caller resolveFromSecurityContext() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
+            return Caller.Anonymous.INSTANCE;
+        }
+        Caller caller = fromToken(jwtAuthentication.getToken());
+        if (caller instanceof CallerIdentity user) {
+            requireCurrent(user);
+        }
+        return caller;
+    }
+
+    /** The token's user must still exist with the token's role; a deleted or re-roled user is signed out. */
+    private void requireCurrent(CallerIdentity user) {
+        Optional<Role> storedRole = userRepository.findRoleById(user.userId());
+        if (storedRole.filter(role -> role == user.role()).isEmpty()) {
+            throw UnauthenticatedException.sessionNoLongerValid();
+        }
     }
 
     private static Caller fromToken(Jwt jwt) {

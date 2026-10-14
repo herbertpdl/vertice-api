@@ -14,6 +14,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByCpf(String cpf);
 
+    /** Just the role, for the per-call check that a token's user still exists with that role. */
+    @Query("select u.role from User u where u.id = :id")
+    Optional<Role> findRoleById(Long id);
+
     List<User> findByRole(Role role);
 
     List<User> findByPasswordHashIsNull();

@@ -98,7 +98,14 @@ turns the token into a `grpc/Caller` (sealed): a user (`CallerIdentity`: numeric
 `id` accepted only when equal to `sub`, `role` ADMIN/TRAINER/CLIENT), a service
 (`Caller.Service`: `sub` `service:bff` or `service:ops` with `role` `SERVICE`, see `ServiceSubject`),
 or `Caller.Anonymous` (no token, only reachable under `local`). Any other subject/role is
-`UNAUTHENTICATED`. Controllers call `resolve()`, `requireUser()` (service → `PERMISSION_DENIED`,
+`UNAUTHENTICATED`. **Roles are re-checked against the DB on every call:** a user caller must still
+exist with exactly the token's `role` (`UserRepository#findRoleById`, one primary-key query of the
+role column), otherwise `UNAUTHENTICATED` "Session no longer valid", which the BFF maps to 401 and
+the web answers by logging out. So a deleted or re-roled user loses access on their next call, not
+when the 8 h token expires. The lookup runs once per RPC (`grpc/CallerScopeInterceptor` keeps the
+resolved caller in the call's gRPC `Context`, never across calls); services and anonymous callers
+skip it. Tests therefore need their user callers to exist: integration tests save them, and
+controller tests that mock `UserRepository` stub `findRoleById` (`PlanCallers.storeUsers`). Controllers call `resolve()`, `requireUser()` (service → `PERMISSION_DENIED`,
 anonymous → `UNAUTHENTICATED`), `requireUserOrAnonymous()` (reference data) or
 `requireService(...)` and pass the caller on; the rules themselves throw
 `PermissionDeniedException` → `PERMISSION_DENIED`. Each aggregate has an authorization class

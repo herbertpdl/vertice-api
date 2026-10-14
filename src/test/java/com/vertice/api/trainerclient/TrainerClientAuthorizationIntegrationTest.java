@@ -53,8 +53,6 @@ class TrainerClientAuthorizationIntegrationTest {
 
     static final String SECRET = "non-local-trainer-client-test-secret!";
     private static final String EMAIL_DOMAIN = "@trainer-client-authz.example.com";
-    /** No user has this id; ADMIN's rules never look the caller up. */
-    private static final long ADMIN_ID = 999_999_999L;
 
     @Autowired
     private UserRepository userRepository;
@@ -67,6 +65,7 @@ class TrainerClientAuthorizationIntegrationTest {
     private User trainerA;
     private User clientA;
     private User trainerB;
+    private User admin;
     private TrainerClient linkA;
 
     @BeforeEach
@@ -76,6 +75,7 @@ class TrainerClientAuthorizationIntegrationTest {
         // No password yet, so the setup-token rule hinges on the roster link alone.
         clientA = userRepository.save(newUser("ClientA", Role.CLIENT, null));
         trainerB = userRepository.save(newUser("TrainerB", Role.TRAINER, "hash"));
+        admin = userRepository.save(newUser("Admin", Role.ADMIN, "hash"));
         linkA = new TrainerClient();
         linkA.setTrainer(trainerA);
         linkA.setClient(clientA);
@@ -139,7 +139,7 @@ class TrainerClientAuthorizationIntegrationTest {
         }
 
         TrainerClientServiceGrpc.TrainerClientServiceBlockingStub asAdmin = TestJwts.withBearer(
-                TrainerClientServiceGrpc.newBlockingStub(channel), TestJwts.token(SECRET, ADMIN_ID, Role.ADMIN));
+                TrainerClientServiceGrpc.newBlockingStub(channel), TestJwts.token(SECRET, admin.getId(), Role.ADMIN));
         assertThat(asAdmin.isTrainersClient(isClient(trainerA, clientA)).getIsClient()).isTrue();
         assertThat(asAdmin.listClientsForTrainer(listFor(trainerA)).getClientsList())
                 .extracting(UserResponse::getId).containsExactly(clientA.getId());

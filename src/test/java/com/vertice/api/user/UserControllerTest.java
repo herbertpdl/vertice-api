@@ -108,6 +108,8 @@ class UserControllerTest {
                 TRAINER_ID, CLIENT_ID, com.vertice.api.user.Role.CLIENT)).thenReturn(true);
         when(trainerClientRepository.existsByTrainerIdAndClientIdAndClientRoleAndEndedAtIsNull(
                 OTHER_TRAINER_ID, OTHER_CLIENT_ID, com.vertice.api.user.Role.CLIENT)).thenReturn(true);
+        // Every caller must still exist with its token's role (CallerIdentityResolver).
+        when(userRepository.findRoleById(ADMIN_ID)).thenReturn(Optional.of(com.vertice.api.user.Role.ADMIN));
         stubStoredUser(TRAINER_ID, com.vertice.api.user.Role.TRAINER, "coach@vertice.com", "$2a$hash");
         stubStoredUser(CLIENT_ID, com.vertice.api.user.Role.CLIENT, "client@vertice.com", null);
         stubStoredUser(OTHER_CLIENT_ID, com.vertice.api.user.Role.CLIENT, "other@vertice.com", null);
@@ -807,5 +809,6 @@ class UserControllerTest {
         user.setEmail(email);
         user.setPasswordHash(passwordHash);
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userRepository.findRoleById(id)).thenReturn(Optional.of(role));
     }
 }
