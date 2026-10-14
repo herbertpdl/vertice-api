@@ -166,3 +166,14 @@ docs/                      Domain model, requirements, and per-feature specs
 
 Every push and pull request against `main` runs `./gradlew build` against a PostgreSQL 16 service
 container, as defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+A second job, `dependency-scan`, builds the Spring Boot jar and scans it with
+[Grype](https://github.com/anchore/grype), failing on any high or critical advisory in a runtime
+dependency. To reproduce it locally after `./gradlew bootJar`:
+
+```sh
+docker run --rm -v "$PWD/build/libs:/scan:ro" anchore/grype:latest dir:/scan --fail-on high
+```
+
+[Dependabot](.github/dependabot.yml) opens weekly update PRs for Gradle dependencies and GitHub
+Actions (minor and patch updates grouped, at most 5 open per ecosystem).
