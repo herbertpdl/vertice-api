@@ -69,18 +69,12 @@ vertice-bff's `src/config/env.ts`). Non-local requires a
 valid token on every call. Under the `local` profile REST auth is disabled entirely
 (`config/LocalSecurityConfig`), and gRPC (`grpc/GrpcSecurityConfig`'s `local`-profile bean)
 permits every call but still decodes a bearer token when one is present — an absent token is
-anonymous, a present but invalid one is `UNAUTHENTICATED`. Tests mint tokens with
-`src/test/.../grpc/TestJwts`. RPCs that need to know who is calling resolve it in the controller
-with `grpc/CallerIdentityResolver#require()` (`UNAUTHENTICATED` when anonymous) and pass the
-`CallerIdentity` into the service, which enforces role/ownership (`PermissionDeniedException` →
-`PERMISSION_DENIED`). Today only the exercise RPCs do; every other RPC still trusts caller-supplied
-ids. Non-local test contexts must set a valid (≥32-byte, non-placeholder) `vertice.jwt.secret`.
-`UserService`'s `VerifyCredentials`, `CreatePasswordSetupToken`, `SetPasswordWithToken` and
-`ListUsersWithoutPassword` are service-level RPCs meant for vertice-bff only (login, first-access
-password links). Like every other RPC they're open to any valid token today; P1-01 restricts them.
-`CreatePasswordSetupToken` is effectively a password-reset primitive (a token for any user id lets
-its holder set that user's password), so it is the one P1-01 must lock down first. See
-`docs/specs/password-lifecycle/spec.md`.
+anonymous, a present but invalid one is `UNAUTHENTICATED`. The decoder requires every token to be
+scoped: HS256 only, `exp` present, `iss == "vertice-bff"`, `aud` containing `"vertice-api"`
+(`HmacJwtDecoder.ISSUER`/`AUDIENCE`); the same checks run under `local` whenever a token is sent.
+Tests mint scoped tokens with `src/test/.../grpc/TestJwts` (`token`, `serviceToken`, `asCaller`,
+`asService`).
+
 Under `local` (even combined, e.g. `local,prod`), `config/LocalProfileGuard` refuses to boot when
 `VERTICE_ENV` is set to anything but `local`/`dev`, or when `spring.datasource.url`'s host isn't
 `localhost`/`127.0.0.1`/`::1`/`postgres` (unparseable URLs fail closed), so `local`-profile tests
@@ -95,6 +89,39 @@ The two transports need separate wiring: Spring Boot's default gRPC
 OAuth2 auto-config is `@ConditionalOnMissingBean(AuthenticationProcessInterceptor.class)`, so
 `GrpcSecurityConfig` defining its own bean is what makes the local-profile bypass exist for gRPC
 at all — it doesn't inherit anything from the REST-side `SecurityConfig`/`LocalSecurityConfig`.
+
+### Trust model: BFF = first layer, API = authoritative layer
+
+vertice-bff checks role and ownership before calling, but the API must hold on its own: a token
+used directly against `:9090` gets exactly what the matrix below allows. `grpc/CallerIdentityResolver`
+turns the token into a `grpc/Caller` (sealed): a user (`CallerIdentity`: numeric `sub`, legacy
+`id` accepted only when equal to `sub`, `role` ADMIN/TRAINER/CLIENT), a service
+(`Caller.Service`: `sub` `service:bff` or `service:ops` with `role` `SERVICE`, see `ServiceSubject`),
+or `Caller.Anonymous` (no token, only reachable under `local`). Any other subject/role is
+`UNAUTHENTICATED`. Controllers call `resolve()`, `requireUser()` (service → `PERMISSION_DENIED`,
+anonymous → `UNAUTHENTICATED`) or `requireService(...)` and pass the caller on; the rules themselves
+throw `PermissionDeniedException` → `PERMISSION_DENIED`. The user domain's rules live in
+`user/UserAuthorization` (one `check*` per RPC, called by `UserController` after request
+validation). The exercise RPCs use `requireUser()`. Plans, workouts, sessions, feedback and
+trainer-client RPCs still trust caller-supplied ids until P1-01 PR B/C.
+
+| RPC | Allowed callers |
+| --- | --- |
+| `VerifyCredentials` | `service:bff` (login); a user for their own stored email only (`POST /auth/password`) |
+| `CreateUser` | `service:bff` (register), never with role ADMIN |
+| `SetPasswordWithToken` | `service:bff` |
+| `ListUsers` | ADMIN, `service:ops`; anonymous under `local` (BFF `VERIFY_PASSWORDS=false` dev login) |
+| `ListUsersWithoutPassword` | ADMIN, `service:ops` (all); TRAINER, narrowed to their active clients (BFF setup-link reissue) |
+| `CreatePasswordSetupToken` | `service:ops`, ADMIN; TRAINER for their active client who has no password yet |
+| `GetUser` | self, ADMIN, the target's active trainer |
+| `UpdateUser` | ADMIN (anything); self or the target's active trainer, role unchanged |
+| `SetUserPassword` | self, ADMIN |
+| `DeleteUser` | self, ADMIN |
+
+"Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
+CLIENT. Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,
+non-placeholder) `vertice.jwt.secret`. `CreatePasswordSetupToken` is effectively a password-reset
+primitive, hence its narrow rule; see `docs/specs/password-lifecycle/spec.md`.
 
 `docs/domain-model.md` is the map for how `TrainingPlan → Workout → WorkoutExercise → ExerciseSet`
 nest and how the `Exercise` catalog fits in — read it before touching that hierarchy, the entity
@@ -146,7 +173,8 @@ map to Java `null` via `@ValueMapping(source = "..._UNSPECIFIED", target = Mappi
   (`spring.grpc.server.port=...`, one distinct port per test class), talking to it through a real
   `ManagedChannel`/blocking stub, with the `Service` layer replaced via `@MockitoBean`. Runs
   `@ActiveProfiles("local")`. This is what exercises `GrpcRequestValidator` and
-  `GrpcExceptionAdvice` end-to-end over the wire.
+  `GrpcExceptionAdvice` end-to-end over the wire. Calls send the caller an RPC's rules require
+  (`TestJwts.asCaller`/`asService`); authorization tests cover allowed and denied callers per RPC.
 
 ### Migrations
 
