@@ -125,12 +125,12 @@ class UserDataMinimisationIntegrationTest {
     }
 
     @Test
-    void theRosterAndTheSetupLinkList_neverCarryACpf() {
+    void theRosterAndTheSetupLinkList_carryNoEmailOrCpf() {
         List<UserResponse> roster = as(trainer, TrainerClientServiceGrpc::newBlockingStub)
                 .listClientsForTrainer(ListClientsForTrainerRequest.newBuilder().setTrainerId(trainer.getId()).build())
                 .getClientsList();
         assertThat(roster).containsExactly(UserResponse.newBuilder().setId(client.getId()).setName("Client")
-                .setEmail(client.getEmail()).setRole(com.vertice.api.generated.grpc.user.v1.Role.CLIENT).build());
+                .setRole(com.vertice.api.generated.grpc.user.v1.Role.CLIENT).build());
 
         List<UserResponse> withoutPassword = as(trainer, UserServiceGrpc::newBlockingStub)
                 .listUsersWithoutPassword(ListUsersWithoutPasswordRequest.getDefaultInstance()).getUsersList();

@@ -175,8 +175,8 @@ messages (`Email already in use`, `CPF already in use`) that never echo the valu
 | View | Fields | RPCs |
 | --- | --- | --- |
 | detail | everything | `GetUser` (self, ADMIN, active trainer), `UpdateUser`, `CreateClientForTrainer` |
-| contact | id, name, role, email | `ListUsers` (ops setup links, local dev login match by email), `ListClientsForTrainer` (the BFF roster still shows email; becomes summary once it doesn't), `CreateUser`, `VerifyCredentials` (the BFF's session) |
-| summary | id, name, role | `ListUsersWithoutPassword`, `GetUser` for a trainer who only has a plan with the target |
+| contact | id, name, role, email | `ListUsers` (ops setup links, local dev login match by email), `CreateUser`, `VerifyCredentials` (the BFF's session) |
+| summary | id, name, role | `ListClientsForTrainer` (the BFF roster), `ListUsersWithoutPassword`, `GetUser` for a trainer who only has a plan with the target |
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,
