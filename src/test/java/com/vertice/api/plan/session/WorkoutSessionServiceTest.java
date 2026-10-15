@@ -228,6 +228,27 @@ class WorkoutSessionServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+    /** A deleted account (P1-05) is missing: no new log is started for it, ADMIN included. */
+    @Test
+    void getOrStartWorkoutLog_throwsWhenClientAccountIsDeleted() {
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+                .thenReturn(Optional.empty());
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
+        User deleted = new User();
+        deleted.setId(2L);
+        deleted.setRole(Role.CLIENT);
+        deleted.anonymise(java.time.Instant.now());
+        when(userRepository.findById(2L)).thenReturn(Optional.of(deleted));
+
+        var request = GetOrStartWorkoutLogRequest.newBuilder()
+                .setWorkoutId(1L).setClientId(2L).setWeekStartDate("2026-08-24").build();
+
+        assertThatThrownBy(() -> service.getOrStartWorkoutLog(request))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Client with id 2 not found");
+        verify(workoutLogRepository, never()).save(any());
+    }
+
     @Test
     void recordSetLog_createsNewSetLog() {
         Workout workout = workout(1L);
