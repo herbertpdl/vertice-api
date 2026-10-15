@@ -7,4 +7,6 @@ import java.util.List;
 public interface WorkoutFeedbackRepository extends JpaRepository<WorkoutFeedback, Long> {
 
     List<WorkoutFeedback> findByWorkoutLog_Workout_TrainingPlan_TrainerId(Long trainerId);
+
+    long countByWorkoutLogId(Long workoutLogId);
 }

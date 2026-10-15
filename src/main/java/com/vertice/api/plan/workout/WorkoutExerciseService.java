@@ -9,11 +9,15 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseResponse;
 import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.exercise.ExerciseRepository;
 import com.vertice.api.plan.session.SetLogRepository;
+import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
+
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_EXERCISES_PER_WORKOUT;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +45,12 @@ public class WorkoutExerciseService {
     public WorkoutExerciseResponse createWorkoutExercise(WorkoutExerciseCreateRequest request) {
         Workout workout = workoutRepository.findById(request.getWorkoutId())
                 .orElseThrow(() -> new ResourceNotFoundException("Workout", request.getWorkoutId()));
+        // Same cap and message as the nested RPCs (WorkoutController). Two concurrent creates can
+        // both pass the count and overshoot by one each; the cap is a product bound, not an invariant.
+        if (workoutExerciseRepository.countByWorkoutId(workout.getId()) >= MAX_EXERCISES_PER_WORKOUT) {
+            throw new ConstraintViolationException(
+                    "exercises: must not exceed %d entries".formatted(MAX_EXERCISES_PER_WORKOUT), Set.of());
+        }
         Exercise exercise = exerciseRepository.findById(request.getExerciseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Exercise", request.getExerciseId()));
         // Spec exercise-starter-catalog PR9 (R17): another trainer's private exercise never goes in.

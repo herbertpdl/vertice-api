@@ -208,4 +208,28 @@ class ExerciseSetServiceTest {
                 .hasMessage("ExerciseSet 9 has logged results and cannot be deleted");
         verify(exerciseSetRepository, never()).delete(exerciseSet);
     }
+
+    /** P1-09: the per-item path holds the same cap as CreateWorkoutWithExercises/ReplaceWorkoutExercises. */
+    @Test
+    void createExerciseSet_whenTheWorkoutExerciseAlreadyHasTenSets_isRefused() {
+        when(workoutExerciseRepository.findById(1L)).thenReturn(Optional.of(workoutExercise(1L)));
+        when(exerciseSetRepository.countByWorkoutExerciseId(1L)).thenReturn(10L);
+
+        assertThatThrownBy(() -> service.createExerciseSet(ExerciseSetCreateRequest.newBuilder()
+                .setWorkoutExerciseId(1L).setSetNumber(11).setStrategy(SetStrategy.STRAIGHT).build()))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessage("sets: must not exceed 10 entries");
+        verify(exerciseSetRepository, never()).save(any());
+    }
+
+    @Test
+    void createExerciseSet_withAWeightPastNumericSixTwo_isRefusedBeforeSaving() {
+        when(workoutExerciseRepository.findById(1L)).thenReturn(Optional.of(workoutExercise(1L)));
+
+        assertThatThrownBy(() -> service.createExerciseSet(ExerciseSetCreateRequest.newBuilder()
+                .setWorkoutExerciseId(1L).setSetNumber(1).setStrategy(SetStrategy.STRAIGHT).setWeight("10000").build()))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessageStartingWith("weight:");
+        verify(exerciseSetRepository, never()).save(any());
+    }
 }

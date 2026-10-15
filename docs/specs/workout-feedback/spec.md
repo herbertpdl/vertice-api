@@ -16,6 +16,10 @@ trainer linking the workout, training plan and client that gave the feedback"),
   client could in principle submit more than one feedback for the same session — not
   restricted, matches this plan's general "don't add constraints requirements.md didn't ask
   for" pattern, e.g. `workout-day-of-week/spec.md` §0 on weekday uniqueness).
+  **Superseded in part by P1-09 (audit 2026-10-09):** still no uniqueness, but at most 10 entries
+  per `WorkoutLog`. Every entry is up to 2 000 characters and lands in the trainer's unpaginated
+  `ListWorkoutFeedback` and the client's data export, so unlimited resubmission would let one
+  client grow both without bound.
 - **`workout_id`/`training_plan_id`/`client_id` are resolved via joins, not stored.** They're all
   reachable through `WorkoutLog` → `Workout` → `TrainingPlan` → `trainer`/`client`; storing them
   again on `WorkoutFeedback` would just be denormalization with no independent source of truth.
@@ -68,7 +72,10 @@ mapper/service, not stored columns.
 
 ## 4. Validation rules
 
-- `text`: `@NotBlank`.
+- `text`: `@NotBlank @Size(max = 2000)` (the column's `VARCHAR(2000)`; P1-09).
+- At most 10 feedback entries per `WorkoutLog` (`WorkoutFeedbackService.MAX_FEEDBACK_PER_LOG`,
+  P1-09): the 11th is `INVALID_ARGUMENT`, "workoutLogId: a workout session takes at most 10
+  feedback entries".
 - `workout_log_id`: `@Min(1)`, must resolve or `NOT_FOUND` ("WorkoutLog").
 - Submitting against a `WorkoutLog` whose `completedAt` is `null` → rejected
   (`ConstraintViolationException`, "workout session is not completed yet").

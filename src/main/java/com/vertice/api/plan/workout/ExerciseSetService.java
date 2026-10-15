@@ -6,11 +6,15 @@ import com.vertice.api.generated.grpc.plan.v1.ExerciseSetCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetRequest;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetResponse;
 import com.vertice.api.plan.session.SetLogRepository;
+import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
+
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_SETS_PER_EXERCISE;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +41,11 @@ public class ExerciseSetService {
     public ExerciseSetResponse createExerciseSet(ExerciseSetCreateRequest request) {
         WorkoutExercise workoutExercise = workoutExerciseRepository.findById(request.getWorkoutExerciseId())
                 .orElseThrow(() -> new ResourceNotFoundException("WorkoutExercise", request.getWorkoutExerciseId()));
+        // Same cap and message as the nested RPCs; see WorkoutExerciseService#createWorkoutExercise.
+        if (exerciseSetRepository.countByWorkoutExerciseId(workoutExercise.getId()) >= MAX_SETS_PER_EXERCISE) {
+            throw new ConstraintViolationException(
+                    "sets: must not exceed %d entries".formatted(MAX_SETS_PER_EXERCISE), Set.of());
+        }
         ExerciseSet exerciseSet = exerciseSetMapper.toEntity(request);
         exerciseSet.setWorkoutExercise(workoutExercise);
         return exerciseSetMapper.toResponse(exerciseSetRepository.save(exerciseSet));

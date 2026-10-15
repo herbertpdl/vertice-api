@@ -7,4 +7,6 @@ import java.util.List;
 public interface ExerciseSetRepository extends JpaRepository<ExerciseSet, Long> {
 
     List<ExerciseSet> findByWorkoutExerciseId(Long workoutExerciseId);
+
+    long countByWorkoutExerciseId(Long workoutExerciseId);
 }
