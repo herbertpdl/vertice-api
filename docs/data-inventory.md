@@ -17,7 +17,7 @@ the code) before a public launch.
 | D2 | **Roles.** For a client's data (profile, plans, logs, feedback), the **trainer is the controller** and the **platform is the operator** that processes it on the trainer's behalf. For a trainer's own account data, the **platform is the controller**. **Pending legal review.** | Access rules: a client's data is readable by the client, their trainer and ADMIN only (CLAUDE.md matrix) |
 | D3 | **Legal basis for account data:** performance of a contract (LGPD art. 7, V). **Pending legal review.** | `CreateUser` requires and stores `accepted_terms_version` + `terms_accepted_at` (INVALID_ARGUMENT without it) |
 | D4 | **Legal basis for health-related data** (loads, session logs, workout feedback): specific consent (LGPD art. 11, I), recorded per user at first access. **Pending legal review.** | `RecordConsent(HEALTH_DATA, version)` → `health_data_consent_version` + `health_data_consent_at` |
-| D5 | **Retention:** account data is kept while the account is active. When the account is deleted, its personal data is deleted or anonymised (implemented by P1-05). **Pending legal review.** | Today `DeleteUser` deletes the row only while the user has no training data (plans, logs, clients, exercises), and refuses with FAILED_PRECONDITION otherwise; P1-05's account deletion adds the anonymise path |
+| D5 | **Retention:** account data is kept while the account is active. When the account is deleted, its personal data is deleted or anonymised (section 3, "On account deletion"). Health-related data held on the client's consent (logs, set logs, feedback) and the plans written for them are deleted, not kept as aggregates. **Pending legal review.** | Implemented: `DeleteAccount` (`user/AccountDeletionService`, one transaction). `DeleteUser` still deletes only a user without training data and refuses with FAILED_PRECONDITION otherwise |
 | D6 | **Server logs are kept 30 days.** This is an assumption about the hosting setup, not something vertice-api enforces. **Pending legal review.** | Log retention is set where the logs are shipped, not in this repo |
 
 Consent is stored as the latest record only: a later `RecordConsent` replaces the earlier version
@@ -43,11 +43,29 @@ it, and logs each reveal). See vertice-bff for its own rules.
 "Account retention" means D5: kept while the account is active, deleted or anonymised when it is
 deleted (P1-05).
 
+### On account deletion (`DeleteAccount`)
+
+One transaction, in this order. A TRAINER with active clients is refused until they end those
+relationships, so no client loses a plan they are following without notice.
+
+| Data | What happens | Why |
+| --- | --- | --- |
+| `workout_feedback`, `set_logs`, `workout_logs` of the user (as the client) | deleted | health-related, held on the user's consent (D4); no aggregate is kept |
+| plans written for the user, with their workouts, workout exercises and sets | deleted | about the user's training, prescribed to them (D3/D4) |
+| plans the user wrote for others (as the trainer), and the exercises used in them | kept, pointing at the anonymised row | they belong to those clients' history |
+| the user's private exercises that no workout uses | deleted | nothing references them |
+| `trainer_clients` rows on either side | `ended_at` set; the rows stay as anonymous history | no active relationship survives the account |
+| `password_setup_tokens` | deleted | credentials of a closed account |
+| `users` row | anonymised: name "Usuário removido", email `deleted+<id>@invalid`, CPF, CREF, password and every consent field cleared, `deleted_at` set. Id and role stay | other records still reference the row; `deleted_at` makes every token of the account invalid at once |
+
+One log line records each deletion with the actor's id, the account's id and its role, nothing else.
+
 ### `users`
 
 | Column | Personal data | Purpose | Legal basis | Retention | Who can read it |
 | --- | --- | --- | --- | --- | --- |
 | `id` | identifier | links every record to the person | D3 | account | everyone who can see the user in any view |
+| `deleted_at` | metadata | marks an anonymised account; its tokens stop working | D3 | kept with the anonymised row | not returned |
 | `name` | yes | identify the person to their trainer or clients | D3 | account | every view |
 | `email` | yes | login, contact, first-access links | D3 | account | self, detail, contact |
 | `cpf` | yes, national ID | TRAINER: identity, CREF checks, invoicing. CLIENT: optional, only if given (D1) | D3 | account | self, detail (masked by the BFF by default) |
@@ -102,8 +120,10 @@ and request metadata. Retention is D6 (30 days, assumption).
 
 - **Consent history and withdrawal** (art. 8 §5, art. 18 IX): today only the latest consent per
   type is kept, and there is no "withdraw" RPC.
-- **Account deletion and anonymisation** of every table above, and data export (P1-05, next PRs).
-  Ending a relationship and the refusal of deletes over recorded data are done.
+- **Data export** (P1-05 (c)). Account deletion, ending a relationship and the refusal of deletes
+  over recorded data are done.
+- **ADMIN-initiated account deletion** (a support request on the user's behalf): today only the
+  user themself can call `DeleteAccount`.
 - **Purge** expired and used `password_setup_tokens` rows.
 - **Legal review** of D1 to D6, and of the Terms, Privacy Policy and health-data notice texts
   whose versions are recorded here.

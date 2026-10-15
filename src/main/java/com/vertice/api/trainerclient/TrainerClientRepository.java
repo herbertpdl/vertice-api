@@ -10,6 +10,8 @@ public interface TrainerClientRepository extends JpaRepository<TrainerClient, Lo
 
     List<TrainerClient> findByTrainerIdAndEndedAtIsNull(Long trainerId);
 
+    boolean existsByTrainerIdAndEndedAtIsNull(Long trainerId);
+
     boolean existsByTrainerIdAndClientIdAndEndedAtIsNull(Long trainerId, Long clientId);
 
     Optional<TrainerClient> findByTrainerIdAndClientIdAndEndedAtIsNull(Long trainerId, Long clientId);

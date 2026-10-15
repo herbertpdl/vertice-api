@@ -474,7 +474,7 @@ class UserServiceTest {
     void listUsersWithoutPassword_filtersByRoleWhenGiven() {
         User client = userWithPassword(7L, null);
         client.setRole(com.vertice.api.user.Role.CLIENT);
-        when(userRepository.findByRoleAndPasswordHashIsNull(com.vertice.api.user.Role.CLIENT)).thenReturn(List.of(client));
+        when(userRepository.findByRoleAndPasswordHashIsNullAndDeletedAtIsNull(com.vertice.api.user.Role.CLIENT)).thenReturn(List.of(client));
 
         assertThat(service.listUsersWithoutPassword(com.vertice.api.user.Role.CLIENT))
                 .containsExactly(UserResponse.newBuilder().setId(7L).setName(client.getName()).setRole(Role.CLIENT).build());
@@ -482,10 +482,10 @@ class UserServiceTest {
 
     @Test
     void listUsersWithoutPassword_withoutRole_listsAll() {
-        when(userRepository.findByPasswordHashIsNull()).thenReturn(List.of());
+        when(userRepository.findByPasswordHashIsNullAndDeletedAtIsNull()).thenReturn(List.of());
 
         assertThat(service.listUsersWithoutPassword(null)).isEmpty();
-        verify(userRepository).findByPasswordHashIsNull();
+        verify(userRepository).findByPasswordHashIsNullAndDeletedAtIsNull();
     }
 
     @Test

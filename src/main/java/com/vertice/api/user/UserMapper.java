@@ -34,6 +34,7 @@ public interface UserMapper {
     @Mapping(target = "healthDataConsentAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     User toEntity(UserCreateRequest request);
 
     // cref is the only nullable string column on User (see docs/specs/trainer-cref/spec.md) — a
@@ -60,6 +61,7 @@ public interface UserMapper {
     @Mapping(target = "healthDataConsentAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     void updateEntityFromRequest(UserRequest request, @MappingTarget User user);
 
     @ValueMapping(source = "ROLE_UNSPECIFIED", target = MappingConstants.NULL)

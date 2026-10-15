@@ -12,6 +12,9 @@ import java.time.Instant;
 @Table(name = "users")
 public class User {
 
+    /** The name a deleted account shows wherever it is still referenced (a former client's plans). */
+    public static final String ANONYMISED_NAME = "Usuário removido";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -60,6 +63,10 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    // Set by DeleteAccount (P1-05): the row is kept, anonymised, and no token of it works any more.
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @PrePersist
     void onCreate() {
         createdAt = DbInstants.now();
@@ -79,5 +86,25 @@ public class User {
     public void consentToHealthData(String version, Instant at) {
         healthDataConsentVersion = version;
         healthDataConsentAt = at;
+    }
+
+    /**
+     * Removes everything that identifies the person (D5, docs/data-inventory.md) and marks the
+     * account deleted. Id and role stay: plans and relationship history still point at the row.
+     * The email keeps the unique index happy and can never receive mail ({@code .invalid}, RFC 2606).
+     */
+    public void anonymise(Instant at) {
+        name = ANONYMISED_NAME;
+        email = "deleted+%d@invalid".formatted(id);
+        cpf = null;
+        cref = null;
+        passwordHash = null;
+        acceptTerms(null, null);
+        consentToHealthData(null, null);
+        deletedAt = at;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 }

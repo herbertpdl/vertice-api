@@ -170,6 +170,19 @@ public class UserAuthorization {
         throw denied(caller, "record a consent");
     }
 
+    /**
+     * Any user, for their own account only: the request has no id, so the caller is the target.
+     * A service identity is refused; nobody, ADMIN included, deletes someone else's account here.
+     *
+     * @return the id of the account to delete
+     */
+    public long checkDeleteAccount(Caller caller) {
+        if (caller instanceof CallerIdentity user) {
+            return user.userId();
+        }
+        throw denied(caller, "delete an account");
+    }
+
     /** First access through a setup link: the BFF's service identity only. */
     public void checkSetPasswordWithToken(Caller caller) {
         if (!caller.isService(ServiceSubject.BFF)) {

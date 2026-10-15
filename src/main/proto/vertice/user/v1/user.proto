@@ -33,8 +33,18 @@ service UserService {
   rpc RecordConsent(RecordConsentRequest) returns (ConsentState);
   // ADMIN; or the user themself / the target's active trainer, without changing the role. Detail view.
   rpc UpdateUser(UpdateUserRequest) returns (UserResponse);
-  // The user themself or ADMIN.
+  // The user themself or ADMIN. FAILED_PRECONDITION while the user has training data (plans, logs,
+  // clients, exercises): removing such an account is DeleteAccount.
   rpc DeleteUser(DeleteUserRequest) returns (google.protobuf.Empty);
+  // Deletes the calling user's own account (P1-05, LGPD art. 18 VI), in one transaction. The request
+  // has no id: the token says whose account it is; a service gets PERMISSION_DENIED. Their workout
+  // feedback, set logs and workout logs are deleted, and so are the plans written for them, their
+  // unused private exercises and their password setup links. Every relationship of theirs ends. The
+  // user row is kept, anonymised (name "Usuário removido", no email, CPF, CREF, password or
+  // consent), so plans they wrote for others still resolve; their tokens stop working on the next
+  // call (UNAUTHENTICATED). A TRAINER with active clients gets FAILED_PRECONDITION: end those
+  // relationships first (EndTrainerClientRelationship).
+  rpc DeleteAccount(DeleteAccountRequest) returns (google.protobuf.Empty);
   // The user themself or ADMIN.
   rpc SetUserPassword(SetUserPasswordRequest) returns (google.protobuf.Empty);
 
@@ -165,6 +175,10 @@ message UpdateUserRequest {
 
 message DeleteUserRequest {
   int64 id = 1;
+}
+
+// Empty on purpose: an account is only ever deleted by its own user (the token's).
+message DeleteAccountRequest {
 }
 
 message SetUserPasswordRequest {

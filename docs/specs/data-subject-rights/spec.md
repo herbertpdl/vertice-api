@@ -1,7 +1,7 @@
 # Spec: Data-subject rights: end a relationship, refuse deletes over history, delete and export an account
 
-Status: In progress. PR (a) (relationship end, delete refusals, integrity fallback) implemented;
-PR (b) `DeleteAccount` and PR (c) `ExportUserData` to follow.
+Status: In progress. PR (a) (relationship end, delete refusals, integrity fallback) and PR (b)
+`DeleteAccount` implemented; PR (c) `ExportUserData` to follow.
 Owner: hebertpdl@gmail.com
 Related: Vertice health audit 2026-10-09, plan item P1-05 (findings COMP-API-001, PROD-API-001,
 REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inventory.md` (D5);
@@ -66,6 +66,36 @@ REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inv
   `workouts.training_plan_id` and `trainer_clients.trainer_id` (all rows, not just active ones),
   none of which had a leading-column index. Part of PERF-API-001.
 
+- **`DeleteAccount` anonymises the user row and deletes what is about the person (D5).** The row
+  can't go: plans the user wrote for other clients (as a trainer), relationship history and the
+  exercises in those plans point at it, and they belong to the other party's history. So the row
+  keeps its id and role, and everything identifying goes: name "Usuário removido", email
+  `deleted+<id>@invalid` (unique, undeliverable), CPF, CREF, password hash and all four consent
+  fields cleared. V29 relaxes `ck_users_trainer_cpf` for deleted rows.
+- **Health-related data is deleted, not aggregated.** Workout feedback, set logs and workout logs
+  are held on the client's consent (D4); with the account gone, so is the basis. Anonymised
+  aggregates were the alternative: nothing in the product reads them yet, so keeping them would be
+  data with no purpose. Feedback is deleted rather than anonymised for the same reason (free text
+  can't be anonymised reliably).
+- **The plans written for the deleted user go too** (the plan item's order: feedback → set logs →
+  logs → plans → relationships → user). A plan prescribed to one client is about them. The plans a
+  deleting *trainer* wrote stay with their clients, under the anonymised trainer.
+- **A TRAINER with active clients is refused** (`FAILED_PRECONDITION` "End your client
+  relationships first…"): deleting would leave active clients on plans with no trainer. Once they
+  end the relationships (`EndTrainerClientRelationship`), their unused private exercises are
+  deleted and the used ones stay, owned by the anonymised row.
+- **Self only, no id in the request.** The token says whose account it is, as for `RecordConsent`.
+  An ADMIN variant (support requests) is a follow-up; the service already takes the actor
+  separately so the audit line doesn't change.
+- **Revocation is `deleted_at`.** `findRoleById` filters `deleted_at IS NULL`, so the account's
+  unexpired tokens fail the per-call role check (`UNAUTHENTICATED`) on their next use. A deleted
+  account is also `NOT_FOUND` for `CreatePasswordSetupToken` and absent from
+  `ListUsersWithoutPassword`: it has no password, but must never be offered one again.
+- **Serialised per account:** the row is read `FOR UPDATE`, so two concurrent deletions run one
+  after the other and the second gets `UNAUTHENTICATED`/`NOT_FOUND`.
+- **Audit:** one INFO line, `Account deleted: actorId=… userId=… role=…`, with no PII. The
+  `audit_events` table is P2-08.
+
 ## 1. `EndTrainerClientRelationship`
 
 `TrainerClientService.EndTrainerClientRelationship(EndTrainerClientRelationshipRequest{trainer_id,
@@ -74,7 +104,16 @@ client_id}) returns (google.protobuf.Empty)`. Controller: `requireUser()`, then
 link), then `TrainerClientService#endRelationship`, which loads the active row and sets `ended_at`
 to the database clock (`DbInstants.now()`).
 
-## 2. Tests
+## 2. `DeleteAccount`
+
+`UserService.DeleteAccount(DeleteAccountRequest{}) returns (google.protobuf.Empty)`. Controller:
+`UserAuthorization#checkDeleteAccount` (any user; a service is `PERMISSION_DENIED`) returns the
+caller's id; `AccountDeletionService#deleteAccount(actorId, userId)` locks the row, checks the
+trainer rule, runs the `AccountDeletionRepository` statements (feedback, set logs, workout logs,
+then the client's plan tree bottom-up, unused exercises, relationships, tokens) and calls
+`User#anonymise` with the database clock.
+
+## 3. Tests
 
 - `plan/RecordedDataIntegrationTest`: a populated plan (workout, two sets, a completed log with one
   set logged, feedback). Every refused delete answers `FAILED_PRECONDITION` with its message and
@@ -85,11 +124,21 @@ to the database clock (`DbInstants.now()`).
 - `grpc/GrpcExceptionMappingTest`: each SQLSTATE branch (and none at all); real JPA unique
   violations on `uq_users_cpf` and `uq_users_email_lower`, whose values appear in neither the
   status nor the captured log output (`OutputCaptureExtension`).
-- `RpcAuthorizationCoverageTest` picks the new RPC up on its own.
+- `RpcAuthorizationCoverageTest` picks the new RPCs up on its own.
+- `user/AccountDeletionIntegrationTest` (populated: plan, sets, a completed log with a set log,
+  feedback, consent, a setup link): a client's deletion removes the health data, the plan for them
+  and the link, anonymises the row, kills the token, hides the account from setup links, and logs
+  ids only; a trainer with an active client is refused and unchanged; a trainer without one is
+  anonymised, loses the unused exercise, and their client keeps the plan, logs and feedback.
+- `UserControllerTest`: self only (client, trainer, ADMIN each delete their own), services denied.
+- `config/DatasourceErrorDetailTest` pins `logServerErrorDetail=false`: the effective Hikari
+  property, and a real unique violation whose message names the constraint but not the value.
 
-## 3. Follow-ups
+## 4. Follow-ups
 
-- (b) `DeleteAccount` and (c) `ExportUserData` (this spec, next PRs).
+- (c) `ExportUserData` (this spec, next PR).
+- vertice-bff: `DELETE /auth/me` → `DeleteAccount` (P1-05 step 2).
+- ADMIN-initiated `DeleteAccount` for a support request.
 - vertice-bff: `DELETE /clients/:id` calls `EndTrainerClientRelationship` instead of `DeleteUser`
   (P1-05 step 2).
 - `LinkClient` / invite-and-accept, and whether a client may end a relationship themself (product).

@@ -83,8 +83,8 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> listUsersWithoutPassword(com.vertice.api.user.Role roleFilter) {
         List<User> users = roleFilter == null
-                ? userRepository.findByPasswordHashIsNull()
-                : userRepository.findByRoleAndPasswordHashIsNull(roleFilter);
+                ? userRepository.findByPasswordHashIsNullAndDeletedAtIsNull()
+                : userRepository.findByRoleAndPasswordHashIsNullAndDeletedAtIsNull(roleFilter);
         return summaries(users);
     }
 

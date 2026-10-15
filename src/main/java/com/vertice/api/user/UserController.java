@@ -7,6 +7,7 @@ import com.vertice.api.generated.grpc.user.v1.ConsentState;
 import com.vertice.api.generated.grpc.user.v1.ConsentType;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
+import com.vertice.api.generated.grpc.user.v1.DeleteAccountRequest;
 import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
@@ -52,6 +53,7 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     private static final String CONSENT_VERSION = "[A-Za-z0-9._-]{1,32}";
 
     private final UserService userService;
+    private final AccountDeletionService accountDeletionService;
     private final PasswordSetupTokenService passwordSetupTokenService;
     private final GrpcRequestValidator validator;
     private final CallerIdentityResolver callerIdentityResolver;
@@ -113,6 +115,15 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     public void deleteUser(DeleteUserRequest request, StreamObserver<Empty> responseObserver) {
         authorization.checkDeleteUser(callerIdentityResolver.resolve(), request.getId());
         userService.deleteUser(request.getId());
+        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    /** Self only: the caller is resolved first and is the account deleted (the request has no id). */
+    @Override
+    public void deleteAccount(DeleteAccountRequest request, StreamObserver<Empty> responseObserver) {
+        long userId = authorization.checkDeleteAccount(callerIdentityResolver.resolve());
+        accountDeletionService.deleteAccount(userId, userId);
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }

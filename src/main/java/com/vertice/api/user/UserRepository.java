@@ -15,8 +15,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByCpf(String cpf);
 
-    /** Just the role, for the per-call check that a token's user still exists with that role. */
-    @Query("select u.role from User u where u.id = :id")
+    /**
+     * Just the role, for the per-call check that a token's user still exists with that role. A
+     * deleted account (P1-05) counts as missing, so its tokens stop working on the next call.
+     */
+    @Query("select u.role from User u where u.id = :id and u.deletedAt is null")
     Optional<Role> findRoleById(Long id);
 
     /** One {@code ListUsers} page: keyset over the primary key, so pages stay stable under inserts. */
@@ -24,9 +27,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByRoleAndIdGreaterThanOrderByIdAsc(Role role, Long afterId, Limit limit);
 
-    List<User> findByPasswordHashIsNull();
+    /** A deleted account has no password either, but must never be offered a setup link. */
+    List<User> findByPasswordHashIsNullAndDeletedAtIsNull();
 
-    List<User> findByRoleAndPasswordHashIsNull(Role role);
+    List<User> findByRoleAndPasswordHashIsNullAndDeletedAtIsNull(Role role);
 
     /** {@code trainerId}'s active clients who haven't set a password yet. */
     @Query("""
