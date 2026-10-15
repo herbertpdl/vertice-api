@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.exception.WorkoutExerciseHasRecordedDataException;
@@ -18,6 +19,7 @@ import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.exercise.ExerciseRepository;
 import com.vertice.api.plan.session.SetLog;
 import com.vertice.api.plan.session.SetLogRepository;
+import com.vertice.api.plan.session.WorkoutLogRepository;
 import com.vertice.api.user.User;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,12 +63,16 @@ class WorkoutServiceTest {
     @Mock
     private SetLogRepository setLogRepository;
 
+    @Mock
+    private WorkoutLogRepository workoutLogRepository;
+
     private WorkoutService service;
 
     @BeforeEach
     void setUp() {
         service = new WorkoutService(workoutRepository, Mappers.getMapper(WorkoutMapper.class), trainingPlanRepository,
-                workoutExerciseRepository, Mappers.getMapper(WorkoutExerciseEntryMapper.class), exerciseRepository, setLogRepository);
+                workoutExerciseRepository, Mappers.getMapper(WorkoutExerciseEntryMapper.class), exerciseRepository, setLogRepository,
+                workoutLogRepository);
     }
 
     @Test
@@ -169,6 +175,19 @@ class WorkoutServiceTest {
 
         assertThatThrownBy(() -> service.deleteWorkout(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void deleteWorkout_refusesOnceAClientHasLoggedIt() {
+        Workout workout = new Workout();
+        workout.setId(5L);
+        when(workoutRepository.findById(5L)).thenReturn(Optional.of(workout));
+        when(workoutLogRepository.existsByWorkoutId(5L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteWorkout(5L))
+                .isInstanceOf(HasRecordedDataException.class)
+                .hasMessage("Workout 5 has workout logs and cannot be deleted");
+        verify(workoutRepository, never()).delete(workout);
     }
 
     @Test

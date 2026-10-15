@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.exception.WorkoutExerciseHasRecordedDataException;
@@ -17,6 +18,7 @@ import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.exercise.ExerciseRepository;
 import com.vertice.api.plan.session.SetLog;
 import com.vertice.api.plan.session.SetLogRepository;
+import com.vertice.api.plan.session.WorkoutLogRepository;
 import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,7 @@ public class WorkoutService {
     private final WorkoutExerciseEntryMapper workoutExerciseEntryMapper;
     private final ExerciseRepository exerciseRepository;
     private final SetLogRepository setLogRepository;
+    private final WorkoutLogRepository workoutLogRepository;
 
     @Transactional(readOnly = true)
     public List<WorkoutResponse> listWorkouts(Long trainingPlanId) {
@@ -69,8 +72,12 @@ public class WorkoutService {
         return workoutMapper.toResponse(workoutRepository.save(workout));
     }
 
+    /** Refused once a client has a log for it, like {@code TrainingPlanService#deleteTrainingPlan}. */
     public void deleteWorkout(Long id) {
         Workout workout = findByIdOrThrow(id);
+        if (workoutLogRepository.existsByWorkoutId(id)) {
+            throw new HasRecordedDataException("Workout", id, "workout logs");
+        }
         workoutRepository.delete(workout);
     }
 

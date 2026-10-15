@@ -1,9 +1,11 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetRequest;
 import com.vertice.api.generated.grpc.plan.v1.SetStrategy;
+import com.vertice.api.plan.session.SetLogRepository;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,11 +33,15 @@ class ExerciseSetServiceTest {
     @Mock
     private WorkoutExerciseRepository workoutExerciseRepository;
 
+    @Mock
+    private SetLogRepository setLogRepository;
+
     private ExerciseSetService service;
 
     @BeforeEach
     void setUp() {
-        service = new ExerciseSetService(exerciseSetRepository, Mappers.getMapper(ExerciseSetMapper.class), workoutExerciseRepository);
+        service = new ExerciseSetService(exerciseSetRepository, Mappers.getMapper(ExerciseSetMapper.class), workoutExerciseRepository,
+                setLogRepository);
     }
 
     private static WorkoutExercise workoutExercise(long id) {
@@ -188,5 +194,18 @@ class ExerciseSetServiceTest {
 
         assertThatThrownBy(() -> service.deleteExerciseSet(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void deleteExerciseSet_refusesOnceItHasALoggedResult() {
+        ExerciseSet exerciseSet = new ExerciseSet();
+        exerciseSet.setId(9L);
+        when(exerciseSetRepository.findById(9L)).thenReturn(Optional.of(exerciseSet));
+        when(setLogRepository.existsByExerciseSetId(9L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteExerciseSet(9L))
+                .isInstanceOf(HasRecordedDataException.class)
+                .hasMessage("ExerciseSet 9 has logged results and cannot be deleted");
+        verify(exerciseSetRepository, never()).delete(exerciseSet);
     }
 }

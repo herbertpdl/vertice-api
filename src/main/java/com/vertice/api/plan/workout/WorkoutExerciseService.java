@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseCreateRequest;
@@ -7,6 +8,7 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseResponse;
 import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.exercise.ExerciseRepository;
+import com.vertice.api.plan.session.SetLogRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ public class WorkoutExerciseService {
     private final WorkoutExerciseMapper workoutExerciseMapper;
     private final WorkoutRepository workoutRepository;
     private final ExerciseRepository exerciseRepository;
+    private final SetLogRepository setLogRepository;
 
     @Transactional(readOnly = true)
     public List<WorkoutExerciseResponse> listWorkoutExercises(Long workoutId) {
@@ -56,8 +59,12 @@ public class WorkoutExerciseService {
         return workoutExerciseMapper.toResponse(workoutExerciseRepository.save(workoutExercise));
     }
 
+    /** Its sets go with it (JPA cascade), so it is refused once any of them has a logged result. */
     public void deleteWorkoutExercise(Long id) {
         WorkoutExercise workoutExercise = findByIdOrThrow(id);
+        if (setLogRepository.existsByExerciseSet_WorkoutExercise_Id(id)) {
+            throw new HasRecordedDataException("WorkoutExercise", id, "logged sets");
+        }
         workoutExerciseRepository.delete(workoutExercise);
     }
 

@@ -13,6 +13,10 @@ public interface SetLogRepository extends JpaRepository<SetLog, Long> {
 
     Optional<SetLog> findByWorkoutLogIdAndExerciseSetId(Long workoutLogId, Long exerciseSetId);
 
+    boolean existsByExerciseSetId(Long exerciseSetId);
+
+    boolean existsByExerciseSet_WorkoutExercise_Id(Long workoutExerciseId);
+
     /**
      * Four chained association predicates is past the point a derived method name (every other
      * query in this codebase) stays readable — see {@code exercise-progress/spec.md} §2.
