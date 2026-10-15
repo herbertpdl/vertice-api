@@ -1,0 +1,18 @@
+# Buf config for the gRPC contract (src/main/proto). CI runs `buf lint` and, on pull requests,
+# `buf breaking` against the base branch; see README, "Proto contract".
+version: v2
+modules:
+  - path: src/main/proto
+lint:
+  use:
+    - STANDARD
+  # The existing protos predate these naming rules, and fixing them means renaming enum values
+  # and request/response messages that vertice-bff relies on. New protos should still follow them.
+  except:
+    - ENUM_VALUE_PREFIX
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+breaking:
+  use:
+    - FILE

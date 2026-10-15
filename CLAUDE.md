@@ -26,8 +26,9 @@ docker compose up -d                                   # Postgres only, required
 
 There is no linter/formatter task configured (no Checkstyle/Spotless in `build.gradle`).
 
-CI (`.github/workflows/ci.yml`) has two jobs: `build-and-test` (`./gradlew build`; the required
-check, so don't rename it) and `dependency-scan` (Grype on the boot jar, fails on high/critical
+CI (`.github/workflows/ci.yml`) has two jobs: `build-and-test` (`buf lint`, `buf breaking`
+against the PR's base on pull requests, then `./gradlew build`; the required check, so don't rename
+it) and `dependency-scan` (Grype on the boot jar, fails on high/critical
 runtime advisories). A failing scan is usually fixed by bumping the Spring Boot plugin or, when
 Boot hasn't caught up, a `set('<lib>.version', …)` override in `build.gradle`'s `ext` block;
 drop the override once Boot manages that version. Dependabot (`.github/dependabot.yml`) covers
@@ -244,6 +245,17 @@ names are easy to confuse.
 Every `*Controller` class (e.g. `TrainerClientController`) is a `@GrpcService` extending a
 generated `*ServiceGrpc.*ImplBase`, not a Spring MVC `@RestController`. There is no REST layer in
 this codebase beyond Actuator. Don't assume MVC conventions (`@RequestBody`, `@Valid`, etc.) apply.
+
+### The protos are the BFF's contract
+
+vertice-bff keeps a copy of `src/main/proto/vertice/**/*.proto` under its `protos/vertice/`, taken at
+a pinned vertice-api commit (to be refreshed by its `npm run sync:protos`, coming in the BFF's
+P2-01 PR; README "Proto contract"). So a proto change here is a contract change: `buf breaking`
+(`FILE` rules, `buf.yaml`) fails the PR on a deleted/renumbered field, rename or type change.
+Evolve additively (new fields with new numbers, `reserved` for removed ones); comment-only edits
+pass. Lint is `STANDARD` minus four naming rules the existing protos predate; new protos should
+follow them anyway (`<Rpc>Request`/`<Rpc>Response`, enum values prefixed with the enum name).
+After merging, sync the BFF copy.
 
 ### Generated proto code
 
