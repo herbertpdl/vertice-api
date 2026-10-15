@@ -27,8 +27,11 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -55,9 +58,13 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 @SpringBootTest(properties = {"spring.grpc.server.port=19092", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 @Import(GrpcExceptionMappingTest.FailingServiceConfig.class)
+@ExtendWith(OutputCaptureExtension.class)
 class GrpcExceptionMappingTest {
 
     private static final String SERVICE_NAME = "com.vertice.api.grpc.test.Failing";
+    /** The values the real unique races below collide on; neither may reach a status or a log line. */
+    private static final String RACED_CPF = "52998224725";
+    private static final String RACED_EMAIL = "raced@exception-mapping.example.com";
 
     private static final MethodDescriptor<StringValue, Empty> TRIGGER_METHOD =
             MethodDescriptor.<StringValue, Empty>newBuilder()
@@ -163,8 +170,18 @@ class GrpcExceptionMappingTest {
      * The answer is the same fixed message as the pre-check's, never the CPF itself.
      */
     @Test
-    void dataIntegrityViolation_onTheCpfIndex_mapsToAlreadyExists_withTheFixedMessage() {
+    void dataIntegrityViolation_onTheCpfIndex_mapsToAlreadyExists_withTheFixedMessage_andLogsNoCpf(CapturedOutput output) {
         assertStatus("unique-cpf", Status.Code.ALREADY_EXISTS, "CPF already in use");
+
+        assertThat(output.getAll()).contains("constraint=uq_users_cpf").doesNotContain(RACED_CPF);
+    }
+
+    /** Same race on the email index (V25's {@code lower(email)}), same rule: the email never leaks. */
+    @Test
+    void dataIntegrityViolation_onTheEmailIndex_mapsToAlreadyExists_withTheFixedMessage_andLogsNoEmail(CapturedOutput output) {
+        assertStatus("unique-email", Status.Code.ALREADY_EXISTS, "Email already in use");
+
+        assertThat(output.getAll()).contains("constraint=uq_users_email_lower").doesNotContainIgnoringCase(RACED_EMAIL);
     }
 
     @Test
@@ -178,9 +195,17 @@ class GrpcExceptionMappingTest {
                 "The change conflicts with related data: the record is still in use, or refers to one that does not exist");
     }
 
+    /** A validation gap, not a race: still INVALID_ARGUMENT to the caller, but an ERROR line for us. */
     @Test
-    void dataIntegrityViolation_onACheckConstraint_mapsToInvalidArgument() {
+    void dataIntegrityViolation_onACheckConstraint_mapsToInvalidArgument_andLogsAnError(CapturedOutput output) {
         assertStatus("check", Status.Code.INVALID_ARGUMENT, "The request violates a data integrity rule");
+
+        assertThat(output.getAll()).contains("ERROR").contains("sqlState=23514").doesNotContain("leak@example.com");
+    }
+
+    @Test
+    void dataIntegrityViolation_withoutASqlState_mapsToInvalidArgument() {
+        assertStatus("no-sql-state", Status.Code.INVALID_ARGUMENT, "The request violates a data integrity rule");
     }
 
     private void assertStatus(String selector, Status.Code code, String description) {
@@ -216,7 +241,11 @@ class GrpcExceptionMappingTest {
                     case "unauthenticated" -> throw new UnauthenticatedException();
                     case "permission-denied" -> throw PermissionDeniedException.noAccess("exercise", 7L);
                     case "recorded-data" -> throw new HasRecordedDataException("Workout", 5L, "workout logs");
-                    case "unique-cpf" -> saveTwoUsersWithOneCpf(userRepository, transactionManager);
+                    case "unique-cpf" -> saveTwoUsers(userRepository, transactionManager,
+                            user("first", RACED_CPF), user("second", RACED_CPF));
+                    case "unique-email" -> saveTwoUsers(userRepository, transactionManager,
+                            userWithEmail(RACED_EMAIL), userWithEmail(RACED_EMAIL.toUpperCase()));
+                    case "no-sql-state" -> throw new DataIntegrityViolationException("no driver cause");
                     case "unique" -> throw integrityViolation("23505");
                     case "foreign-key" -> throw integrityViolation("23503");
                     case "check" -> throw integrityViolation("23514");
@@ -241,18 +270,28 @@ class GrpcExceptionMappingTest {
         }
 
         /** Rolled back: the duplicate never commits, and neither does the first row. */
-        private static void saveTwoUsersWithOneCpf(UserRepository userRepository, PlatformTransactionManager transactionManager) {
+        private static void saveTwoUsers(UserRepository userRepository, PlatformTransactionManager transactionManager,
+                                         User first, User second) {
             new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-                userRepository.saveAndFlush(user("first"));
-                userRepository.saveAndFlush(user("second"));
+                userRepository.saveAndFlush(first);
+                userRepository.saveAndFlush(second);
             });
         }
 
-        private static User user(String name) {
+        private static User user(String name, String cpf) {
             User user = new User();
             user.setName(name);
             user.setEmail(name + "-" + System.nanoTime() + "@exception-mapping.example.com");
-            user.setCpf("52998224725");
+            user.setCpf(cpf);
+            user.setRole(Role.CLIENT);
+            return user;
+        }
+
+        /** No CPF (optional for a CLIENT), so only the email index can refuse the second row. */
+        private static User userWithEmail(String email) {
+            User user = new User();
+            user.setName("Raced");
+            user.setEmail(email);
             user.setRole(Role.CLIENT);
             return user;
         }

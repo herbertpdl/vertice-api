@@ -56,8 +56,15 @@ REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inv
   fixed text: the driver's message names the values (an email, a CPF). The unique indexes a request
   can race into keep the service's own message (`uq_users_email_lower` → "Email already in use",
   `uq_users_cpf` → "CPF already in use", `uq_trainer_clients_active_client` → "Client already has
-  an active trainer"), which covers the concurrent duplicate-CPF race. One WARN line logs the
-  SQLSTATE and constraint name only.
+  an active trainer"), which covers the concurrent duplicate-CPF race. One line logs the SQLSTATE
+  and constraint name only: WARN for the unique and foreign-key races, ERROR for anything else
+  (a validation gap worth seeing). Postgres error text can carry the values, so pgjdbc's
+  `logServerErrorDetail=false` drops the `Detail: Key (...)=(...)` part from driver messages and
+  Hibernate's own SQL-error logger (`org.hibernate.orm.jdbc.error`) is off.
+- **Indexes for the checks (V28).** The refusals and (b)'s account deletion filter on
+  `set_logs.exercise_set_id`, `workout_logs.client_id`, `training_plans.trainer_id`/`client_id`,
+  `workouts.training_plan_id` and `trainer_clients.trainer_id` (all rows, not just active ones),
+  none of which had a leading-column index. Part of PERF-API-001.
 
 ## 1. `EndTrainerClientRelationship`
 
@@ -75,8 +82,9 @@ to the database clock (`DbInstants.now()`).
   trainer; ending the relationship keeps plans, logs and feedback readable and frees the client.
 - `trainerclient/TrainerClientAuthorizationIntegrationTest`: who may end a relationship, and that
   every active-link privilege goes once it ends.
-- `grpc/GrpcExceptionMappingTest`: each SQLSTATE branch, one through a real JPA unique violation on
-  `uq_users_cpf`; no description carries the value.
+- `grpc/GrpcExceptionMappingTest`: each SQLSTATE branch (and none at all); real JPA unique
+  violations on `uq_users_cpf` and `uq_users_email_lower`, whose values appear in neither the
+  status nor the captured log output (`OutputCaptureExtension`).
 - `RpcAuthorizationCoverageTest` picks the new RPC up on its own.
 
 ## 3. Follow-ups
@@ -86,5 +94,7 @@ to the database clock (`DbInstants.now()`).
   (P1-05 step 2).
 - `LinkClient` / invite-and-accept, and whether a client may end a relationship themself (product).
 - Whether a former client's plans become read-only for the trainer (product).
+- The rest of PERF-API-001 (P2-06): `workout_exercises.workout_id`/`exercise_id`,
+  `exercise_sets.workout_exercise_id`, `workout_feedback.workout_log_id`.
 - `UpdateExerciseSet` still rewrites a set that has logged results (REL-API-003); decide whether
   that is refused too.

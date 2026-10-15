@@ -241,9 +241,11 @@ deleted`): a plan or workout with workout logs, a workout exercise or set with s
 with training data (`ExerciseInUseException` is the catalog's equivalent). Behind that,
 `GrpcExceptionAdvice` maps any `DataIntegrityViolationException` (a missed check, or a race past
 one): unique key → `ALREADY_EXISTS` (the fixed duplicate email/CPF message for those indexes),
-foreign key → `FAILED_PRECONDITION`, anything else → `INVALID_ARGUMENT`. The description is fixed
-text and the log line carries only the SQLSTATE and constraint name: the driver's message names
-the offending values.
+foreign key → `FAILED_PRECONDITION`, anything else → `INVALID_ARGUMENT` (logged at ERROR: a
+validation gap, while the unique/FK races are WARN). The description is fixed text and the log
+line carries only the SQLSTATE and constraint name. Postgres error text can carry input values, so
+`application.properties` sets pgjdbc's `logServerErrorDetail=false` (no `Detail: Key (cpf)=(…)` in
+exception messages) and turns `org.hibernate.orm.jdbc.error` off; keep both.
 
 ### Proto ↔ Java conversion helpers (`grpc/Proto*`)
 

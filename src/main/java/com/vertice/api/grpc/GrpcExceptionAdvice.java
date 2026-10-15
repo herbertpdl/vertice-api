@@ -122,8 +122,10 @@ public class GrpcExceptionAdvice {
     /**
      * The fallback for a constraint the service didn't check first, or checked and then lost a
      * race on (REL-API-003/004): a known client error, never {@code INTERNAL}/{@code UNKNOWN}. The
-     * driver's message names the offending values (an email, a CPF), so it never reaches the
-     * description or the log; only the SQLSTATE and the constraint name are logged.
+     * driver's message can name the offending values (an email, a CPF), so it never reaches the
+     * description or the log; only the SQLSTATE and the constraint name are logged. A unique or
+     * foreign-key race is expected traffic (WARN); anything else means a validation gap, so it is
+     * logged at ERROR to stay visible while the caller still gets {@code INVALID_ARGUMENT}.
      */
     @GrpcExceptionHandler(DataIntegrityViolationException.class)
     public Status handleDataIntegrityViolation(DataIntegrityViolationException ex) {
@@ -132,17 +134,20 @@ public class GrpcExceptionAdvice {
                 .map(org.hibernate.exception.ConstraintViolationException::getConstraintName)
                 .map(name -> name.toLowerCase(Locale.ROOT))
                 .orElse(null);
-        log.warn("Data integrity violation: sqlState={} constraint={}", sqlState, constraint);
         if (UNIQUE_VIOLATION.equals(sqlState) || ex instanceof DuplicateKeyException) {
+            log.warn("Unique constraint violation: sqlState={} constraint={}", sqlState, constraint);
             return Status.ALREADY_EXISTS.withDescription(Optional.ofNullable(constraint)
                     .map(UNIQUE_CONSTRAINT_MESSAGES::get)
                     .orElse("A record with the same unique value already exists"));
         }
         if (FOREIGN_KEY_VIOLATION.equals(sqlState)) {
+            log.warn("Foreign key violation: sqlState={} constraint={}", sqlState, constraint);
             return Status.FAILED_PRECONDITION.withDescription(
                     "The change conflicts with related data: the record is still in use, or refers to one that does not exist");
         }
-        // A NOT NULL or CHECK constraint: input the request validation should have refused.
+        // A NOT NULL or CHECK constraint (or no SQLSTATE at all): input the request validation should have refused.
+        log.error("Data integrity violation not caught by request validation: sqlState={} constraint={}",
+                sqlState, constraint);
         return Status.INVALID_ARGUMENT.withDescription("The request violates a data integrity rule");
     }
 
