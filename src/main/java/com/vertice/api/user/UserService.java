@@ -62,8 +62,8 @@ public class UserService {
         // One extra row tells whether another page follows without a count query.
         Limit limit = Limit.of(pageSize + 1);
         List<User> users = roleFilter == null
-                ? userRepository.findByIdGreaterThanOrderByIdAsc(afterId, limit)
-                : userRepository.findByRoleAndIdGreaterThanOrderByIdAsc(roleFilter, afterId, limit);
+                ? userRepository.findByDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(afterId, limit)
+                : userRepository.findByRoleAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(roleFilter, afterId, limit);
         boolean hasNext = users.size() > pageSize;
         List<User> page = hasNext ? users.subList(0, pageSize) : users;
         ListUsersResponse.Builder response = ListUsersResponse.newBuilder()
@@ -107,6 +107,7 @@ public class UserService {
      */
     public UserResponse createUser(UserCreateRequest request) {
         String email = Emails.normalize(request.getEmail());
+        assertEmailNotReserved(email);
         assertEmailAvailable(email, null);
         assertCpfRequiredForTrainer(request.getCpf(), request.getRole());
         assertCpfAvailable(request.getCpf(), null);
@@ -123,6 +124,7 @@ public class UserService {
     public UserResponse updateUser(Long id, UserRequest request) {
         User user = findByIdOrThrow(id);
         String email = Emails.normalize(request.getEmail());
+        assertEmailNotReserved(email);
         assertEmailAvailable(email, id);
         assertCpfRequiredForTrainer(request.getCpf(), request.getRole());
         assertCpfAvailable(request.getCpf(), id);
@@ -180,9 +182,21 @@ public class UserService {
         passwordSetupTokenRepository.deleteUnusedByUserId(id);
     }
 
+    /**
+     * A deleted account (P1-05) is missing for every RPC here: GetUser, UpdateUser, RecordConsent,
+     * SetUserPassword and DeleteUser are NOT_FOUND on it, ADMIN included, so nothing can be written
+     * back into an anonymised row.
+     */
     private User findByIdOrThrow(Long id) {
         return userRepository.findById(id)
+                .filter(user -> !user.isDeleted())
                 .orElseThrow(() -> new ResourceNotFoundException("User", id));
+    }
+
+    private static void assertEmailNotReserved(String email) {
+        if (Emails.isReserved(email)) {
+            throw new ConstraintViolationException("email: addresses on the .invalid domain are reserved", Set.of());
+        }
     }
 
     private void assertEmailAvailable(String email, Long excludingId) {

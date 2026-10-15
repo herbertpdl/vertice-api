@@ -3,13 +3,13 @@ package com.vertice.api.user;
 import com.vertice.api.generated.grpc.plan.v1.CreateWorkoutWithExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetEntry;
+import com.vertice.api.generated.grpc.plan.v1.ExerciseSetServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.GetTrainingPlanRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListExerciseSetsRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListWorkoutExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseEntry;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseServiceGrpc;
-import com.vertice.api.generated.grpc.plan.v1.ExerciseSetServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
@@ -17,12 +17,20 @@ import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
+import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
+import com.vertice.api.generated.grpc.trainerclient.v1.TrainerClientServiceGrpc;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.DeleteAccountRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
+import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
+import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
+import com.vertice.api.generated.grpc.user.v1.UpdateUserRequest;
+import com.vertice.api.generated.grpc.user.v1.UserCreateRequest;
+import com.vertice.api.generated.grpc.user.v1.UserRequest;
 import com.vertice.api.generated.grpc.user.v1.UserResponse;
 import com.vertice.api.generated.grpc.user.v1.UserServiceGrpc;
+import com.vertice.api.grpc.ServiceSubject;
 import com.vertice.api.grpc.TestJwts;
 import com.vertice.api.plan.PlanLevel;
 import com.vertice.api.plan.TrainingPlan;
@@ -36,6 +44,13 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.AbstractStub;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,13 +60,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-
-import java.time.Instant;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 
 import static com.vertice.api.plan.PlanCallers.assertCode;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,12 +98,18 @@ class AccountDeletionIntegrationTest {
     private ManagedChannel channel;
     private User trainer;
     private User client;
+    /** Another client of the same trainer, with the same kind of history: nothing of theirs may change. */
+    private User bystander;
     private User admin;
     private TrainerClient link;
     private Exercise usedExercise;
     private Exercise unusedExercise;
     private long plan;
     private long workoutLog;
+    private long bystanderPlan;
+    private long bystanderWorkoutLog;
+    /** Users a test saves beyond the fixture's, removed with it. */
+    private final List<Long> extraUsers = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -114,34 +128,25 @@ class AccountDeletionIntegrationTest {
         usedExercise = exerciseRepository.save(exerciseOf(trainer, "Used"));
         unusedExercise = exerciseRepository.save(exerciseOf(trainer, "Unused"));
 
-        plan = seedPlan();
-        long workout = as(trainer, WorkoutServiceGrpc::newBlockingStub).createWorkoutWithExercises(
-                CreateWorkoutWithExercisesRequest.newBuilder().setName("Leg Day").setTrainingPlanId(plan)
-                        .setDayOfWeek(DayOfWeek.MONDAY)
-                        .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(usedExercise.getId())
-                                .addSets(ExerciseSetEntry.newBuilder().setReps(5))
-                                .addSets(ExerciseSetEntry.newBuilder().setReps(5)))
-                        .build()).getId();
-        long workoutExercise = as(trainer, WorkoutExerciseServiceGrpc::newBlockingStub).listWorkoutExercises(
-                ListWorkoutExercisesRequest.newBuilder().setWorkoutId(workout).build()).getWorkoutExercises(0).getId();
-        long set = as(trainer, ExerciseSetServiceGrpc::newBlockingStub).listExerciseSets(
-                ListExerciseSetsRequest.newBuilder().setWorkoutExerciseId(workoutExercise).build()).getExerciseSets(0).getId();
+        bystander = userRepository.save(newUser("Bystander", Role.CLIENT));
+        TrainerClient bystanderLink = new TrainerClient();
+        bystanderLink.setTrainer(trainer);
+        bystanderLink.setClient(bystander);
+        bystanderLink.setStartedAt(Instant.now());
+        trainerClientRepository.save(bystanderLink);
 
-        WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub sessions = as(client, WorkoutSessionServiceGrpc::newBlockingStub);
-        workoutLog = sessions.getOrStartWorkoutLog(GetOrStartWorkoutLogRequest.newBuilder().setWorkoutId(workout)
-                .setClientId(client.getId()).setWeekStartDate(WEEK).build()).getId();
-        sessions.recordSetLog(RecordSetLogRequest.newBuilder().setWorkoutLogId(workoutLog).setExerciseSetId(set)
-                .setWeight("80").setReps(5).build());
-        sessions.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(workoutLog).build());
-        as(client, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
-                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(workoutLog).setText("Knee hurt a bit").build());
-        passwordSetupTokenService.createToken(client.getId());
+        plan = seedPlan(client);
+        workoutLog = seedHistory(client, plan, "Knee hurt a bit");
+        bystanderPlan = seedPlan(bystander);
+        bystanderWorkoutLog = seedHistory(bystander, bystanderPlan, "Felt strong");
     }
 
     @AfterEach
     void tearDown() throws InterruptedException {
         channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
-        Map<String, List<Long>> users = Map.of("ids", List.of(trainer.getId(), client.getId(), admin.getId()));
+        List<Long> ids = new ArrayList<>(List.of(trainer.getId(), client.getId(), bystander.getId(), admin.getId()));
+        ids.addAll(extraUsers);
+        Map<String, List<Long>> users = Map.of("ids", ids);
         for (String delete : List.of(
                 "DELETE FROM workout_feedback WHERE workout_log_id IN (SELECT id FROM workout_logs WHERE client_id IN (:ids))",
                 "DELETE FROM set_logs WHERE workout_log_id IN (SELECT id FROM workout_logs WHERE client_id IN (:ids))",
@@ -187,7 +192,7 @@ class AccountDeletionIntegrationTest {
 
         User anonymised = userRepository.findById(id).orElseThrow();
         assertThat(anonymised.getName()).isEqualTo(User.ANONYMISED_NAME);
-        assertThat(anonymised.getEmail()).isEqualTo("deleted+%d@invalid".formatted(id));
+        assertThat(anonymised.getEmail()).isNull();
         assertThat(anonymised.getCpf()).isNull();
         assertThat(anonymised.getPasswordHash()).isNull();
         assertThat(anonymised.getAcceptedTermsVersion()).isNull();
@@ -209,10 +214,82 @@ class AccountDeletionIntegrationTest {
         assertThat(asAdmin.listUsersWithoutPassword(ListUsersWithoutPasswordRequest.getDefaultInstance()).getUsersList())
                 .extracting(UserResponse::getId).doesNotContain(id);
 
+        // Missing to ADMIN too: nothing can be read from or written back into the anonymised row.
+        assertCode(() -> asAdmin.getUser(GetUserRequest.newBuilder().setId(id).build()), Status.Code.NOT_FOUND);
+        assertCode(() -> asAdmin.updateUser(UpdateUserRequest.newBuilder().setId(id).setUser(UserRequest.newBuilder()
+                .setName("Back").setEmail("back@account-deletion.example.com")
+                .setRole(com.vertice.api.generated.grpc.user.v1.Role.CLIENT)).build()), Status.Code.NOT_FOUND);
+        assertCode(() -> asAdmin.setUserPassword(SetUserPasswordRequest.newBuilder().setId(id)
+                .setPassword("brandNewPassword1").build()), Status.Code.NOT_FOUND);
+        assertThat(asAdmin.listUsers(ListUsersRequest.getDefaultInstance()).getUsersList())
+                .extracting(UserResponse::getId).doesNotContain(id);
+
         assertThat(output.getAll())
                 .contains("Account deleted: actorId=%d userId=%d role=CLIENT".formatted(id, id))
                 .doesNotContain(client.getEmail())
                 .doesNotContain(client.getCpf());
+    }
+
+    /** The other client of the same trainer: plan, log, set log, feedback, setup link and link all stay. */
+    @Test
+    void aClientsDeletion_leavesAnotherClientsDataUntouched() {
+        as(client, UserServiceGrpc::newBlockingStub).deleteAccount(DeleteAccountRequest.getDefaultInstance());
+
+        long id = bystander.getId();
+        assertThat(count("SELECT count(*) FROM training_plans WHERE id = :id", bystanderPlan)).isOne();
+        assertThat(count("SELECT count(*) FROM workouts WHERE training_plan_id = :id", bystanderPlan)).isOne();
+        assertThat(count("SELECT count(*) FROM exercise_sets es"
+                + " JOIN workout_exercises we ON we.id = es.workout_exercise_id"
+                + " JOIN workouts w ON w.id = we.workout_id"
+                + " WHERE w.training_plan_id = :id", bystanderPlan)).isEqualTo(2);
+        assertThat(count("SELECT count(*) FROM workout_logs WHERE client_id = :id", id)).isOne();
+        assertThat(count("SELECT count(*) FROM set_logs WHERE workout_log_id = :id", bystanderWorkoutLog)).isOne();
+        assertThat(count("SELECT count(*) FROM workout_feedback WHERE workout_log_id = :id", bystanderWorkoutLog)).isOne();
+        assertThat(count("SELECT count(*) FROM password_setup_tokens WHERE user_id = :id", id)).isOne();
+        assertThat(count("SELECT count(*) FROM trainer_clients WHERE client_id = :id AND ended_at IS NULL", id)).isOne();
+        User untouched = userRepository.findById(id).orElseThrow();
+        assertThat(untouched.getName()).isEqualTo("Bystander");
+        assertThat(untouched.getEmail()).isEqualTo(bystander.getEmail());
+        assertThat(untouched.isDeleted()).isFalse();
+        assertThat(as(bystander, TrainingPlanServiceGrpc::newBlockingStub)
+                .getTrainingPlan(GetTrainingPlanRequest.newBuilder().setId(bystanderPlan).build()).getId()).isEqualTo(bystanderPlan);
+    }
+
+    /**
+     * Review of #68: a predictable placeholder email could be taken by a live account first and
+     * make the deletion fail on the unique index forever. The deleted row's email is NULL, so a
+     * live row holding any look-alike address (here saved directly, as a row from before the
+     * reserved-domain rule would be) can't block it; and no write path accepts a {@code .invalid}
+     * address any more.
+     */
+    @Test
+    void deletionSucceeds_whenALiveRowHoldsALookAlikeAddress_andReservedAddressesAreRefused() {
+        String legacyPlaceholder = "deleted+%d@invalid".formatted(client.getId());
+        User squatter = newUser("Squatter", Role.CLIENT);
+        squatter.setEmail(legacyPlaceholder);
+        squatter = userRepository.save(squatter);
+        extraUsers.add(squatter.getId());
+
+        as(client, UserServiceGrpc::newBlockingStub).deleteAccount(DeleteAccountRequest.getDefaultInstance());
+
+        assertThat(userRepository.findById(client.getId()).orElseThrow().isDeleted()).isTrue();
+        assertThat(userRepository.findById(squatter.getId()).orElseThrow().getEmail()).isEqualTo(legacyPlaceholder);
+
+        // Self UpdateUser, a trainer updating their client, registration and create-client all refuse it.
+        UserRequest.Builder reserved = UserRequest.newBuilder().setName("Bystander")
+                .setEmail("deleted+1@invalid").setRole(com.vertice.api.generated.grpc.user.v1.Role.CLIENT);
+        assertCode(() -> as(bystander, UserServiceGrpc::newBlockingStub).updateUser(UpdateUserRequest.newBuilder()
+                .setId(bystander.getId()).setUser(reserved).build()), Status.Code.INVALID_ARGUMENT);
+        assertCode(() -> as(trainer, UserServiceGrpc::newBlockingStub).updateUser(UpdateUserRequest.newBuilder()
+                .setId(bystander.getId()).setUser(reserved.setEmail("Someone@Mail.INVALID")).build()), Status.Code.INVALID_ARGUMENT);
+        assertCode(() -> TestJwts.withBearer(UserServiceGrpc.newBlockingStub(channel), TestJwts.serviceToken(SECRET, ServiceSubject.BFF))
+                .createUser(UserCreateRequest.newBuilder().setName("New").setEmail("deleted+2@invalid")
+                        .setPassword("supersecret1").setRole(com.vertice.api.generated.grpc.user.v1.Role.CLIENT)
+                        .setAcceptedTermsVersion("2026-01").build()), Status.Code.INVALID_ARGUMENT);
+        assertCode(() -> as(trainer, TrainerClientServiceGrpc::newBlockingStub).createClientForTrainer(
+                CreateClientForTrainerRequest.newBuilder().setTrainerId(trainer.getId()).setName("New")
+                        .setEmail("new@clients.invalid").build()), Status.Code.INVALID_ARGUMENT);
+        assertThat(userRepository.findById(bystander.getId()).orElseThrow().getEmail()).isEqualTo(bystander.getEmail());
     }
 
     @Test
@@ -238,8 +315,8 @@ class AccountDeletionIntegrationTest {
      */
     @Test
     void aTrainerWithoutActiveClients_isAnonymised_andTheirClientsKeepTheirPlans() {
-        link.setEndedAt(Instant.now());
-        trainerClientRepository.save(link);
+        jdbc.update("UPDATE trainer_clients SET ended_at = now() WHERE trainer_id = :id AND ended_at IS NULL",
+                Map.of("id", trainer.getId()));
 
         as(trainer, UserServiceGrpc::newBlockingStub).deleteAccount(DeleteAccountRequest.getDefaultInstance());
 
@@ -268,11 +345,42 @@ class AccountDeletionIntegrationTest {
         return TestJwts.withBearer(newStub.apply(channel), TestJwts.token(SECRET, user.getId(), user.getRole()));
     }
 
-    private long seedPlan() {
+    /**
+     * A workout of the trainer's used exercise with two sets in {@code planId}; the client logs the
+     * first set, completes the session and leaves {@code feedback}; they get a setup link.
+     *
+     * @return the workout log's id
+     */
+    private long seedHistory(User of, long planId, String feedback) {
+        long workout = as(trainer, WorkoutServiceGrpc::newBlockingStub).createWorkoutWithExercises(
+                CreateWorkoutWithExercisesRequest.newBuilder().setName("Leg Day").setTrainingPlanId(planId)
+                        .setDayOfWeek(DayOfWeek.MONDAY)
+                        .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(usedExercise.getId())
+                                .addSets(ExerciseSetEntry.newBuilder().setReps(5))
+                                .addSets(ExerciseSetEntry.newBuilder().setReps(5)))
+                        .build()).getId();
+        long workoutExercise = as(trainer, WorkoutExerciseServiceGrpc::newBlockingStub).listWorkoutExercises(
+                ListWorkoutExercisesRequest.newBuilder().setWorkoutId(workout).build()).getWorkoutExercises(0).getId();
+        long set = as(trainer, ExerciseSetServiceGrpc::newBlockingStub).listExerciseSets(
+                ListExerciseSetsRequest.newBuilder().setWorkoutExerciseId(workoutExercise).build()).getExerciseSets(0).getId();
+
+        WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub sessions = as(of, WorkoutSessionServiceGrpc::newBlockingStub);
+        long log = sessions.getOrStartWorkoutLog(GetOrStartWorkoutLogRequest.newBuilder().setWorkoutId(workout)
+                .setClientId(of.getId()).setWeekStartDate(WEEK).build()).getId();
+        sessions.recordSetLog(RecordSetLogRequest.newBuilder().setWorkoutLogId(log).setExerciseSetId(set)
+                .setWeight("80").setReps(5).build());
+        sessions.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(log).build());
+        as(of, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
+                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(log).setText(feedback).build());
+        passwordSetupTokenService.createToken(of.getId());
+        return log;
+    }
+
+    private long seedPlan(User forClient) {
         TrainingPlan trainingPlan = new TrainingPlan();
         trainingPlan.setName("Plan");
         trainingPlan.setTrainer(trainer);
-        trainingPlan.setClient(client);
+        trainingPlan.setClient(forClient);
         trainingPlan.setStartDate(LocalDate.of(2026, 1, 1));
         trainingPlan.setEndDate(LocalDate.of(2026, 12, 31));
         trainingPlan.setLevel(PlanLevel.INTERMEDIATE);

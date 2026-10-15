@@ -22,7 +22,8 @@ public class User {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true)
+    // null only on a deleted account (V30's ck_users_email_unless_deleted); unique when set.
+    @Column(unique = true)
     private String email;
 
     // null for a CLIENT who didn't give one; a TRAINER always has one (UserService, P1-04). Unique
@@ -91,11 +92,12 @@ public class User {
     /**
      * Removes everything that identifies the person (D5, docs/data-inventory.md) and marks the
      * account deleted. Id and role stay: plans and relationship history still point at the row.
-     * The email keeps the unique index happy and can never receive mail ({@code .invalid}, RFC 2606).
+     * The email is cleared, not replaced by a placeholder: a predictable one could already be taken
+     * by a live account and block the deletion on the unique index.
      */
     public void anonymise(Instant at) {
         name = ANONYMISED_NAME;
-        email = "deleted+%d@invalid".formatted(id);
+        email = null;
         cpf = null;
         cref = null;
         passwordHash = null;

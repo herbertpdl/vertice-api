@@ -17,13 +17,15 @@ service UserService {
 
   // ADMIN or service:ops (anonymous only under the local profile). Contact view: the ops script
   // hands each setup link to its client by email, and the local dev login matches users by email.
-  // Paginated, ordered by id: see ListUsersRequest.
+  // Paginated, ordered by id: see ListUsersRequest. Deleted accounts (DeleteAccount) are left out,
+  // and every other RPC here answers NOT_FOUND for one.
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
   // Self view for the user themself (the consent state drives the first-access notice). Detail for
   // ADMIN or the target's active trainer. A trainer with any training plan for the target (e.g. a
   // former client) gets the summary view.
   rpc GetUser(GetUserRequest) returns (UserResponse);
-  // service:bff only (registration), and never with role ADMIN. Contact view.
+  // service:bff only (registration), and never with role ADMIN. Contact view. An email on the
+  // reserved .invalid TLD is INVALID_ARGUMENT (also for UpdateUser and CreateClientForTrainer).
   rpc CreateUser(UserCreateRequest) returns (UserResponse);
   // Records a consent given by the calling user themself (P1-04): the Terms version they accepted,
   // or their consent to the processing of health-related data (loads, session logs, feedback; LGPD
@@ -40,8 +42,8 @@ service UserService {
   // has no id: the token says whose account it is; a service gets PERMISSION_DENIED. Their workout
   // feedback, set logs and workout logs are deleted, and so are the plans written for them, their
   // unused private exercises and their password setup links. Every relationship of theirs ends. The
-  // user row is kept, anonymised (name "Usuário removido", no email, CPF, CREF, password or
-  // consent), so plans they wrote for others still resolve; their tokens stop working on the next
+  // user row is kept, anonymised (name "Usuário removido"; email, CPF, CREF, password and
+  // consent cleared), so plans they wrote for others still resolve; their tokens stop working on the next
   // call (UNAUTHENTICATED). A TRAINER with active clients gets FAILED_PRECONDITION: end those
   // relationships first (EndTrainerClientRelationship).
   rpc DeleteAccount(DeleteAccountRequest) returns (google.protobuf.Empty);

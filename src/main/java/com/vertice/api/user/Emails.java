@@ -14,4 +14,14 @@ public final class Emails {
     public static String normalize(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
     }
+
+    /**
+     * Whether a normalized email is on the {@code .invalid} TLD (RFC 2606), which can never receive
+     * mail. Refused on every write as defence in depth: nothing legitimate uses it, and it is the
+     * obvious shape for a "deleted account" placeholder.
+     */
+    public static boolean isReserved(String email) {
+        String domain = email.substring(email.lastIndexOf('@') + 1);
+        return domain.equals("invalid") || domain.endsWith(".invalid");
+    }
 }

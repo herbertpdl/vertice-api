@@ -9,8 +9,11 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    /** Matches through V25's unique index on {@code lower(email)}; pass an already normalized email. */
-    @Query("select u from User u where lower(u.email) = :email")
+    /**
+     * Matches through V25's unique index on {@code lower(email)}; pass an already normalized email.
+     * Never a deleted account (it has no email anyway since V30; the filter keeps that explicit).
+     */
+    @Query("select u from User u where lower(u.email) = :email and u.deletedAt is null")
     Optional<User> findByEmail(String email);
 
     Optional<User> findByCpf(String cpf);
@@ -22,10 +25,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select u.role from User u where u.id = :id and u.deletedAt is null")
     Optional<Role> findRoleById(Long id);
 
-    /** One {@code ListUsers} page: keyset over the primary key, so pages stay stable under inserts. */
-    List<User> findByIdGreaterThanOrderByIdAsc(Long afterId, Limit limit);
+    /**
+     * One {@code ListUsers} page: keyset over the primary key, so pages stay stable under inserts.
+     * Deleted accounts are left out: an anonymised row has nothing for ops or the dev login to use.
+     */
+    List<User> findByDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(Long afterId, Limit limit);
 
-    List<User> findByRoleAndIdGreaterThanOrderByIdAsc(Role role, Long afterId, Limit limit);
+    List<User> findByRoleAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(Role role, Long afterId, Limit limit);
 
     /** A deleted account has no password either, but must never be offered a setup link. */
     List<User> findByPasswordHashIsNullAndDeletedAtIsNull();

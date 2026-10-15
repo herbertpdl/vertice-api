@@ -69,9 +69,20 @@ REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inv
 - **`DeleteAccount` anonymises the user row and deletes what is about the person (D5).** The row
   can't go: plans the user wrote for other clients (as a trainer), relationship history and the
   exercises in those plans point at it, and they belong to the other party's history. So the row
-  keeps its id and role, and everything identifying goes: name "Usuário removido", email
-  `deleted+<id>@invalid` (unique, undeliverable), CPF, CREF, password hash and all four consent
-  fields cleared. V29 relaxes `ck_users_trainer_cpf` for deleted rows.
+  keeps its id and role, and everything identifying goes: name "Usuário removido"; email, CPF,
+  CREF, password hash and all four consent fields NULL. V29 relaxes `ck_users_trainer_cpf` and V30
+  `email NOT NULL` for deleted rows only.
+- **The email is NULL, not a placeholder** (review of #68). A predictable placeholder such as
+  `deleted+<id>@invalid` could be claimed by a live account first (self UpdateUser, a trainer
+  updating a client, public CreateUser), and the victim's deletion would then fail on
+  `uq_users_email_lower` and roll back for good. NULLs never collide on that index. As defence in
+  depth, `CreateUser`, `UpdateUser` and `CreateClientForTrainer` refuse any address on the reserved
+  `.invalid` TLD (INVALID_ARGUMENT).
+- **A deleted account is missing everywhere**, ADMIN included: `UserService#findByIdOrThrow`
+  (GetUser, UpdateUser, RecordConsent, SetUserPassword, DeleteUser → NOT_FOUND), the email lookup
+  (VerifyCredentials), and `ListUsers`, which leaves deleted rows out rather than marking them:
+  an anonymised row carries nothing ops or the dev login could use. Nothing can be written back
+  into it.
 - **Health-related data is deleted, not aggregated.** Workout feedback, set logs and workout logs
   are held on the client's consent (D4); with the account gone, so is the basis. Anonymised
   aggregates were the alternative: nothing in the product reads them yet, so keeping them would be
@@ -128,8 +139,12 @@ then the client's plan tree bottom-up, unused exercises, relationships, tokens) 
 - `user/AccountDeletionIntegrationTest` (populated: plan, sets, a completed log with a set log,
   feedback, consent, a setup link): a client's deletion removes the health data, the plan for them
   and the link, anonymises the row, kills the token, hides the account from setup links, and logs
-  ids only; a trainer with an active client is refused and unchanged; a trainer without one is
-  anonymised, loses the unused exercise, and their client keeps the plan, logs and feedback.
+  ids only, and leaves the row unreachable for ADMIN (GetUser, UpdateUser, SetUserPassword are
+  NOT_FOUND; ListUsers leaves it out); a second client of the same trainer keeps their plan tree,
+  log, set log, feedback, setup link and relationship; the deletion succeeds while a live row
+  holds the old placeholder address, and every write path refuses a `.invalid` address; a trainer
+  with an active client is refused and unchanged; a trainer without one is anonymised, loses the
+  unused exercise, and their client keeps the plan, logs and feedback.
 - `UserControllerTest`: self only (client, trainer, ADMIN each delete their own), services denied.
 - `config/DatasourceErrorDetailTest` pins `logServerErrorDetail=false`: the effective Hikari
   property, and a real unique violation whose message names the constraint but not the value.

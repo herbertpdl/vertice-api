@@ -197,11 +197,16 @@ decisions are pending legal review.
 native statements in `user/AccountDeletionRepository` in foreign-key order) deletes the caller's
 feedback, set logs, workout logs, the plans written for them and their unused private exercises,
 ends their relationships, deletes their setup tokens and anonymises the `users` row
-(`User#anonymise`: name `Usuário removido`, email `deleted+<id>@invalid`, CPF/CREF/password/consent
-cleared, `deleted_at` set; V29 relaxes `ck_users_trainer_cpf` for deleted rows). The row stays
-because plans the user wrote for others point at it. A deleted account is missing for
-`findRoleById` (tokens die), `CreatePasswordSetupToken` (`NOT_FOUND`) and
-`ListUsersWithoutPassword`. Each deletion logs one INFO line with actor id, user id and role only.
+(`User#anonymise`: name `Usuário removido`, email/CPF/CREF/password/consent set to NULL,
+`deleted_at` set; V29 relaxes `ck_users_trainer_cpf` and V30 `email NOT NULL` for deleted rows
+only). The email is NULL, never a placeholder: a predictable one could be claimed by a live account
+first and block the deletion on `uq_users_email_lower`. Addresses on the `.invalid` TLD are refused
+on every write (`Emails#isReserved`, INVALID_ARGUMENT) as defence in depth. The row stays because
+plans the user wrote for others point at it. A deleted account is missing everywhere:
+`findRoleById` (tokens die), `UserService#findByIdOrThrow` (GetUser, UpdateUser, RecordConsent,
+SetUserPassword, DeleteUser are `NOT_FOUND`, ADMIN included), the email lookup (VerifyCredentials),
+`ListUsers`, `ListUsersWithoutPassword` and `CreatePasswordSetupToken`. Each deletion logs one INFO
+line with actor id, user id and role only.
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's
