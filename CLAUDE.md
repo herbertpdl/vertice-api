@@ -149,7 +149,7 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `GetUser` | self (self view), ADMIN, the target's active trainer (detail view); a trainer with any plan for the target gets the summary view (dashboard names of former clients) |
 | `UpdateUser` | ADMIN (anything); self or the target's active trainer, role unchanged |
 | `SetUserPassword` | self, ADMIN |
-| `DeleteUser` | self, ADMIN |
+| `DeleteUser` | self, ADMIN; FAILED_PRECONDITION while the user has training data (plans, logs, clients, exercises) |
 | `ListTrainingPlans` | TRAINER (own plans), CLIENT (plans for them), ADMIN (as filtered) |
 | `GetTrainingPlan`, `ListWorkouts`, `GetWorkout`, `ListWorkoutExercises`, `GetWorkoutExercise`, `ListExerciseSets`, `GetExerciseSet` | the plan's trainer or client, ADMIN |
 | `CreateTrainingPlan` | TRAINER as themself (client on their active roster), ADMIN |
@@ -161,6 +161,7 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `GetExerciseProgress` | the client themself, their active trainer, ADMIN |
 | `ListWorkoutFeedback` | TRAINER for their own `trainer_id`, ADMIN |
 | `CreateClientForTrainer`, `ListClientsForTrainer`, `IsTrainersClient` | TRAINER for their own `trainer_id`, ADMIN (any trainer); never a CLIENT or a service |
+| `EndTrainerClientRelationship` | TRAINER for their own `trainer_id` and a client on their active roster, ADMIN (any active relationship); never a CLIENT or a service |
 | `ListExercises` | TRAINER (starter set + own), ADMIN (starter set) |
 | `GetExercise` | TRAINER (starter set or own), ADMIN (starter set), a CLIENT for an exercise in one of their workouts |
 | `CreateExercise`, `UpdateExercise`, `DeleteExercise` | TRAINER, on their own exercises only (the starter set is read-only) |
@@ -191,7 +192,13 @@ every personal-data column with its purpose, legal basis, retention and readers;
 decisions are pending legal review.
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
-CLIENT. Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,
+CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's
+account, the plans and every log stay. The trainer then loses everything an active link grants
+(roster, detail view, `GetExerciseProgress`, setup links, `CreateTrainingPlan`/`UpdateTrainingPlan`
+for that client) and keeps what the plan-tree rules give a plan's trainer, which don't look at the
+link: reading the plans they wrote and the logs under them, the summary `GetUser` view, and the
+plan-tree writes other than `UpdateTrainingPlan`. The client keeps reading those plans.
+Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,
 non-placeholder) `vertice.jwt.secret`. `CreatePasswordSetupToken` is effectively a password-reset
 primitive, hence its narrow rule; see `docs/specs/password-lifecycle/spec.md`.
 
@@ -227,6 +234,16 @@ constraint under `common/validation`.
 (`ResourceNotFoundException`, `DuplicateEmailException`, `DuplicateCpfException`,
 `ConstraintViolationException`), mapped to `Status` codes instead of `ProblemDetail`. Add new
 domain exceptions to both if they can surface from gRPC-reachable code paths.
+
+A delete that a foreign key would refuse is checked first and refused with
+`HasRecordedDataException` → `FAILED_PRECONDITION` (`<Resource> <id> has <what> and cannot be
+deleted`): a plan or workout with workout logs, a workout exercise or set with set logs, a user
+with training data (`ExerciseInUseException` is the catalog's equivalent). Behind that,
+`GrpcExceptionAdvice` maps any `DataIntegrityViolationException` (a missed check, or a race past
+one): unique key → `ALREADY_EXISTS` (the fixed duplicate email/CPF message for those indexes),
+foreign key → `FAILED_PRECONDITION`, anything else → `INVALID_ARGUMENT`. The description is fixed
+text and the log line carries only the SQLSTATE and constraint name: the driver's message names
+the offending values.
 
 ### Proto ↔ Java conversion helpers (`grpc/Proto*`)
 

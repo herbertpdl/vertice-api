@@ -2,6 +2,7 @@ package com.vertice.api.trainerclient;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
+import com.vertice.api.generated.grpc.trainerclient.v1.EndTrainerClientRelationshipRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerRequest;
@@ -35,6 +36,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -52,6 +55,10 @@ class TrainerClientControllerTest {
     @MockitoBean
     private UserRepository userRepository;
 
+    /** Read by the end-relationship rule: only {@link #TRAINER_ID}→{@link #CLIENT_ID} is active. */
+    @MockitoBean
+    private TrainerClientRepository trainerClientRepository;
+
     private ManagedChannel channel;
     /** Calls as trainer {@link #TRAINER_ID}, the trainer the requests below name. */
     private TrainerClientServiceGrpc.TrainerClientServiceBlockingStub stub;
@@ -62,6 +69,7 @@ class TrainerClientControllerTest {
         channel = NettyChannelBuilder.forTarget("localhost:19102").usePlaintext().build();
         callers = PlanCallers.of(TrainerClientServiceGrpc.newBlockingStub(channel));
         PlanCallers.storeUsers(userRepository);
+        when(trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(TRAINER_ID, CLIENT_ID)).thenReturn(true);
         stub = callers.trainer();
     }
 
@@ -242,7 +250,45 @@ class TrainerClientControllerTest {
         assertDenied(() -> otherTrainer.listClientsForTrainer(ListClientsForTrainerRequest.newBuilder().setTrainerId(TRAINER_ID).build()));
         assertDenied(() -> otherTrainer.isTrainersClient(
                 IsTrainersClientRequest.newBuilder().setTrainerId(TRAINER_ID).setClientId(CLIENT_ID).build()));
+        assertDenied(() -> otherTrainer.endTrainerClientRelationship(endRequest(TRAINER_ID, CLIENT_ID)));
         verifyNoInteractions(trainerClientService);
+    }
+
+    @Test
+    void endTrainerClientRelationship_endsTheTrainersActiveRelationship() {
+        stub.endTrainerClientRelationship(endRequest(TRAINER_ID, CLIENT_ID));
+
+        verify(trainerClientService).endRelationship(TRAINER_ID, CLIENT_ID);
+    }
+
+    @Test
+    void endTrainerClientRelationship_authorization() {
+        EndTrainerClientRelationshipRequest request = endRequest(TRAINER_ID, CLIENT_ID);
+
+        assertTrainerAsThemselfOrAdminRule(stub -> stub.endTrainerClientRelationship(request));
+    }
+
+    /** Not on the trainer's active roster, whether the client exists or not: the same refusal, before the service. */
+    @Test
+    void endTrainerClientRelationship_forAClientNotOnTheRoster_isDenied() {
+        assertDenied(() -> stub.endTrainerClientRelationship(endRequest(TRAINER_ID, PlanCallers.OTHER_CLIENT_ID)));
+        assertDenied(() -> stub.endTrainerClientRelationship(endRequest(TRAINER_ID, 999L)));
+        verifyNoInteractions(trainerClientService);
+    }
+
+    @Test
+    void endTrainerClientRelationship_adminWithNoActiveRelationship_throwsNotFound() {
+        doThrow(new ResourceNotFoundException("Active relationship for client", 999L))
+                .when(trainerClientService).endRelationship(TRAINER_ID, 999L);
+
+        assertThatThrownBy(() -> callers.admin().endTrainerClientRelationship(endRequest(TRAINER_ID, 999L)))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    private static EndTrainerClientRelationshipRequest endRequest(long trainerId, long clientId) {
+        return EndTrainerClientRelationshipRequest.newBuilder().setTrainerId(trainerId).setClientId(clientId).build();
     }
 
     private void assertTrainerAsThemselfOrAdminRule(Consumer<TrainerClientServiceGrpc.TrainerClientServiceBlockingStub> call) {

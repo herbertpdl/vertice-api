@@ -6,6 +6,7 @@ import com.vertice.api.generated.grpc.plan.v1.TrainingPlanServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
 import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
+import com.vertice.api.generated.grpc.trainerclient.v1.EndTrainerClientRelationshipRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.TrainerClientServiceGrpc;
@@ -147,13 +148,37 @@ class TrainerClientAuthorizationIntegrationTest {
     }
 
     /**
-     * Once the relationship ended, every rule that requires an active link refuses trainer A. The
-     * row is ended directly in the database: no RPC ends a relationship yet (P1-05).
+     * EndTrainerClientRelationship (P1-05): only the trainer themself or ADMIN. Trainer B, the
+     * client and the services are refused before anything changes; so is trainer A naming a client
+     * who isn't on their active roster.
      */
     @Test
+    void endTrainerClientRelationship_onlyTheTrainerOrAdmin() {
+        EndTrainerClientRelationshipRequest endA = endFor(trainerA, clientA);
+        assertDenied(() -> as(trainerB, TrainerClientServiceGrpc::newBlockingStub).endTrainerClientRelationship(endA));
+        assertDenied(() -> as(trainerB, TrainerClientServiceGrpc::newBlockingStub).endTrainerClientRelationship(endFor(trainerB, clientA)));
+        assertDenied(() -> as(clientA, TrainerClientServiceGrpc::newBlockingStub).endTrainerClientRelationship(endA));
+        for (ServiceSubject service : ServiceSubject.values()) {
+            assertDenied(() -> TestJwts.withBearer(TrainerClientServiceGrpc.newBlockingStub(channel),
+                    TestJwts.serviceToken(SECRET, service)).endTrainerClientRelationship(endA));
+        }
+        assertThat(trainerClientRepository.findById(linkA.getId()).orElseThrow().getEndedAt()).isNull();
+
+        TrainerClientServiceGrpc.TrainerClientServiceBlockingStub asAdmin = TestJwts.withBearer(
+                TrainerClientServiceGrpc.newBlockingStub(channel), TestJwts.token(SECRET, admin.getId(), Role.ADMIN));
+        asAdmin.endTrainerClientRelationship(endA);
+        assertThat(trainerClientRepository.findById(linkA.getId()).orElseThrow().getEndedAt()).isNotNull();
+
+        // Already ended: nothing active left, NOT_FOUND for ADMIN and the usual refusal for the trainer.
+        assertCode(() -> asAdmin.endTrainerClientRelationship(endA), Status.Code.NOT_FOUND);
+        assertDenied(() -> as(trainerA, TrainerClientServiceGrpc::newBlockingStub).endTrainerClientRelationship(endA));
+    }
+
+    /** Once the relationship ended, every rule that requires an active link refuses trainer A. */
+    @Test
     void anEndedRelationship_endsEveryActiveLinkPrivilege() {
-        jdbc.update("UPDATE trainer_clients SET ended_at = now() WHERE id = :id", Map.of("id", linkA.getId()));
         TrainerClientServiceGrpc.TrainerClientServiceBlockingStub asA = as(trainerA, TrainerClientServiceGrpc::newBlockingStub);
+        asA.endTrainerClientRelationship(endFor(trainerA, clientA));
         UserServiceGrpc.UserServiceBlockingStub usersAsA = as(trainerA, UserServiceGrpc::newBlockingStub);
 
         assertThat(asA.isTrainersClient(isClient(trainerA, clientA)).getIsClient()).isFalse();
@@ -183,6 +208,10 @@ class TrainerClientAuthorizationIntegrationTest {
 
     private <S extends AbstractStub<S>> S as(User user, Function<ManagedChannel, S> newStub) {
         return TestJwts.withBearer(newStub.apply(channel), TestJwts.token(SECRET, user.getId(), user.getRole()));
+    }
+
+    private static EndTrainerClientRelationshipRequest endFor(User trainer, User client) {
+        return EndTrainerClientRelationshipRequest.newBuilder().setTrainerId(trainer.getId()).setClientId(client.getId()).build();
     }
 
     private static ListClientsForTrainerRequest listFor(User trainer) {

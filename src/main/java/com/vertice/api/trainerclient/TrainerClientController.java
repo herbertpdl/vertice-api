@@ -1,8 +1,10 @@
 package com.vertice.api.trainerclient;
 
+import com.google.protobuf.Empty;
 import com.vertice.api.common.validation.Cpf;
 import com.vertice.api.common.validation.Password;
 import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
+import com.vertice.api.generated.grpc.trainerclient.v1.EndTrainerClientRelationshipRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerRequest;
@@ -50,6 +52,15 @@ public class TrainerClientController extends TrainerClientServiceGrpc.TrainerCli
     public void isTrainersClient(IsTrainersClientRequest request, StreamObserver<IsTrainersClientResponse> responseObserver) {
         authorization.checkIsTrainersClient(callerIdentityResolver.requireUser(), request.getTrainerId());
         responseObserver.onNext(trainerClientService.isTrainersClient(request.getTrainerId(), request.getClientId()));
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void endTrainerClientRelationship(EndTrainerClientRelationshipRequest request, StreamObserver<Empty> responseObserver) {
+        authorization.checkEndTrainerClientRelationship(callerIdentityResolver.requireUser(),
+                request.getTrainerId(), request.getClientId());
+        trainerClientService.endRelationship(request.getTrainerId(), request.getClientId());
+        responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }
 

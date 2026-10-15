@@ -73,6 +73,17 @@ public class TrainerClientService {
         return ListClientsForTrainerResponse.newBuilder().addAllClients(clients).build();
     }
 
+    /**
+     * Sets {@code ended_at} on the active row, so {@code uq_trainer_clients_active_client} frees the
+     * client for another trainer. Plans and logs keep pointing at both users: they are history,
+     * not part of the relationship.
+     */
+    public void endRelationship(Long trainerId, Long clientId) {
+        TrainerClient relationship = trainerClientRepository.findByTrainerIdAndClientIdAndEndedAtIsNull(trainerId, clientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Active relationship for client", clientId));
+        relationship.setEndedAt(DbInstants.now());
+    }
+
     @Transactional(readOnly = true)
     public IsTrainersClientResponse isTrainersClient(Long trainerId, Long clientId) {
         boolean isClient = trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(trainerId, clientId);

@@ -17,7 +17,7 @@ the code) before a public launch.
 | D2 | **Roles.** For a client's data (profile, plans, logs, feedback), the **trainer is the controller** and the **platform is the operator** that processes it on the trainer's behalf. For a trainer's own account data, the **platform is the controller**. **Pending legal review.** | Access rules: a client's data is readable by the client, their trainer and ADMIN only (CLAUDE.md matrix) |
 | D3 | **Legal basis for account data:** performance of a contract (LGPD art. 7, V). **Pending legal review.** | `CreateUser` requires and stores `accepted_terms_version` + `terms_accepted_at` (INVALID_ARGUMENT without it) |
 | D4 | **Legal basis for health-related data** (loads, session logs, workout feedback): specific consent (LGPD art. 11, I), recorded per user at first access. **Pending legal review.** | `RecordConsent(HEALTH_DATA, version)` → `health_data_consent_version` + `health_data_consent_at` |
-| D5 | **Retention:** account data is kept while the account is active. When the account is deleted, its personal data is deleted or anonymised (implemented by P1-05). **Pending legal review.** | Today `DeleteUser` deletes the row; P1-05 adds the full delete/anonymise path |
+| D5 | **Retention:** account data is kept while the account is active. When the account is deleted, its personal data is deleted or anonymised (implemented by P1-05). **Pending legal review.** | Today `DeleteUser` deletes the row only while the user has no training data (plans, logs, clients, exercises), and refuses with FAILED_PRECONDITION otherwise; P1-05's account deletion adds the anonymise path |
 | D6 | **Server logs are kept 30 days.** This is an assumption about the hosting setup, not something vertice-api enforces. **Pending legal review.** | Log retention is set where the logs are shipped, not in this repo |
 
 Consent is stored as the latest record only: a later `RecordConsent` replaces the earlier version
@@ -62,7 +62,7 @@ deleted (P1-05).
 
 | Column | Personal data | Purpose | Legal basis | Retention | Who can read it |
 | --- | --- | --- | --- | --- | --- |
-| `trainer_id`, `client_id`, `started_at`, `ended_at` | yes: who trains whom, and since when | the trainer's roster, and the access rules built on it | D3 | account (the row cascades when the client is deleted) | the trainer (roster), ADMIN |
+| `trainer_id`, `client_id`, `started_at`, `ended_at` | yes: who trains whom, and since when | the trainer's roster, and the access rules built on it | D3 | account: `EndTrainerClientRelationship` sets `ended_at` and keeps the row as history (the plans written during it point at both users); the row cascades when the client is deleted | the trainer (roster, while active), ADMIN |
 
 ### `training_plans`, `workouts`, `workout_exercises`, `exercise_sets`
 
@@ -102,7 +102,8 @@ and request metadata. Retention is D6 (30 days, assumption).
 
 - **Consent history and withdrawal** (art. 8 §5, art. 18 IX): today only the latest consent per
   type is kept, and there is no "withdraw" RPC.
-- **Deletion and anonymisation** of every table above, and data export (P1-05).
+- **Account deletion and anonymisation** of every table above, and data export (P1-05, next PRs).
+  Ending a relationship and the refusal of deletes over recorded data are done.
 - **Purge** expired and used `password_setup_tokens` rows.
 - **Legal review** of D1 to D6, and of the Terms, Privacy Policy and health-data notice texts
   whose versions are recorded here.
