@@ -40,6 +40,26 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+          # Full history, so the base branch is available locally for `buf breaking`.
+          fetch-depth: 0
+
+      # The protos under src/main/proto are the contract vertice-bff copies (see README, "Proto
+      # contract"). Lint and breaking-change checks run here, inside the required check, so an
+      # incompatible change can't be merged. Config: buf.yaml.
+      - name: Set up Buf
+        uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
+        with:
+          version: 1.73.0
+          setup_only: true
+
+      - name: Lint protos
+        run: buf lint
+
+      - name: Check protos for breaking changes
+        if: github.event_name == 'pull_request'
+        # subdir: compare the proto tree itself, so the check doesn't depend on the base branch
+        # having a buf.yaml.
+        run: buf breaking --against ".git#ref=refs/remotes/origin/${{ github.base_ref }},subdir=src/main/proto"
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5

@@ -46,6 +46,32 @@ All business functionality is implemented as gRPC services, defined as `.proto` 
 gRPC server reflection (for tools like `grpcurl`) is disabled by default and only enabled under
 the `local` profile.
 
+### Proto contract
+
+The `.proto` files under `src/main/proto/vertice` are the single source of truth for the API
+contract. [vertice-bff](https://github.com/herbertpdl/vertice-bff) doesn't define its own: it keeps
+a copy under its `protos/vertice/` (same relative paths, `*.proto` files only) taken from this
+directory at a pinned vertice-api commit. The copy is meant to be refreshed with
+`npm run sync:protos` in vertice-bff, with a CI step there that fails when the copy differs from
+the pinned ref; that script lands in vertice-bff's next PR (audit plan item P2-01), so until then
+the copy is updated by hand. Change a proto here first, merge it, then sync the BFF.
+
+CI guards the contract with [Buf](https://buf.build) (config in [`buf.yaml`](buf.yaml)):
+
+- `buf lint`: the `STANDARD` rules, minus four that the existing protos predate and that can't be
+  fixed without renaming enum values or messages the BFF uses (`ENUM_VALUE_PREFIX`,
+  `RPC_REQUEST_RESPONSE_UNIQUE`, `RPC_REQUEST_STANDARD_NAME`, `RPC_RESPONSE_STANDARD_NAME`).
+- `buf breaking` (pull requests only): the `FILE` rules against the PR's base branch, so a deleted
+  or renumbered field, a renamed message/RPC, a changed type or a moved file fails the build.
+  Comment-only changes pass. An intentional break needs a new package version (e.g. `v2`) instead.
+
+To run them locally (Buf CLI 1.73.0, as pinned in CI):
+
+```sh
+buf lint
+buf breaking --against '.git#branch=main,subdir=src/main/proto'
+```
+
 ## Prerequisites
 
 - JDK 25 (or let the Gradle toolchain provision one automatically)
@@ -164,8 +190,9 @@ docs/                      Domain model, requirements, and per-feature specs
 
 ## Continuous integration
 
-Every push and pull request against `main` runs `./gradlew build` against a PostgreSQL 16 service
-container, as defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Every push and pull request against `main` runs `buf lint` (and, on pull requests, `buf breaking`
+against the base branch; see [Proto contract](#proto-contract)) and then `./gradlew build` against a
+PostgreSQL 16 service container, as defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 A second job, `dependency-scan`, builds the Spring Boot jar and scans it with
 [Grype](https://github.com/anchore/grype), failing on any high or critical advisory in a runtime
