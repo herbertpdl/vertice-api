@@ -66,10 +66,6 @@ One log line records each deletion with the actor's id, the account's id and its
 | Column | Personal data | Purpose | Legal basis | Retention | Who can read it |
 | --- | --- | --- | --- | --- | --- |
 | `id` | identifier | links every record to the person | D3 | account | everyone who can see the user in any view |
-| `deleted_at` | metadata | marks an anonymised account; its tokens stop working | D3 | kept with the anonymised row | not returned |
-
-`email` is NULL only on a deleted account (V30's `ck_users_email_unless_deleted`). No account can
-hold an address on the reserved `.invalid` TLD.
 | `name` | yes | identify the person to their trainer or clients | D3 | account | every view |
 | `email` | yes | login, contact, first-access links | D3 | account | self, detail, contact |
 | `cpf` | yes, national ID | TRAINER: identity, CREF checks, invoicing. CLIENT: optional, only if given (D1) | D3 | account | self, detail (masked by the BFF by default) |
@@ -79,6 +75,10 @@ hold an address on the reserved `.invalid` TLD.
 | `accepted_terms_version`, `terms_accepted_at` | consent record | prove which Terms / Privacy Policy version the user accepted, and when | D3 (evidence of the contract) | account | self only |
 | `health_data_consent_version`, `health_data_consent_at` | consent record | prove the art. 11 consent for health-related data | D4 (evidence of the consent) | account | self only |
 | `created_at`, `updated_at` | metadata | record lifecycle, audits, retention | D3 | account | not returned |
+| `deleted_at` | metadata | marks an anonymised account; its tokens stop working | D3 | kept with the anonymised row | not returned |
+
+`email` is NULL only on a deleted account (V30's `ck_users_email_unless_deleted`). No account can
+hold an address on the reserved `.invalid` TLD.
 
 ### `trainer_clients`
 
