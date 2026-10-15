@@ -2,6 +2,7 @@ package com.vertice.api.user;
 
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.user.v1.ConsentState;
@@ -376,6 +377,19 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> service.deleteUser(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void deleteUser_refusesWhileTheUserHasTrainingData() {
+        User existing = new User();
+        existing.setId(4L);
+        when(userRepository.findById(4L)).thenReturn(Optional.of(existing));
+        when(userRepository.hasTrainingData(4L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteUser(4L))
+                .isInstanceOf(HasRecordedDataException.class)
+                .hasMessage("User 4 has training plans, workout logs, clients or exercises and cannot be deleted");
+        verify(userRepository, never()).delete(existing);
     }
 
     @Test

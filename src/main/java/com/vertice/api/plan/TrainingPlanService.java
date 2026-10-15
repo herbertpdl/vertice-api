@@ -1,11 +1,13 @@
 package com.vertice.api.plan;
 
 import com.vertice.api.common.exception.BusinessRuleViolationException;
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanResponse;
 import com.vertice.api.grpc.ProtoDates;
+import com.vertice.api.plan.session.WorkoutLogRepository;
 import com.vertice.api.trainerclient.TrainerClientRepository;
 import com.vertice.api.user.Role;
 import com.vertice.api.user.User;
@@ -28,6 +30,7 @@ public class TrainingPlanService {
     private final TrainingPlanMapper trainingPlanMapper;
     private final UserRepository userRepository;
     private final TrainerClientRepository trainerClientRepository;
+    private final WorkoutLogRepository workoutLogRepository;
 
     @Transactional(readOnly = true)
     public List<TrainingPlanResponse> listTrainingPlans(Long trainerId, Long clientId) {
@@ -74,8 +77,17 @@ public class TrainingPlanService {
         return trainingPlanMapper.toResponse(trainingPlanRepository.save(trainingPlan));
     }
 
+    /**
+     * The plan's workouts, exercises and sets go with it (JPA cascade), but not once a client has
+     * trained with it: a workout log is history, so the delete is refused instead of failing on
+     * {@code fk_workout_logs_workout}. Set logs always hang off a log of the same workout
+     * ({@code RecordSetLog} enforces it), so checking logs covers them.
+     */
     public void deleteTrainingPlan(Long id) {
         TrainingPlan trainingPlan = findByIdOrThrow(id);
+        if (workoutLogRepository.existsByWorkout_TrainingPlan_Id(id)) {
+            throw new HasRecordedDataException("TrainingPlan", id, "workout logs");
+        }
         trainingPlanRepository.delete(trainingPlan);
     }
 

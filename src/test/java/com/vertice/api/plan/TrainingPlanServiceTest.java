@@ -1,10 +1,12 @@
 package com.vertice.api.plan;
 
 import com.vertice.api.common.exception.BusinessRuleViolationException;
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.PlanLevel;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanRequest;
+import com.vertice.api.plan.session.WorkoutLogRepository;
 import com.vertice.api.trainerclient.TrainerClientRepository;
 import com.vertice.api.user.Role;
 import com.vertice.api.user.User;
@@ -39,12 +41,15 @@ class TrainingPlanServiceTest {
     @Mock
     private TrainerClientRepository trainerClientRepository;
 
+    @Mock
+    private WorkoutLogRepository workoutLogRepository;
+
     private TrainingPlanService service;
 
     @BeforeEach
     void setUp() {
         service = new TrainingPlanService(trainingPlanRepository, Mappers.getMapper(TrainingPlanMapper.class), userRepository,
-                trainerClientRepository);
+                trainerClientRepository, workoutLogRepository);
     }
 
     private static User user(long id, Role role) {
@@ -324,5 +329,27 @@ class TrainingPlanServiceTest {
 
         assertThatThrownBy(() -> service.deleteTrainingPlan(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void deleteTrainingPlan_refusesOnceAClientHasLoggedAWorkout() {
+        TrainingPlan plan = plan(5L, user(1L, Role.TRAINER), user(2L, Role.CLIENT));
+        when(trainingPlanRepository.findById(5L)).thenReturn(Optional.of(plan));
+        when(workoutLogRepository.existsByWorkout_TrainingPlan_Id(5L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteTrainingPlan(5L))
+                .isInstanceOf(HasRecordedDataException.class)
+                .hasMessage("TrainingPlan 5 has workout logs and cannot be deleted");
+        verify(trainingPlanRepository, never()).delete(plan);
+    }
+
+    @Test
+    void deleteTrainingPlan_deletesWhenNothingWasLogged() {
+        TrainingPlan plan = plan(5L, user(1L, Role.TRAINER), user(2L, Role.CLIENT));
+        when(trainingPlanRepository.findById(5L)).thenReturn(Optional.of(plan));
+
+        service.deleteTrainingPlan(5L);
+
+        verify(trainingPlanRepository).delete(plan);
     }
 }

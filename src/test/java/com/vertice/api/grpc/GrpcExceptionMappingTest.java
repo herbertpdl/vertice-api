@@ -5,9 +5,13 @@ import com.google.protobuf.StringValue;
 import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ExerciseInUseException;
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.exception.UnauthenticatedException;
+import com.vertice.api.user.Role;
+import com.vertice.api.user.User;
+import com.vertice.api.user.UserRepository;
 import io.grpc.BindableService;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
@@ -23,12 +27,19 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.sql.SQLException;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -47,9 +58,13 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 @SpringBootTest(properties = {"spring.grpc.server.port=19092", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 @Import(GrpcExceptionMappingTest.FailingServiceConfig.class)
+@ExtendWith(OutputCaptureExtension.class)
 class GrpcExceptionMappingTest {
 
     private static final String SERVICE_NAME = "com.vertice.api.grpc.test.Failing";
+    /** The values the real unique races below collide on; neither may reach a status or a log line. */
+    private static final String RACED_CPF = "52998224725";
+    private static final String RACED_EMAIL = "raced@exception-mapping.example.com";
 
     private static final MethodDescriptor<StringValue, Empty> TRIGGER_METHOD =
             MethodDescriptor.<StringValue, Empty>newBuilder()
@@ -144,6 +159,64 @@ class GrpcExceptionMappingTest {
                 });
     }
 
+    @Test
+    void hasRecordedDataException_mapsToFailedPrecondition() {
+        assertStatus("recorded-data", Status.Code.FAILED_PRECONDITION, "Workout 5 has workout logs and cannot be deleted");
+    }
+
+    /**
+     * A real unique violation through JPA, as the concurrent duplicate-CPF race produces it: the
+     * service's own pre-check can't see the other transaction's row, so the index is what refuses.
+     * The answer is the same fixed message as the pre-check's, never the CPF itself.
+     */
+    @Test
+    void dataIntegrityViolation_onTheCpfIndex_mapsToAlreadyExists_withTheFixedMessage_andLogsNoCpf(CapturedOutput output) {
+        assertStatus("unique-cpf", Status.Code.ALREADY_EXISTS, "CPF already in use");
+
+        assertThat(output.getAll()).contains("constraint=uq_users_cpf").doesNotContain(RACED_CPF);
+    }
+
+    /** Same race on the email index (V25's {@code lower(email)}), same rule: the email never leaks. */
+    @Test
+    void dataIntegrityViolation_onTheEmailIndex_mapsToAlreadyExists_withTheFixedMessage_andLogsNoEmail(CapturedOutput output) {
+        assertStatus("unique-email", Status.Code.ALREADY_EXISTS, "Email already in use");
+
+        assertThat(output.getAll()).contains("constraint=uq_users_email_lower").doesNotContainIgnoringCase(RACED_EMAIL);
+    }
+
+    @Test
+    void dataIntegrityViolation_onAnUnnamedUniqueKey_mapsToAlreadyExists_withoutTheValue() {
+        assertStatus("unique", Status.Code.ALREADY_EXISTS, "A record with the same unique value already exists");
+    }
+
+    @Test
+    void dataIntegrityViolation_onAForeignKey_mapsToFailedPrecondition_withoutTheValue() {
+        assertStatus("foreign-key", Status.Code.FAILED_PRECONDITION,
+                "The change conflicts with related data: the record is still in use, or refers to one that does not exist");
+    }
+
+    /** A validation gap, not a race: still INVALID_ARGUMENT to the caller, but an ERROR line for us. */
+    @Test
+    void dataIntegrityViolation_onACheckConstraint_mapsToInvalidArgument_andLogsAnError(CapturedOutput output) {
+        assertStatus("check", Status.Code.INVALID_ARGUMENT, "The request violates a data integrity rule");
+
+        assertThat(output.getAll()).contains("ERROR").contains("sqlState=23514").doesNotContain("leak@example.com");
+    }
+
+    @Test
+    void dataIntegrityViolation_withoutASqlState_mapsToInvalidArgument() {
+        assertStatus("no-sql-state", Status.Code.INVALID_ARGUMENT, "The request violates a data integrity rule");
+    }
+
+    private void assertStatus(String selector, Status.Code code, String description) {
+        assertThatThrownBy(() -> trigger(selector))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(code);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo(description);
+                });
+    }
+
     private Empty trigger(String selector) {
         channel = NettyChannelBuilder.forTarget("localhost:19092").usePlaintext().build();
         return ClientCalls.blockingUnaryCall(channel, TRIGGER_METHOD, CallOptions.DEFAULT,
@@ -154,7 +227,8 @@ class GrpcExceptionMappingTest {
     static class FailingServiceConfig {
 
         @Bean
-        BindableService failingService(GrpcRequestValidator validator) {
+        BindableService failingService(GrpcRequestValidator validator, UserRepository userRepository,
+                                       PlatformTransactionManager transactionManager) {
             ServerCalls.UnaryMethod<StringValue, Empty> handler = (request, responseObserver) -> {
                 switch (request.getValue()) {
                     case "not-found" -> throw new ResourceNotFoundException("Trainer", 1L);
@@ -166,6 +240,15 @@ class GrpcExceptionMappingTest {
                     case "business-rule" -> throw new BusinessRuleViolationException("Workout 1 is not assigned to client 2");
                     case "unauthenticated" -> throw new UnauthenticatedException();
                     case "permission-denied" -> throw PermissionDeniedException.noAccess("exercise", 7L);
+                    case "recorded-data" -> throw new HasRecordedDataException("Workout", 5L, "workout logs");
+                    case "unique-cpf" -> saveTwoUsers(userRepository, transactionManager,
+                            user("first", RACED_CPF), user("second", RACED_CPF));
+                    case "unique-email" -> saveTwoUsers(userRepository, transactionManager,
+                            userWithEmail(RACED_EMAIL), userWithEmail(RACED_EMAIL.toUpperCase()));
+                    case "no-sql-state" -> throw new DataIntegrityViolationException("no driver cause");
+                    case "unique" -> throw integrityViolation("23505");
+                    case "foreign-key" -> throw integrityViolation("23503");
+                    case "check" -> throw integrityViolation("23514");
                     default -> { }
                 }
                 responseObserver.onNext(Empty.getDefaultInstance());
@@ -178,6 +261,39 @@ class GrpcExceptionMappingTest {
         }
 
         private record ValidationProbe(@NotBlank String name) {
+        }
+
+        /** The driver's text names the offending value; the mapped status must not. */
+        private static DataIntegrityViolationException integrityViolation(String sqlState) {
+            return new DataIntegrityViolationException("could not execute statement",
+                    new SQLException("ERROR: violation. Detail: Key (email)=(leak@example.com)", sqlState));
+        }
+
+        /** Rolled back: the duplicate never commits, and neither does the first row. */
+        private static void saveTwoUsers(UserRepository userRepository, PlatformTransactionManager transactionManager,
+                                         User first, User second) {
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                userRepository.saveAndFlush(first);
+                userRepository.saveAndFlush(second);
+            });
+        }
+
+        private static User user(String name, String cpf) {
+            User user = new User();
+            user.setName(name);
+            user.setEmail(name + "-" + System.nanoTime() + "@exception-mapping.example.com");
+            user.setCpf(cpf);
+            user.setRole(Role.CLIENT);
+            return user;
+        }
+
+        /** No CPF (optional for a CLIENT), so only the email index can refuse the second row. */
+        private static User userWithEmail(String email) {
+            User user = new User();
+            user.setName("Raced");
+            user.setEmail(email);
+            user.setRole(Role.CLIENT);
+            return user;
         }
     }
 }

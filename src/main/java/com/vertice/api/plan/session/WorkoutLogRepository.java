@@ -13,4 +13,8 @@ public interface WorkoutLogRepository extends JpaRepository<WorkoutLog, Long> {
     List<WorkoutLog> findByClientIdAndWorkout_TrainingPlan_IdAndWeekStartDate(Long clientId, Long trainingPlanId, LocalDate weekStartDate);
 
     Optional<WorkoutLog> findFirstByClientIdAndWorkoutIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(Long clientId, Long workoutId);
+
+    boolean existsByWorkoutId(Long workoutId);
+
+    boolean existsByWorkout_TrainingPlan_Id(Long trainingPlanId);
 }

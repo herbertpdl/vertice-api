@@ -37,4 +37,18 @@ public interface UserRepository extends JpaRepository<User, Long> {
               and tc.client.passwordHash is null
             """)
     List<User> findActiveClientsWithoutPassword(Long trainerId);
+
+    /**
+     * Whether any row that has no {@code ON DELETE} rule points at the user: a plan they wrote or
+     * that was written for them, a workout log of theirs, a relationship as the trainer (ended
+     * ones too) or a private exercise. Their own {@code trainer_clients} rows as the client and
+     * their password setup tokens cascade, so they don't count.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT EXISTS (SELECT 1 FROM training_plans WHERE trainer_id = :id OR client_id = :id)
+                OR EXISTS (SELECT 1 FROM workout_logs WHERE client_id = :id)
+                OR EXISTS (SELECT 1 FROM trainer_clients WHERE trainer_id = :id)
+                OR EXISTS (SELECT 1 FROM exercises WHERE owner_id = :id)
+            """)
+    boolean hasTrainingData(Long id);
 }

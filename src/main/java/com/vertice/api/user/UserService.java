@@ -2,6 +2,7 @@ package com.vertice.api.user;
 
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.time.DbInstants;
@@ -159,8 +160,15 @@ public class UserService {
         return userMapper.toConsentState(userRepository.save(user));
     }
 
+    /**
+     * Refused while the user has training data (REL-API-003): deleting them would break a foreign
+     * key. Removing an account with data is anonymisation, a separate path (P1-05).
+     */
     public void deleteUser(Long id) {
         User user = findByIdOrThrow(id);
+        if (userRepository.hasTrainingData(id)) {
+            throw new HasRecordedDataException("User", id, "training plans, workout logs, clients or exercises");
+        }
         userRepository.delete(user);
     }
 

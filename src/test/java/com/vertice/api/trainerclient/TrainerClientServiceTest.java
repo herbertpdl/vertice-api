@@ -179,4 +179,23 @@ class TrainerClientServiceTest {
 
         assertThat(response.getIsClient()).isFalse();
     }
+
+    @Test
+    void endRelationship_setsEndedAtOnTheActiveRow() {
+        TrainerClient active = new TrainerClient();
+        when(trainerClientRepository.findByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(Optional.of(active));
+
+        service.endRelationship(1L, 2L);
+
+        assertThat(active.getEndedAt()).isNotNull();
+    }
+
+    @Test
+    void endRelationship_throwsWhenThereIsNoActiveRelationship() {
+        when(trainerClientRepository.findByTrainerIdAndClientIdAndEndedAtIsNull(1L, 2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.endRelationship(1L, 2L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Active relationship for client with id 2 not found");
+    }
 }

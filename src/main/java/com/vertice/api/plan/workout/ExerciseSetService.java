@@ -1,9 +1,11 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetRequest;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetResponse;
+import com.vertice.api.plan.session.SetLogRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,7 @@ public class ExerciseSetService {
     private final ExerciseSetRepository exerciseSetRepository;
     private final ExerciseSetMapper exerciseSetMapper;
     private final WorkoutExerciseRepository workoutExerciseRepository;
+    private final SetLogRepository setLogRepository;
 
     @Transactional(readOnly = true)
     public List<ExerciseSetResponse> listExerciseSets(Long workoutExerciseId) {
@@ -47,6 +50,9 @@ public class ExerciseSetService {
 
     public void deleteExerciseSet(Long id) {
         ExerciseSet exerciseSet = findByIdOrThrow(id);
+        if (setLogRepository.existsByExerciseSetId(id)) {
+            throw new HasRecordedDataException("ExerciseSet", id, "logged results");
+        }
         exerciseSetRepository.delete(exerciseSet);
     }
 

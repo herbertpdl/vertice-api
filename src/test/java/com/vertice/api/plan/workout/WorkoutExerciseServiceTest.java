@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseCreateRequest;
@@ -7,6 +8,7 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseRequest;
 import com.vertice.api.plan.exercise.Exercise;
 import com.vertice.api.plan.TrainingPlan;
 import com.vertice.api.plan.exercise.ExerciseRepository;
+import com.vertice.api.plan.session.SetLogRepository;
 import com.vertice.api.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,12 +39,15 @@ class WorkoutExerciseServiceTest {
     @Mock
     private ExerciseRepository exerciseRepository;
 
+    @Mock
+    private SetLogRepository setLogRepository;
+
     private WorkoutExerciseService service;
 
     @BeforeEach
     void setUp() {
         service = new WorkoutExerciseService(workoutExerciseRepository, Mappers.getMapper(WorkoutExerciseMapper.class),
-                workoutRepository, exerciseRepository);
+                workoutRepository, exerciseRepository, setLogRepository);
     }
 
     private static final long TRAINER_ID = 10L;
@@ -209,5 +214,18 @@ class WorkoutExerciseServiceTest {
 
         assertThatThrownBy(() -> service.deleteWorkoutExercise(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void deleteWorkoutExercise_refusesOnceAnyOfItsSetsHasALoggedResult() {
+        WorkoutExercise workoutExercise = new WorkoutExercise();
+        workoutExercise.setId(7L);
+        when(workoutExerciseRepository.findById(7L)).thenReturn(Optional.of(workoutExercise));
+        when(setLogRepository.existsByExerciseSet_WorkoutExercise_Id(7L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteWorkoutExercise(7L))
+                .isInstanceOf(HasRecordedDataException.class)
+                .hasMessage("WorkoutExercise 7 has logged sets and cannot be deleted");
+        verify(workoutExerciseRepository, never()).delete(workoutExercise);
     }
 }
