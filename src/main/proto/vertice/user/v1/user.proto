@@ -47,6 +47,14 @@ service UserService {
   // call (UNAUTHENTICATED). A TRAINER with active clients gets FAILED_PRECONDITION: end those
   // relationships first (EndTrainerClientRelationship).
   rpc DeleteAccount(DeleteAccountRequest) returns (google.protobuf.Empty);
+  // Everything vertice-api stores about the calling user (P1-05, LGPD art. 18 II and V), as one
+  // JSON document: profile, consent, relationships, plans as their client or trainer (whole tree),
+  // their own workout logs with set logs and feedback, and their private exercises. Credentials
+  // (password hash, setup links) are never included. Self only: the request has no id, and a
+  // service gets PERMISSION_DENIED. RESOURCE_EXHAUSTED when the account exceeds the export bounds
+  // (vertice.export.*) rather than a truncated document. A deleted account can't call it (its
+  // tokens are UNAUTHENTICATED).
+  rpc ExportUserData(ExportUserDataRequest) returns (ExportUserDataResponse);
   // The user themself or ADMIN.
   rpc SetUserPassword(SetUserPasswordRequest) returns (google.protobuf.Empty);
 
@@ -181,6 +189,17 @@ message DeleteUserRequest {
 
 // Empty on purpose: an account is only ever deleted by its own user (the token's).
 message DeleteAccountRequest {
+}
+
+// Empty on purpose: a user only ever exports their own data (the token's).
+message ExportUserDataRequest {
+}
+
+message ExportUserDataResponse {
+  // UTF-8 JSON. Top-level keys: formatVersion (bumped when a key is renamed or removed),
+  // exportedAt, profile, consent, relationships, plans, workoutLogs, exercises. Timestamps are
+  // ISO-8601 UTC, dates ISO-8601, decimals JSON numbers; a value never set is null.
+  string json = 1;
 }
 
 message SetUserPasswordRequest {
