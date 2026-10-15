@@ -54,9 +54,10 @@ relationships, so no client loses a plan they are following without notice.
 | plans written for the user, with their workouts, workout exercises and sets | deleted | about the user's training, prescribed to them (D3/D4) |
 | plans the user wrote for others (as the trainer), and the exercises used in them | kept, pointing at the anonymised row | they belong to those clients' history |
 | the user's private exercises that no workout uses | deleted | nothing references them |
+| the user's private exercises used in a workout (as the trainer) | kept, including their free-text `name` and `description`, owned by the anonymised row | they are part of the plans other clients keep. That free text is plan content the trainer wrote; if it names a person, it stays with the plan. **Pending legal review.** |
 | `trainer_clients` rows on either side | `ended_at` set; the rows stay as anonymous history | no active relationship survives the account |
 | `password_setup_tokens` | deleted | credentials of a closed account |
-| `users` row | anonymised: name "Usuário removido", email `deleted+<id>@invalid`, CPF, CREF, password and every consent field cleared, `deleted_at` set. Id and role stay | other records still reference the row; `deleted_at` makes every token of the account invalid at once |
+| `users` row | anonymised: name "Usuário removido"; email, CPF, CREF, password and every consent field set to NULL; `deleted_at` set. Id and role stay. Every user RPC treats the row as missing (NOT_FOUND, left out of lists) | other records still reference the row; `deleted_at` makes every token of the account invalid at once. The email is NULL rather than a placeholder, which a live account could claim first and block the deletion with |
 
 One log line records each deletion with the actor's id, the account's id and its role, nothing else.
 
@@ -66,6 +67,9 @@ One log line records each deletion with the actor's id, the account's id and its
 | --- | --- | --- | --- | --- | --- |
 | `id` | identifier | links every record to the person | D3 | account | everyone who can see the user in any view |
 | `deleted_at` | metadata | marks an anonymised account; its tokens stop working | D3 | kept with the anonymised row | not returned |
+
+`email` is NULL only on a deleted account (V30's `ck_users_email_unless_deleted`). No account can
+hold an address on the reserved `.invalid` TLD.
 | `name` | yes | identify the person to their trainer or clients | D3 | account | every view |
 | `email` | yes | login, contact, first-access links | D3 | account | self, detail, contact |
 | `cpf` | yes, national ID | TRAINER: identity, CREF checks, invoicing. CLIENT: optional, only if given (D1) | D3 | account | self, detail (masked by the BFF by default) |
