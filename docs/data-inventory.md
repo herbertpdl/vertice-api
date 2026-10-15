@@ -15,7 +15,7 @@ the code) before a public launch.
 | --- | --- | --- |
 | D1 | **CPF is optional for a CLIENT** (data minimisation, LGPD art. 6, III) and **required for a TRAINER** (identity, CREF checks and invoicing). **Pending legal review.** | `UserService#assertCpfRequiredForTrainer`, V27 `ck_users_trainer_cpf`, partial unique index `uq_users_cpf` |
 | D2 | **Roles.** For a client's data (profile, plans, logs, feedback), the **trainer is the controller** and the **platform is the operator** that processes it on the trainer's behalf. For a trainer's own account data, the **platform is the controller**. **Pending legal review.** | Access rules: a client's data is readable by the client, their trainer and ADMIN only (CLAUDE.md matrix) |
-| D3 | **Legal basis for account data:** performance of a contract (LGPD art. 7, V). **Pending legal review.** | `CreateUser` stores `accepted_terms_version` + `terms_accepted_at` |
+| D3 | **Legal basis for account data:** performance of a contract (LGPD art. 7, V). **Pending legal review.** | `CreateUser` requires and stores `accepted_terms_version` + `terms_accepted_at` (INVALID_ARGUMENT without it) |
 | D4 | **Legal basis for health-related data** (loads, session logs, workout feedback): specific consent (LGPD art. 11, I), recorded per user at first access. **Pending legal review.** | `RecordConsent(HEALTH_DATA, version)` → `health_data_consent_version` + `health_data_consent_at` |
 | D5 | **Retention:** account data is kept while the account is active. When the account is deleted, its personal data is deleted or anonymised (implemented by P1-05). **Pending legal review.** | Today `DeleteUser` deletes the row; P1-05 adds the full delete/anonymise path |
 | D6 | **Server logs are kept 30 days.** This is an assumption about the hosting setup, not something vertice-api enforces. **Pending legal review.** | Log retention is set where the logs are shipped, not in this repo |
@@ -100,9 +100,6 @@ and request metadata. Retention is D6 (30 days, assumption).
 
 ## 4. Follow-ups
 
-- **CreateUser requires the Terms version** once vertice-bff sends it:
-  `vertice.consent.terms-required-on-registration` is `false` until then, then turned on for good
-  and the switch removed.
 - **Consent history and withdrawal** (art. 8 §5, art. 18 IX): today only the latest consent per
   type is kept, and there is no "withdraw" RPC.
 - **Deletion and anonymisation** of every table above, and data export (P1-05).

@@ -86,7 +86,8 @@ class UserConsentIntegrationTest {
     void aTrainerWithoutCpf_isRefused() {
         assertCode(() -> TestJwts.withBearer(users, TestJwts.serviceToken(SECRET, ServiceSubject.BFF))
                 .createUser(UserCreateRequest.newBuilder().setName("Trainer").setEmail(uniqueEmail("trainer"))
-                        .setPassword(PASSWORD).setRole(com.vertice.api.generated.grpc.user.v1.Role.TRAINER).build()),
+                        .setPassword(PASSWORD).setAcceptedTermsVersion("2026-10-14")
+                        .setRole(com.vertice.api.generated.grpc.user.v1.Role.TRAINER).build()),
                 Status.Code.INVALID_ARGUMENT);
     }
 

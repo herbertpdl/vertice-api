@@ -184,8 +184,7 @@ messages (`Email already in use`, `CPF already in use`) that never echo the valu
 (`accepted_terms_version`, `terms_accepted_at`, set by `CreateUser` or `RecordConsent(TERMS)`) and
 the health-data consent (`health_data_consent_version`, `health_data_consent_at`,
 `RecordConsent(HEALTH_DATA)`), each version and time together (V27 check constraints). `CreateUser`
-accepts a registration without the version while `vertice.consent.terms-required-on-registration`
-is off (the default until vertice-bff sends it). CPF is optional for a CLIENT and required for a
+requires the version (INVALID_ARGUMENT when empty): no account without an acceptance on record. CPF is optional for a CLIENT and required for a
 TRAINER (`UserService`, backstopped by V27's `ck_users_trainer_cpf`); an empty CPF is stored as
 NULL, and `uq_users_cpf` is a partial unique index over set values. `docs/data-inventory.md` lists
 every personal-data column with its purpose, legal basis, retention and readers; its product/legal

@@ -35,7 +35,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.grpc.server.service.GrpcService;
 
 import java.util.List;
@@ -47,7 +46,6 @@ import java.util.Set;
  */
 @GrpcService
 @RequiredArgsConstructor
-@EnableConfigurationProperties(ConsentProperties.class)
 public class UserController extends UserServiceGrpc.UserServiceImplBase {
 
     /** A consent text version: what the client was shown, e.g. {@code 2026-10-14} or {@code v1.2}. */
@@ -58,7 +56,6 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     private final GrpcRequestValidator validator;
     private final CallerIdentityResolver callerIdentityResolver;
     private final UserAuthorization authorization;
-    private final ConsentProperties consentProperties;
 
     @Override
     public void listUsers(ListUsersRequest request, StreamObserver<ListUsersResponse> responseObserver) {
@@ -93,8 +90,8 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
         validator.validate(new CreateValidation(request.getName(), Emails.normalize(request.getEmail()), request.getPassword(),
                 request.getCpf(), ProtoStrings.emptyToNull(request.getAcceptedTermsVersion())));
         requireRole(request.getRole());
-        // TODO(P1-04 follow-up): always required once vertice-bff sends it; then drop the switch.
-        if (consentProperties.termsRequiredOnRegistration() && request.getAcceptedTermsVersion().isEmpty()) {
+        // No account without an accepted Terms / Privacy Policy version on record (P1-04).
+        if (request.getAcceptedTermsVersion().isEmpty()) {
             throw new ConstraintViolationException("accepted_terms_version: must be set", Set.of());
         }
         authorization.checkCreateUser(callerIdentityResolver.resolve(), domainRole(request.getRole()));
