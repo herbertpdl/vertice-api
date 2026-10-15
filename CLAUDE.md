@@ -257,8 +257,15 @@ hand-written code) — mirrors the `.proto` package path, e.g. `trainerclient/v1
 gRPC handlers build request objects by hand from proto fields, so Bean Validation doesn't run
 automatically the way it does for REST's `@RequestBody`. The pattern (see any `*Controller`):
 define a private `record` with Bean Validation annotations mirroring the fields to validate, then
-call `GrpcRequestValidator#validate(record)` before delegating to the service. `@Cpf` is a custom
-constraint under `common/validation`.
+call `GrpcRequestValidator#validate(record)` before delegating to the service. `@Cpf` and
+`@Password` are custom constraints under `common/validation`.
+
+Every free-text field has a `@Size(max = …)` equal to its `VARCHAR(n)` column, and every quantity
+(reps, seconds, order, set number) an `@Max` (P1-09). `@Size` counts UTF-16 units, as JavaScript's `.length` does in the BFF and web, so a
+character outside the BMP counts twice and the bound is never looser than Postgres's. The
+workout-tree numbers and the caps (20 exercises per workout, 10 sets per exercise, on the per-item
+RPCs too) live in `plan/workout/WorkoutLimits`; decimal precision per column in `ProtoDecimals`.
+vertice-bff and vertice-web-react mirror these numbers, so change them together.
 
 ### Exception mapping: two parallel handlers, same exception types
 

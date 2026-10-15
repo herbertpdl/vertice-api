@@ -208,6 +208,12 @@ every write; Jackson's wrapping of the refusal is unwrapped). `ExportTooLargeExc
 - vertice-bff (P1-05 step 2): `DELETE /auth/me` → `DeleteAccount`, `GET /auth/me/export` →
   `ExportUserData` (as a JSON file download), `GET/PATCH /auth/me`.
 - Paging or streaming the export, if an account ever reaches the bounds.
+- Estimate the size while reading, not only while writing. `BoundedOutputStream` bounds the JSON,
+  but each section's rows are read into memory first, so the peak before serialization is
+  `max-rows` times the widest row: for feedback, 20 000 rows of up to 2 000 characters (the text
+  caps P1-09 enforces on every write; feedback is also capped at 10 entries per workout log).
+  Summing the text lengths as rows are mapped, and refusing once the sum alone passes `max-size`,
+  would stop an oversized section before it is all in memory.
 - ADMIN-initiated `DeleteAccount` for a support request.
 - vertice-bff: `DELETE /clients/:id` calls `EndTrainerClientRelationship` instead of `DeleteUser`
   (P1-05 step 2).
