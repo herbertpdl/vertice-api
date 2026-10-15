@@ -127,10 +127,7 @@ message UserCreateRequest {
   Role role = 6;
   // The Terms of Use / Privacy Policy version the user accepted at registration, at most 32
   // characters; stored with the server's time. Required by CreateUser (INVALID_ARGUMENT when
-  // empty) when vertice.consent.terms-required-on-registration is on. It is off until vertice-bff
-  // sends the field (P1-04 follow-up): an empty value then creates the user with no acceptance
-  // recorded, and they are asked at first access. CreateClientForTrainer never sets it: the client
-  // accepts for themself.
+  // empty). CreateClientForTrainer never sets it: the client accepts for themself.
   string accepted_terms_version = 7;
 }
 

@@ -51,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -69,6 +70,7 @@ import static org.mockito.Mockito.when;
 class UserControllerTest {
 
     private static final String VALID_CPF = "11144477735";
+    private static final String TERMS_VERSION = "2026-10-14";
 
     private static final long ADMIN_ID = 1L;
     private static final long TRAINER_ID = 10L;
@@ -207,7 +209,7 @@ class UserControllerTest {
         UserResponse created = UserResponse.newBuilder().setId(1L).setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).setCref("123456-G/SP").build();
         when(userService.createUser(any())).thenReturn(created);
 
-        UserResponse response = bff.createUser(UserCreateRequest.newBuilder()
+        UserResponse response = bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).setCref("123456-G/SP").build());
 
         assertThat(response).isEqualTo(UserResponse.newBuilder()
@@ -215,32 +217,53 @@ class UserControllerTest {
     }
 
     @Test
+    void createUser_passesTheAcceptedTermsVersionOn() {
+        when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.TRAINER).build());
+
+        bff.createUser(registration(Role.TRAINER));
+
+        verify(userService).createUser(argThat(request -> request.getAcceptedTermsVersion().equals(TERMS_VERSION)));
+    }
+
+    /** No account without an accepted Terms / Privacy Policy version on record (P1-04). */
+    @Test
+    void createUser_withoutTermsVersion_throwsInvalidArgument() {
+        assertThatThrownBy(() -> bff.createUser(registration(Role.TRAINER).toBuilder().clearAcceptedTermsVersion().build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
+                    assertThat(ex.getStatus().getDescription()).contains("accepted_terms_version");
+                });
+        verifyNoInteractions(userService);
+    }
+
+    @Test
     void createUser_withMissingRole_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).build()));
     }
 
     @Test
     void createUser_withBlankName_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build()));
     }
 
     @Test
     void createUser_withMalformedEmail_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("not-an-email").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build()));
     }
 
     @Test
     void createUser_withShortPassword_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("short").setCpf(VALID_CPF).setRole(Role.TRAINER).build()));
     }
 
     @Test
     void createUser_withInvalidCpf_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf("00000000000").setRole(Role.TRAINER).build()));
     }
 
@@ -248,7 +271,7 @@ class UserControllerTest {
     void createUser_withDuplicateEmail_throwsAlreadyExists() {
         when(userService.createUser(any())).thenThrow(new DuplicateEmailException());
 
-        assertThatThrownBy(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertThatThrownBy(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
@@ -258,7 +281,7 @@ class UserControllerTest {
     @Test
     void createUser_withDuplicateEmailOrCpf_descriptionDoesNotEchoTheValue() {
         when(userService.createUser(any())).thenThrow(new DuplicateEmailException()).thenThrow(new DuplicateCpfException());
-        UserCreateRequest request = UserCreateRequest.newBuilder()
+        UserCreateRequest request = UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build();
 
         assertThat(List.of(descriptionOf(() -> bff.createUser(request)), descriptionOf(() -> bff.createUser(request))))
@@ -270,7 +293,7 @@ class UserControllerTest {
     void createUser_withDuplicateCpf_throwsAlreadyExists() {
         when(userService.createUser(any())).thenThrow(new DuplicateCpfException());
 
-        assertThatThrownBy(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertThatThrownBy(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
@@ -356,7 +379,7 @@ class UserControllerTest {
 
     @Test
     void createUser_withPasswordOver72Chars_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("x".repeat(73)).setCpf(VALID_CPF).setRole(Role.TRAINER).build()));
     }
 
@@ -365,14 +388,14 @@ class UserControllerTest {
         UserResponse created = UserResponse.newBuilder().setId(1L).setEmail("coach@vertice.com").setRole(Role.TRAINER).build();
         when(userService.createUser(any())).thenReturn(created);
 
-        assertThat(bff.createUser(UserCreateRequest.newBuilder()
+        assertThat(bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail(" Coach@Vertice.com ").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build()))
                 .isEqualTo(created);
     }
 
     @Test
     void createUser_withoutPassword_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).build()));
     }
 
@@ -387,7 +410,7 @@ class UserControllerTest {
 
     @Test
     void createUser_withPasswordOver72Bytes_throwsInvalidArgument() {
-        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder()
+        assertInvalidArgument(() -> bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword(MULTI_BYTE_PASSWORD).setCpf(VALID_CPF).setRole(Role.TRAINER).build()));
         verifyNoInteractions(userService);
     }
@@ -643,7 +666,7 @@ class UserControllerTest {
     }
 
     private static UserCreateRequest registration(Role role) {
-        return UserCreateRequest.newBuilder()
+        return UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(role).build();
     }
 
@@ -841,7 +864,7 @@ class UserControllerTest {
     void createUser_withoutTermsVersion_isAcceptedWhileTheSwitchIsOff() {
         when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.TRAINER).build());
 
-        bff.createUser(UserCreateRequest.newBuilder()
+        bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build());
 
         verify(userService).createUser(any());
@@ -850,7 +873,7 @@ class UserControllerTest {
     @Test
     void createUser_withTermsVersion_passesItToTheService() {
         when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.TRAINER).build());
-        UserCreateRequest request = UserCreateRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com")
+        UserCreateRequest request = UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION).setName("Coach").setEmail("coach@vertice.com")
                 .setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).setAcceptedTermsVersion("2026-10-14").build();
 
         bff.createUser(request);
@@ -860,7 +883,7 @@ class UserControllerTest {
 
     @Test
     void createUser_withMalformedTermsVersion_throwsInvalidArgument() {
-        UserCreateRequest.Builder request = UserCreateRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com")
+        UserCreateRequest.Builder request = UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION).setName("Coach").setEmail("coach@vertice.com")
                 .setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER);
 
         assertInvalidArgument(() -> bff.createUser(request.setAcceptedTermsVersion(" ").build()));
@@ -872,7 +895,7 @@ class UserControllerTest {
     void createUser_clientWithoutCpf_passesValidation() {
         when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.CLIENT).build());
 
-        bff.createUser(UserCreateRequest.newBuilder()
+        bff.createUser(UserCreateRequest.newBuilder().setAcceptedTermsVersion(TERMS_VERSION)
                 .setName("Client").setEmail("client@vertice.com").setPassword("supersecret1").setRole(Role.CLIENT).build());
 
         verify(userService).createUser(any());

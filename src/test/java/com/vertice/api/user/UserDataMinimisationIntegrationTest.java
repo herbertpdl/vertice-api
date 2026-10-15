@@ -220,7 +220,7 @@ class UserDataMinimisationIntegrationTest {
 
     private static UserCreateRequest registration(String email, String cpf) {
         return UserCreateRequest.newBuilder().setName("Registered").setEmail(email).setPassword(PASSWORD).setCpf(cpf)
-                .setRole(com.vertice.api.generated.grpc.user.v1.Role.TRAINER).build();
+                .setAcceptedTermsVersion("2026-10-14").setRole(com.vertice.api.generated.grpc.user.v1.Role.TRAINER).build();
     }
 
     private static User newUser(String name, Role role, String passwordHash) {
