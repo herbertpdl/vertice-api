@@ -32,7 +32,9 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.AbstractStub;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +47,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -66,6 +69,12 @@ class UserDataExportIntegrationTest {
     static final String SECRET = "non-local-user-data-export-secret-32b";
     /** A Monday, as {@code week_start_date} requires. */
     private static final String WEEK = "2026-03-02";
+    /**
+     * Not UTC, so reading a {@code TIMESTAMP} column in the JVM's zone instead of as UTC shows up as
+     * a shifted instant here, on CI (which runs in UTC) as much as locally.
+     */
+    private static final TimeZone NON_UTC = TimeZone.getTimeZone("America/Sao_Paulo");
+    private static TimeZone originalZone;
 
     @Autowired
     private UserRepository userRepository;
@@ -92,6 +101,21 @@ class UserDataExportIntegrationTest {
     private long plan;
     private long otherPlan;
     private long workoutLog;
+
+    /**
+     * Pinned for this class only. Not in a static initializer: JUnit loads every test class during
+     * discovery, which would move the whole run off the default zone.
+     */
+    @BeforeAll
+    static void pinNonUtcZone() {
+        originalZone = TimeZone.getDefault();
+        TimeZone.setDefault(NON_UTC);
+    }
+
+    @AfterAll
+    static void restoreZone() {
+        TimeZone.setDefault(originalZone);
+    }
 
     @BeforeEach
     void setUp() {
@@ -187,6 +211,24 @@ class UserDataExportIntegrationTest {
                 .doesNotContain("token");
     }
 
+    /**
+     * A known wall-clock value written straight into the {@code TIMESTAMP} column comes out as that
+     * value in UTC, with the JVM in a non-UTC zone (see {@link #NON_UTC}); Hibernate reads it the
+     * same way. Reading it in the JVM's zone would give 13:15:30.123456Z instead.
+     */
+    @Test
+    void timestamps_areExportedAsTheUtcInstantTheColumnHolds() {
+        assertThat(TimeZone.getDefault()).isEqualTo(NON_UTC);
+        jdbc.update("UPDATE workout_logs SET started_at = TIMESTAMP '2026-03-02 10:15:30.123456' WHERE id = :id",
+                Map.of("id", workoutLog));
+
+        JsonNode log = jsonMapper.readTree(export(client)).at("/workoutLogs/0");
+
+        assertThat(log.get("startedAt").asString()).isEqualTo("2026-03-02T10:15:30.123456Z");
+        assertThat(workoutLogRepository.findById(workoutLog).orElseThrow().getStartedAt())
+                .isEqualTo(Instant.parse("2026-03-02T10:15:30.123456Z"));
+    }
+
     /** Both plans they wrote and their own exercise; their clients' sessions belong to those clients. */
     @Test
     void aTrainersExport_holdsTheirPlansAndCatalogue_butNotTheirClientsSessions() {
@@ -201,7 +243,11 @@ class UserDataExportIntegrationTest {
         assertThat(root.get("workoutLogs")).isEmpty();
         assertThat(root.get("exercises")).hasSize(1);
         assertThat(root.at("/exercises/0/description").asString()).isEqualTo("Rear foot on a bench");
-        assertThat(root.toString()).doesNotContain("Knee hurt a bit").doesNotContain("Other client's private note");
+        assertThat(root.toString())
+                .doesNotContain("Knee hurt a bit").doesNotContain("Other client's private note")
+                // A client appears in a trainer's export by id and name only, never by email or CPF.
+                .doesNotContain(client.getEmail()).doesNotContain(client.getCpf())
+                .doesNotContain(otherClient.getEmail()).doesNotContain(otherClient.getCpf());
     }
 
     /** Self only, and only while the account exists: a deleted account's token is already dead. */

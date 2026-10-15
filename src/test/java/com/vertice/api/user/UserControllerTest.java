@@ -1,8 +1,10 @@
 package com.vertice.api.user;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
+import com.vertice.api.common.exception.ExportTooLargeException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.InvalidPasswordSetupTokenException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
@@ -784,7 +786,7 @@ class UserControllerTest {
 
     @Test
     void deleteAccount_trainerWithActiveClients_isFailedPrecondition() {
-        doThrow(new com.vertice.api.common.exception.BusinessRuleViolationException("End your client relationships first"))
+        doThrow(new BusinessRuleViolationException("End your client relationships first"))
                 .when(accountDeletionService).deleteAccount(TRAINER_ID, TRAINER_ID);
 
         assertThatThrownBy(() -> trainer.deleteAccount(DeleteAccountRequest.getDefaultInstance()))
@@ -819,7 +821,7 @@ class UserControllerTest {
     @Test
     void exportUserData_tooLarge_isResourceExhausted() {
         when(userDataExportService.exportUserData(CLIENT_ID))
-                .thenThrow(new com.vertice.api.common.exception.ExportTooLargeException("plans exceed 20000 rows"));
+                .thenThrow(new ExportTooLargeException("plans exceed 20000 rows"));
 
         assertThatThrownBy(() -> client.exportUserData(ExportUserDataRequest.getDefaultInstance()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
