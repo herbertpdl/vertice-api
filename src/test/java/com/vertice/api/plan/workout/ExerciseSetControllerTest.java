@@ -29,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
 import static com.vertice.api.plan.PlanCallers.PARTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -250,5 +251,32 @@ class ExerciseSetControllerTest {
     @Test
     void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
         callers.assertNoServiceOrAnonymous(c -> c.getExerciseSet(GetExerciseSetRequest.newBuilder().setId(EXERCISE_SET_ID).build()));
+    }
+
+    // Upper bounds (P1-09): WorkoutLimits, and VARCHAR(255) for notes.
+
+    @Test
+    void createExerciseSet_atEveryUpperBound_isAccepted() {
+        stub.createExerciseSet(validCreateRequest().setSetNumber(1_000).setReps(1_000).setDurationSeconds(86_400)
+                .setRestSeconds(3_600).setNotes("n".repeat(255)).build());
+    }
+
+    @Test
+    void createExerciseSet_pastAnUpperBound_throwsInvalidArgument() {
+        assertInvalidField(() -> stub.createExerciseSet(validCreateRequest().setSetNumber(1_001).build()), "setNumber");
+        assertInvalidField(() -> stub.createExerciseSet(validCreateRequest().setReps(1_001).build()), "reps");
+        assertInvalidField(() -> stub.createExerciseSet(validCreateRequest().setDurationSeconds(86_401).build()), "durationSeconds");
+        assertInvalidField(() -> stub.createExerciseSet(validCreateRequest().setRestSeconds(3_601).build()), "restSeconds");
+        assertInvalidField(() -> stub.createExerciseSet(validCreateRequest().setNotes("n".repeat(256)).build()), "notes");
+    }
+
+    @Test
+    void updateExerciseSet_pastAnUpperBound_throwsInvalidArgument() {
+        ExerciseSetRequest.Builder valid = ExerciseSetRequest.newBuilder().setSetNumber(1).setStrategy(SetStrategy.STRAIGHT);
+
+        assertInvalidField(() -> stub.updateExerciseSet(UpdateExerciseSetRequest.newBuilder().setId(EXERCISE_SET_ID)
+                .setExerciseSet(valid.clone().setSetNumber(1_001)).build()), "setNumber");
+        assertInvalidField(() -> stub.updateExerciseSet(UpdateExerciseSetRequest.newBuilder().setId(EXERCISE_SET_ID)
+                .setExerciseSet(valid.clone().setNotes("n".repeat(256))).build()), "notes");
     }
 }

@@ -35,6 +35,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
@@ -536,5 +537,64 @@ class WorkoutControllerTest {
         return CloneWorkoutRequest.newBuilder()
                 .setSourceWorkoutId(sourceWorkoutId).setTargetTrainingPlanId(targetTrainingPlanId)
                 .setName("Copy").setDayOfWeek(DayOfWeek.MONDAY).build();
+    }
+
+    // Upper bounds (P1-09): VARCHAR(255) for names and notes, WorkoutLimits for the numbers.
+
+    private static CreateWorkoutWithExercisesRequest withEntry(WorkoutExerciseEntry.Builder entry) {
+        return CreateWorkoutWithExercisesRequest.newBuilder()
+                .setName("Day 1").setTrainingPlanId(PLAN_ID).setDayOfWeek(DayOfWeek.MONDAY).addExercises(entry).build();
+    }
+
+    @Test
+    void workoutName_pastTwoHundredFiftyFiveCharacters_throwsInvalidArgument_onEveryRpcThatTakesOne() {
+        String name = "n".repeat(256);
+
+        assertInvalidField(() -> stub.createWorkout(WorkoutCreateRequest.newBuilder()
+                .setName(name).setTrainingPlanId(PLAN_ID).setDayOfWeek(DayOfWeek.MONDAY).build()), "name");
+        assertInvalidField(() -> stub.updateWorkout(UpdateWorkoutRequest.newBuilder().setId(WORKOUT_ID)
+                .setWorkout(WorkoutRequest.newBuilder().setName(name).setDayOfWeek(DayOfWeek.MONDAY)).build()), "name");
+        assertInvalidField(() -> stub.cloneWorkout(cloneRequest(WORKOUT_ID, PLAN_ID).toBuilder().setName(name).build()), "name");
+        assertInvalidField(() -> stub.createWorkoutWithExercises(CreateWorkoutWithExercisesRequest.newBuilder()
+                .setName(name).setTrainingPlanId(PLAN_ID).setDayOfWeek(DayOfWeek.MONDAY).build()), "name");
+        verify(workoutService, never()).createWorkout(any());
+    }
+
+    @Test
+    void createWorkoutWithExercises_atEveryUpperBound_isAccepted() {
+        when(workoutService.createWorkoutWithExercises(any())).thenReturn(WorkoutResponse.getDefaultInstance());
+
+        stub.createWorkoutWithExercises(withEntry(WorkoutExerciseEntry.newBuilder().setExerciseId(10L)
+                .setRestSecondsBetweenSets(3_600).setNotes("n".repeat(255))
+                .addSets(ExerciseSetEntry.newBuilder().setReps(1_000).setDurationSeconds(86_400).setRestSeconds(3_600)
+                        .setNotes("n".repeat(255)))));
+    }
+
+    @Test
+    void createWorkoutWithExercises_withAnEntryPastAnUpperBound_throwsInvalidArgument() {
+        WorkoutExerciseEntry.Builder entry = WorkoutExerciseEntry.newBuilder().setExerciseId(10L);
+        ExerciseSetEntry.Builder set = ExerciseSetEntry.newBuilder().setReps(10);
+
+        assertInvalidField(() -> stub.createWorkoutWithExercises(withEntry(entry.clone().setRestSecondsBetweenSets(3_601))),
+                "restSecondsBetweenSets");
+        assertInvalidField(() -> stub.createWorkoutWithExercises(withEntry(entry.clone().setRestSecondsBetweenSets(-1))),
+                "restSecondsBetweenSets");
+        assertInvalidField(() -> stub.createWorkoutWithExercises(withEntry(entry.clone().setNotes("n".repeat(256)))), "notes");
+        assertInvalidField(() -> stub.createWorkoutWithExercises(withEntry(entry.clone().addSets(set.clone().setReps(1_001)))), "reps");
+        assertInvalidField(() -> stub.createWorkoutWithExercises(withEntry(entry.clone().addSets(set.clone().setDurationSeconds(86_401)))),
+                "durationSeconds");
+        assertInvalidField(() -> stub.createWorkoutWithExercises(withEntry(entry.clone().addSets(set.clone().setRestSeconds(3_601)))),
+                "restSeconds");
+        assertInvalidField(() -> stub.createWorkoutWithExercises(withEntry(entry.clone().addSets(set.clone().setNotes("n".repeat(256))))),
+                "notes");
+        verify(workoutService, never()).createWorkoutWithExercises(any());
+    }
+
+    @Test
+    void replaceWorkoutExercises_withAnEntryPastAnUpperBound_throwsInvalidArgument() {
+        assertInvalidField(() -> stub.replaceWorkoutExercises(ReplaceWorkoutExercisesRequest.newBuilder().setWorkoutId(WORKOUT_ID)
+                .addExercises(WorkoutExerciseEntry.newBuilder().setExerciseId(10L)
+                        .addSets(ExerciseSetEntry.newBuilder().setNotes("n".repeat(256)))).build()), "notes");
+        verify(workoutService, never()).replaceWorkoutExercises(any());
     }
 }

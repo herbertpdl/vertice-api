@@ -15,11 +15,19 @@ import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
 import java.util.Set;
+
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_DURATION_SECONDS;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_NOTES_LENGTH;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_POSITION;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_REPS;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_REST_SECONDS;
 
 @GrpcService
 @RequiredArgsConstructor
@@ -49,8 +57,8 @@ public class ExerciseSetController extends ExerciseSetServiceGrpc.ExerciseSetSer
     @Override
     public void createExerciseSet(ExerciseSetCreateRequest request, StreamObserver<ExerciseSetResponse> responseObserver) {
         CallerIdentity caller = callerIdentityResolver.requireUser();
-        validator.validate(new ExerciseSetValidation(
-                request.getSetNumber(), request.getReps(), request.getDurationSeconds(), request.getRestSeconds()));
+        validator.validate(new ExerciseSetValidation(request.getSetNumber(), request.getReps(),
+                request.getDurationSeconds(), request.getRestSeconds(), request.getNotes()));
         requireStrategy(request.getStrategy());
         authorization.checkWriteWorkoutExercise(caller, request.getWorkoutExerciseId());
         responseObserver.onNext(exerciseSetService.createExerciseSet(request));
@@ -61,8 +69,8 @@ public class ExerciseSetController extends ExerciseSetServiceGrpc.ExerciseSetSer
     public void updateExerciseSet(UpdateExerciseSetRequest request, StreamObserver<ExerciseSetResponse> responseObserver) {
         CallerIdentity caller = callerIdentityResolver.requireUser();
         var exerciseSet = request.getExerciseSet();
-        validator.validate(new ExerciseSetValidation(
-                exerciseSet.getSetNumber(), exerciseSet.getReps(), exerciseSet.getDurationSeconds(), exerciseSet.getRestSeconds()));
+        validator.validate(new ExerciseSetValidation(exerciseSet.getSetNumber(), exerciseSet.getReps(),
+                exerciseSet.getDurationSeconds(), exerciseSet.getRestSeconds(), exerciseSet.getNotes()));
         requireStrategy(exerciseSet.getStrategy());
         authorization.checkWriteExerciseSet(caller, request.getId());
         responseObserver.onNext(exerciseSetService.updateExerciseSet(request.getId(), exerciseSet));
@@ -89,9 +97,10 @@ public class ExerciseSetController extends ExerciseSetServiceGrpc.ExerciseSetSer
     }
 
     private record ExerciseSetValidation(
-            @Min(1) int setNumber,
-            @Min(0) int reps,
-            @Min(0) int durationSeconds,
-            @Min(0) int restSeconds) {
+            @Min(1) @Max(MAX_POSITION) int setNumber,
+            @Min(0) @Max(MAX_REPS) int reps,
+            @Min(0) @Max(MAX_DURATION_SECONDS) int durationSeconds,
+            @Min(0) @Max(MAX_REST_SECONDS) int restSeconds,
+            @Size(max = MAX_NOTES_LENGTH) String notes) {
     }
 }

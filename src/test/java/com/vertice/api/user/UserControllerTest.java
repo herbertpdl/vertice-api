@@ -50,6 +50,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -1073,5 +1074,41 @@ class UserControllerTest {
         user.setPasswordHash(passwordHash);
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
         when(userRepository.findRoleById(id)).thenReturn(Optional.of(role));
+    }
+
+    // Upper bounds (P1-09): users.name and email are VARCHAR(255), cref VARCHAR(20). Both addresses
+    // are valid for @Email (64-character local part, labels of at most 63), so only the length decides.
+    private static final String EMAIL_255 = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(58) + ".com";
+    private static final String EMAIL_256 = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(59) + ".com";
+
+    @Test
+    void createUser_withEveryTextFieldAtItsBound_isAccepted() {
+        when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.TRAINER).build());
+
+        bff.createUser(registration(Role.TRAINER).toBuilder()
+                .setName("n".repeat(255)).setEmail(EMAIL_255).setCref("c".repeat(20)).build());
+    }
+
+    @Test
+    void createUser_pastABound_throwsInvalidArgument() {
+        UserCreateRequest valid = registration(Role.TRAINER);
+
+        assertInvalidField(() -> bff.createUser(valid.toBuilder().setName("n".repeat(256)).build()), "name");
+        assertInvalidField(() -> bff.createUser(valid.toBuilder().setEmail(EMAIL_256).build()), "email");
+        assertInvalidField(() -> bff.createUser(valid.toBuilder().setCref("c".repeat(21)).build()), "cref");
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void updateUser_pastABound_throwsInvalidArgument() {
+        UserRequest valid = UserRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com").setCpf(VALID_CPF).setRole(Role.TRAINER).build();
+
+        assertInvalidField(() -> admin.updateUser(UpdateUserRequest.newBuilder().setId(1L)
+                .setUser(valid.toBuilder().setName("n".repeat(256))).build()), "name");
+        assertInvalidField(() -> admin.updateUser(UpdateUserRequest.newBuilder().setId(1L)
+                .setUser(valid.toBuilder().setEmail(EMAIL_256)).build()), "email");
+        assertInvalidField(() -> admin.updateUser(UpdateUserRequest.newBuilder().setId(1L)
+                .setUser(valid.toBuilder().setCref("c".repeat(21))).build()), "cref");
+        verify(userService, never()).updateUser(any(), any());
     }
 }

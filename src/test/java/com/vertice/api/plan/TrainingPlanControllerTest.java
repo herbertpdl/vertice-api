@@ -27,6 +27,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
@@ -335,5 +336,33 @@ class TrainingPlanControllerTest {
         assertCode(() -> callers.anonymous().getTrainingPlan(request), Status.Code.UNAUTHENTICATED);
         assertCode(() -> callers.anonymous().listTrainingPlans(ListTrainingPlansRequest.getDefaultInstance()),
                 Status.Code.UNAUTHENTICATED);
+    }
+
+    // Upper bounds (P1-09): training_plans.name and description are VARCHAR(255).
+
+    @Test
+    void createTrainingPlan_withNameAndDescriptionAtTheBound_isAccepted() {
+        when(trainingPlanService.createTrainingPlan(any())).thenReturn(plan().build());
+
+        stub.createTrainingPlan(validCreateRequest().setName("n".repeat(255)).setDescription("d".repeat(255)).build());
+    }
+
+    @Test
+    void createTrainingPlan_pastTheBound_throwsInvalidArgument() {
+        assertInvalidField(() -> stub.createTrainingPlan(validCreateRequest().setName("n".repeat(256)).build()), "name");
+        assertInvalidField(() -> stub.createTrainingPlan(validCreateRequest().setDescription("d".repeat(256)).build()), "description");
+        verify(trainingPlanService, never()).createTrainingPlan(any());
+    }
+
+    @Test
+    void updateTrainingPlan_pastTheBound_throwsInvalidArgument() {
+        TrainingPlanRequest.Builder valid = TrainingPlanRequest.newBuilder().setName("Plan").setClientId(2L)
+                .setStartDate("2026-01-05").setEndDate("2026-03-30").setLevel(PlanLevel.INTERMEDIATE);
+
+        assertInvalidField(() -> stub.updateTrainingPlan(UpdateTrainingPlanRequest.newBuilder().setId(1L)
+                .setTrainingPlan(valid.clone().setName("n".repeat(256))).build()), "name");
+        assertInvalidField(() -> stub.updateTrainingPlan(UpdateTrainingPlanRequest.newBuilder().setId(1L)
+                .setTrainingPlan(valid.clone().setDescription("d".repeat(256))).build()), "description");
+        verify(trainingPlanService, never()).updateTrainingPlan(any(), any());
     }
 }

@@ -17,6 +17,13 @@ import java.util.Set;
 @Transactional
 public class WorkoutFeedbackService {
 
+    /**
+     * Feedback entries per workout session (P1-09). Each one is up to 2 000 characters and lands
+     * in the trainer's unpaginated {@code ListWorkoutFeedback} and the client's export, so a
+     * client can't grow either without bound by resubmitting.
+     */
+    static final int MAX_FEEDBACK_PER_LOG = 10;
+
     private final WorkoutFeedbackRepository workoutFeedbackRepository;
     private final WorkoutFeedbackMapper workoutFeedbackMapper;
     private final WorkoutLogRepository workoutLogRepository;
@@ -26,6 +33,10 @@ public class WorkoutFeedbackService {
                 .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", request.getWorkoutLogId()));
         if (workoutLog.getCompletedAt() == null) {
             throw new ConstraintViolationException("workoutLogId: workout session is not completed yet", Set.of());
+        }
+        if (workoutFeedbackRepository.countByWorkoutLogId(workoutLog.getId()) >= MAX_FEEDBACK_PER_LOG) {
+            throw new ConstraintViolationException(
+                    "workoutLogId: a workout session takes at most %d feedback entries".formatted(MAX_FEEDBACK_PER_LOG), Set.of());
         }
 
         WorkoutFeedback feedback = new WorkoutFeedback();

@@ -25,6 +25,9 @@ import java.util.Set;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static com.vertice.api.plan.PlanCallers.OTHER_TRAINER_ID;
 import static com.vertice.api.plan.PlanCallers.PARTIES;
 import static com.vertice.api.plan.PlanCallers.TRAINER_ID;
@@ -168,5 +171,23 @@ class WorkoutFeedbackControllerTest {
     void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
         callers.assertNoServiceOrAnonymous(c -> c.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
                 .setWorkoutLogId(WORKOUT_LOG_ID).setText("Great session!").build()));
+    }
+
+    // Upper bound (P1-09): workout_feedback.text is VARCHAR(2000).
+
+    @Test
+    void submitWorkoutFeedback_withTwoThousandCharacters_isAccepted() {
+        stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+                .setWorkoutLogId(WORKOUT_LOG_ID).setText("f".repeat(2_000)).build());
+    }
+
+    @Test
+    void submitWorkoutFeedback_pastTwoThousandCharacters_throwsInvalidArgument() {
+        assertInvalidField(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+                .setWorkoutLogId(WORKOUT_LOG_ID).setText("f".repeat(2_001)).build()), "text");
+        // The 10 KB body from the plan's acceptance criterion.
+        assertInvalidField(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+                .setWorkoutLogId(WORKOUT_LOG_ID).setText("f".repeat(10_240)).build()), "text");
+        verify(workoutFeedbackService, never()).submitWorkoutFeedback(any());
     }
 }

@@ -17,6 +17,7 @@ import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -51,7 +52,7 @@ public class TrainingPlanController extends TrainingPlanServiceGrpc.TrainingPlan
     @Override
     public void createTrainingPlan(TrainingPlanCreateRequest request, StreamObserver<TrainingPlanResponse> responseObserver) {
         CallerIdentity caller = callerIdentityResolver.requireUser();
-        validator.validate(new PlanValidation(request.getName(), request.getClientId(), request.getStartDate(), request.getEndDate()));
+        validator.validate(new PlanValidation(request.getName(), request.getDescription(), request.getClientId(), request.getStartDate(), request.getEndDate()));
         requireLevel(request.getLevel());
         long trainerId = authorization.checkCreateTrainingPlan(caller, request.getTrainerId());
         responseObserver.onNext(trainingPlanService.createTrainingPlan(request.toBuilder().setTrainerId(trainerId).build()));
@@ -62,7 +63,7 @@ public class TrainingPlanController extends TrainingPlanServiceGrpc.TrainingPlan
     public void updateTrainingPlan(UpdateTrainingPlanRequest request, StreamObserver<TrainingPlanResponse> responseObserver) {
         CallerIdentity caller = callerIdentityResolver.requireUser();
         var trainingPlan = request.getTrainingPlan();
-        validator.validate(new PlanValidation(trainingPlan.getName(), trainingPlan.getClientId(), trainingPlan.getStartDate(), trainingPlan.getEndDate()));
+        validator.validate(new PlanValidation(trainingPlan.getName(), trainingPlan.getDescription(), trainingPlan.getClientId(), trainingPlan.getStartDate(), trainingPlan.getEndDate()));
         requireLevel(trainingPlan.getLevel());
         authorization.checkUpdateTrainingPlan(caller, request.getId());
         responseObserver.onNext(trainingPlanService.updateTrainingPlan(request.getId(), trainingPlan));
@@ -89,7 +90,8 @@ public class TrainingPlanController extends TrainingPlanServiceGrpc.TrainingPlan
     }
 
     private record PlanValidation(
-            @NotBlank String name,
+            @NotBlank @Size(max = 255) String name,
+            @Size(max = 255) String description,
             @Min(1) long clientId,
             @NotBlank String startDate,
             @NotBlank String endDate) {

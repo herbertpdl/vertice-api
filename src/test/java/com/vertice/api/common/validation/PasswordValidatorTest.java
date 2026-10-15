@@ -33,6 +33,21 @@ class PasswordValidatorTest {
         assertThat(validator.isValid("\t \n".repeat(4), null)).isFalse();
     }
 
+    /**
+     * Spaces are part of a password: only an all-whitespace one is blank. Note that {@code @NotBlank}
+     * (which sits next to {@code @Password} where a password is required) uses {@code trim()}, so it
+     * also refuses an all-control-character value that {@code isBlank()} here would let through, and
+     * {@code isBlank()} refuses Unicode spaces such as U+2003 that {@code trim()} keeps: together they
+     * refuse both.
+     */
+    @Test
+    void acceptsLeadingTrailingAndInternalSpaces() {
+        assertThat(validator.isValid(" leading1", null)).isTrue();
+        assertThat(validator.isValid("trailing1 ", null)).isTrue();
+        assertThat(validator.isValid("in ter nal", null)).isTrue();
+        assertThat(validator.isValid("  two  words  ", null)).isTrue();
+    }
+
     @Test
     void nullIsLeftToNotBlank() {
         assertThat(validator.isValid(null, null)).isTrue();

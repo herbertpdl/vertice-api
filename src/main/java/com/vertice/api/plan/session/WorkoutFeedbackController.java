@@ -11,6 +11,7 @@ import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -43,7 +44,7 @@ public class WorkoutFeedbackController extends WorkoutFeedbackServiceGrpc.Workou
         responseObserver.onCompleted();
     }
 
-    private record SubmitValidation(@Min(1) long workoutLogId, @NotBlank String text) {
+    private record SubmitValidation(@Min(1) long workoutLogId, @NotBlank @Size(max = 2000) String text) {
     }
 
     private record ListValidation(@Min(1) long trainerId) {

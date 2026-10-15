@@ -20,20 +20,26 @@ import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
 import java.util.List;
 import java.util.Set;
 
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_DURATION_SECONDS;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_EXERCISES_PER_WORKOUT;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_NOTES_LENGTH;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_REPS;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_REST_SECONDS;
+import static com.vertice.api.plan.workout.WorkoutLimits.MAX_SETS_PER_EXERCISE;
+
 @GrpcService
 @RequiredArgsConstructor
 public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase {
-
-    private static final int MAX_EXERCISE_ENTRIES = 20;
-    private static final int MAX_SET_ENTRIES_PER_EXERCISE = 10;
 
     private final WorkoutService workoutService;
     private final GrpcRequestValidator validator;
@@ -116,23 +122,25 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
 
     /**
      * Shared by {@code createWorkoutWithExercises}/{@code replaceWorkoutExercises}: caps and
-     * per-set numeric checks (R8, R9) — generic messages, not naming the offending entry (§0/F10
+     * per-entry and per-set bounds (R8, R9, P1-09) — generic messages, not naming the offending entry (§0/F10
      * of docs/specs/create-workout-with-exercises/spec.md). {@code exercise_id} existence and
      * {@code weight}/{@code load_percentage} parsing are checked later, in the service/mapper,
      * since they need repository access / {@code ProtoDecimals} — but still before any write.
      */
     private void validateExerciseEntries(List<WorkoutExerciseEntry> entries) {
-        if (entries.size() > MAX_EXERCISE_ENTRIES) {
+        if (entries.size() > MAX_EXERCISES_PER_WORKOUT) {
             throw new ConstraintViolationException(
-                    "exercises: must not exceed %d entries".formatted(MAX_EXERCISE_ENTRIES), Set.of());
+                    "exercises: must not exceed %d entries".formatted(MAX_EXERCISES_PER_WORKOUT), Set.of());
         }
         for (WorkoutExerciseEntry entry : entries) {
-            if (entry.getSetsList().size() > MAX_SET_ENTRIES_PER_EXERCISE) {
+            if (entry.getSetsList().size() > MAX_SETS_PER_EXERCISE) {
                 throw new ConstraintViolationException(
-                        "sets: must not exceed %d entries".formatted(MAX_SET_ENTRIES_PER_EXERCISE), Set.of());
+                        "sets: must not exceed %d entries".formatted(MAX_SETS_PER_EXERCISE), Set.of());
             }
+            validator.validate(new WorkoutExerciseEntryValidation(entry.getRestSecondsBetweenSets(), entry.getNotes()));
             for (ExerciseSetEntry set : entry.getSetsList()) {
-                validator.validate(new ExerciseSetEntryValidation(set.getReps(), set.getDurationSeconds(), set.getRestSeconds()));
+                validator.validate(new ExerciseSetEntryValidation(
+                        set.getReps(), set.getDurationSeconds(), set.getRestSeconds(), set.getNotes()));
             }
         }
     }
@@ -148,12 +156,18 @@ public class WorkoutController extends WorkoutServiceGrpc.WorkoutServiceImplBase
         }
     }
 
-    private record WorkoutValidation(@NotBlank String name) {
+    private record WorkoutValidation(@NotBlank @Size(max = 255) String name) {
+    }
+
+    private record WorkoutExerciseEntryValidation(
+            @Min(0) @Max(MAX_REST_SECONDS) int restSecondsBetweenSets,
+            @Size(max = MAX_NOTES_LENGTH) String notes) {
     }
 
     private record ExerciseSetEntryValidation(
-            @Min(0) int reps,
-            @Min(0) int durationSeconds,
-            @Min(0) int restSeconds) {
+            @Min(0) @Max(MAX_REPS) int reps,
+            @Min(0) @Max(MAX_DURATION_SECONDS) int durationSeconds,
+            @Min(0) @Max(MAX_REST_SECONDS) int restSeconds,
+            @Size(max = MAX_NOTES_LENGTH) String notes) {
     }
 }

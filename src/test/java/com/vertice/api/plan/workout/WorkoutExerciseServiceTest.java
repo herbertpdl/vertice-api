@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.validation.ConstraintViolationException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -227,5 +228,31 @@ class WorkoutExerciseServiceTest {
                 .isInstanceOf(HasRecordedDataException.class)
                 .hasMessage("WorkoutExercise 7 has logged sets and cannot be deleted");
         verify(workoutExerciseRepository, never()).delete(workoutExercise);
+    }
+
+    /** P1-09: the per-item path holds the same cap as CreateWorkoutWithExercises/ReplaceWorkoutExercises. */
+    @Test
+    void createWorkoutExercise_whenTheWorkoutAlreadyHasTwentyExercises_isRefused() {
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
+        when(workoutExerciseRepository.countByWorkoutId(1L)).thenReturn(20L);
+
+        assertThatThrownBy(() -> service.createWorkoutExercise(WorkoutExerciseCreateRequest.newBuilder()
+                .setWorkoutId(1L).setExerciseId(2L).setOrder(21).build()))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessage("exercises: must not exceed 20 entries");
+        verify(workoutExerciseRepository, never()).save(any());
+    }
+
+    @Test
+    void createWorkoutExercise_withNineteenAlready_addsTheTwentieth() {
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
+        when(workoutExerciseRepository.countByWorkoutId(1L)).thenReturn(19L);
+        when(exerciseRepository.findById(2L)).thenReturn(Optional.of(exercise(2L)));
+        when(workoutExerciseRepository.save(any(WorkoutExercise.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.createWorkoutExercise(WorkoutExerciseCreateRequest.newBuilder()
+                .setWorkoutId(1L).setExerciseId(2L).setOrder(20).build());
+
+        assertThat(response.getOrder()).isEqualTo(20);
     }
 }

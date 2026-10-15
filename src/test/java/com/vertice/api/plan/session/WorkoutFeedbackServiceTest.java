@@ -136,4 +136,30 @@ class WorkoutFeedbackServiceTest {
 
         assertThat(responses).isEmpty();
     }
+
+    /** P1-09: at most 10 feedback entries per session, so resubmitting can't grow the trainer's list without bound. */
+    @Test
+    void submitWorkoutFeedback_whenTheSessionAlreadyHasTenEntries_isRefused() {
+        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(completedLog(10L)));
+        when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(10L);
+
+        var request = SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(10L).setText("Feedback").build();
+
+        assertThatThrownBy(() -> service.submitWorkoutFeedback(request))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessage("workoutLogId: a workout session takes at most 10 feedback entries");
+        verify(workoutFeedbackRepository, never()).save(any());
+    }
+
+    @Test
+    void submitWorkoutFeedback_withNineEntriesAlready_savesTheTenth() {
+        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(completedLog(10L)));
+        when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(9L);
+        when(workoutFeedbackRepository.save(any(WorkoutFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+                .setWorkoutLogId(10L).setText("Tenth").build());
+
+        assertThat(response.getText()).isEqualTo("Tenth");
+    }
 }

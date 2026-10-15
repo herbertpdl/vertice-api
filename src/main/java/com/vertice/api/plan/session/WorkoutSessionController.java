@@ -16,7 +16,9 @@ import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
 import com.vertice.api.grpc.CallerIdentity;
 import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
+import com.vertice.api.plan.workout.WorkoutLimits;
 import io.grpc.stub.StreamObserver;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
@@ -106,7 +108,8 @@ public class WorkoutSessionController extends WorkoutSessionServiceGrpc.WorkoutS
     private record GetExerciseProgressValidation(@Min(1) long clientId, @Min(1) long exerciseId) {
     }
 
-    private record RecordSetLogValidation(@Min(1) long workoutLogId, @Min(1) long exerciseSetId, @Min(0) int reps) {
+    private record RecordSetLogValidation(
+            @Min(1) long workoutLogId, @Min(1) long exerciseSetId, @Min(0) @Max(WorkoutLimits.MAX_REPS) int reps) {
     }
 
     private record ListWorkoutLogsValidation(@Min(1) long clientId, @Min(1) long trainingPlanId, @NotBlank String weekStartDate) {

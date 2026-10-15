@@ -23,8 +23,8 @@ public interface ExerciseSetMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "workoutExercise", ignore = true)
-    @Mapping(target = "weight", qualifiedByName = "stringToDecimal")
-    @Mapping(target = "loadPercentage", qualifiedByName = "stringToDecimal")
+    @Mapping(target = "weight", qualifiedByName = "stringToWeight")
+    @Mapping(target = "loadPercentage", qualifiedByName = "stringToLoadPercentage")
     ExerciseSet toEntity(ExerciseSetCreateRequest request);
 
     @Mapping(target = "workoutExerciseId", source = "workoutExercise.id")
@@ -35,8 +35,8 @@ public interface ExerciseSetMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "workoutExercise", ignore = true)
-    @Mapping(target = "weight", qualifiedByName = "stringToDecimal")
-    @Mapping(target = "loadPercentage", qualifiedByName = "stringToDecimal")
+    @Mapping(target = "weight", qualifiedByName = "stringToWeight")
+    @Mapping(target = "loadPercentage", qualifiedByName = "stringToLoadPercentage")
     void updateEntityFromRequest(ExerciseSetRequest request, @MappingTarget ExerciseSet exerciseSet);
 
     @ValueMapping(source = "SET_STRATEGY_UNSPECIFIED", target = MappingConstants.NULL)
