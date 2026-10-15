@@ -34,12 +34,14 @@ public interface UserMapper {
     @Mapping(target = "healthDataConsentAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     User toEntity(UserCreateRequest request);
 
-    // cref is the only nullable string column on User (see docs/specs/trainer-cref/spec.md) — a
-    // real DB row for a CLIENT/ADMIN, or a TRAINER who hasn't set one, has cref == null, and
-    // protobuf string setters reject null (ProtoStrings' own doc comment), so this needs the same
+    // cref (a CLIENT/ADMIN, or a TRAINER who hasn't set one, see docs/specs/trainer-cref/spec.md),
+    // cpf (an optional client CPF) and email (a deleted account) can be null on a real row, and
+    // protobuf string setters reject null (ProtoStrings' own doc comment), so they get the same
     // nullToEmpty treatment TrainingPlanMapper already uses for its nullable description field.
+    @Mapping(target = "email", qualifiedByName = "nullToEmpty")
     @Mapping(target = "cref", qualifiedByName = "nullToEmpty")
     @Mapping(target = "cpf", qualifiedByName = "nullToEmpty")
     @Mapping(target = "consent", source = "user")
@@ -60,6 +62,7 @@ public interface UserMapper {
     @Mapping(target = "healthDataConsentAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     void updateEntityFromRequest(UserRequest request, @MappingTarget User user);
 
     @ValueMapping(source = "ROLE_UNSPECIFIED", target = MappingConstants.NULL)

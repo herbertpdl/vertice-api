@@ -10,6 +10,7 @@ import com.vertice.api.generated.grpc.user.v1.ConsentState;
 import com.vertice.api.generated.grpc.user.v1.ConsentType;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
+import com.vertice.api.generated.grpc.user.v1.DeleteAccountRequest;
 import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
@@ -85,6 +86,9 @@ class UserControllerTest {
 
     @MockitoBean
     private PasswordSetupTokenService passwordSetupTokenService;
+
+    @MockitoBean
+    private AccountDeletionService accountDeletionService;
 
     @MockitoBean
     private UserRepository userRepository;
@@ -753,6 +757,36 @@ class UserControllerTest {
         assertPermissionDenied(() -> client.deleteUser(DeleteUserRequest.newBuilder().setId(TRAINER_ID).build()));
         assertPermissionDenied(() -> ops.deleteUser(DeleteUserRequest.newBuilder().setId(CLIENT_ID).build()));
         verifyNoInteractions(userService);
+    }
+
+    /** The request has no id: whoever calls deletes their own account, ADMIN included, and nobody else's. */
+    @Test
+    void deleteAccount_deletesTheCallersOwnAccount() {
+        client.deleteAccount(DeleteAccountRequest.getDefaultInstance());
+        trainer.deleteAccount(DeleteAccountRequest.getDefaultInstance());
+        admin.deleteAccount(DeleteAccountRequest.getDefaultInstance());
+
+        verify(accountDeletionService).deleteAccount(CLIENT_ID, CLIENT_ID);
+        verify(accountDeletionService).deleteAccount(TRAINER_ID, TRAINER_ID);
+        verify(accountDeletionService).deleteAccount(ADMIN_ID, ADMIN_ID);
+    }
+
+    @Test
+    void deleteAccount_serviceIdentities_arePermissionDenied() {
+        assertPermissionDenied(() -> bff.deleteAccount(DeleteAccountRequest.getDefaultInstance()));
+        assertPermissionDenied(() -> ops.deleteAccount(DeleteAccountRequest.getDefaultInstance()));
+        verifyNoInteractions(accountDeletionService);
+    }
+
+    @Test
+    void deleteAccount_trainerWithActiveClients_isFailedPrecondition() {
+        doThrow(new com.vertice.api.common.exception.BusinessRuleViolationException("End your client relationships first"))
+                .when(accountDeletionService).deleteAccount(TRAINER_ID, TRAINER_ID);
+
+        assertThatThrownBy(() -> trainer.deleteAccount(DeleteAccountRequest.getDefaultInstance()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.FAILED_PRECONDITION);
     }
 
     @Test

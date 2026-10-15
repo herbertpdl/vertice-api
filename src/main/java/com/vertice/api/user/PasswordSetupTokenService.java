@@ -38,9 +38,13 @@ public class PasswordSetupTokenService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordSetupProperties properties;
 
-    /** Replaces any unused token the user already has, so only the newest link works. */
+    /**
+     * Replaces any unused token the user already has, so only the newest link works. A deleted
+     * account (P1-05) is NOT_FOUND: it has no password, but must never get one back.
+     */
     public CreatePasswordSetupTokenResponse createToken(Long userId) {
         User user = userRepository.findById(userId)
+                .filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         tokenRepository.deleteUnusedByUserId(userId);
 

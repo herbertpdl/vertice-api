@@ -99,9 +99,10 @@ turns the token into a `grpc/Caller` (sealed): a user (`CallerIdentity`: numeric
 (`Caller.Service`: `sub` `service:bff` or `service:ops` with `role` `SERVICE`, see `ServiceSubject`),
 or `Caller.Anonymous` (no token, only reachable under `local`). Any other subject/role is
 `UNAUTHENTICATED`. **Roles are re-checked against the DB on every call:** a user caller must still
-exist with exactly the token's `role` (`UserRepository#findRoleById`, one primary-key query of the
-role column), otherwise `UNAUTHENTICATED` "Session no longer valid", which the BFF maps to 401 and
-the web answers by logging out. So a deleted or re-roled user loses access on their next call, not
+exist, not deleted (`deleted_at IS NULL`, set by `DeleteAccount`), with exactly the token's `role`
+(`UserRepository#findRoleById`, one primary-key query of the role column), otherwise
+`UNAUTHENTICATED` "Session no longer valid", which the BFF maps to 401 and the web answers by
+logging out. So a deleted or re-roled user loses access on their next call, not
 when the 8 h token expires. The lookup runs once per RPC (`grpc/CallerScopeInterceptor` keeps the
 resolved caller in the call's gRPC `Context`, never across calls); services and anonymous callers
 skip it. Tests therefore need their user callers to exist: integration tests save them, and
@@ -150,6 +151,7 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `UpdateUser` | ADMIN (anything); self or the target's active trainer, role unchanged |
 | `SetUserPassword` | self, ADMIN |
 | `DeleteUser` | self, ADMIN; FAILED_PRECONDITION while the user has training data (plans, logs, clients, exercises) |
+| `DeleteAccount` | any user, for their own account only (the request has no id); never a service. A TRAINER with active clients gets FAILED_PRECONDITION |
 | `ListTrainingPlans` | TRAINER (own plans), CLIENT (plans for them), ADMIN (as filtered) |
 | `GetTrainingPlan`, `ListWorkouts`, `GetWorkout`, `ListWorkoutExercises`, `GetWorkoutExercise`, `ListExerciseSets`, `GetExerciseSet` | the plan's trainer or client, ADMIN |
 | `CreateTrainingPlan` | TRAINER as themself (client on their active roster), ADMIN |
@@ -190,6 +192,24 @@ TRAINER (`UserService`, backstopped by V27's `ck_users_trainer_cpf`); an empty C
 NULL, and `uq_users_cpf` is a partial unique index over set values. `docs/data-inventory.md` lists
 every personal-data column with its purpose, legal basis, retention and readers; its product/legal
 decisions are pending legal review.
+
+**Account deletion (P1-05, D5).** `DeleteAccount` (`user/AccountDeletionService`, one transaction,
+native statements in `user/AccountDeletionRepository` in foreign-key order) deletes the caller's
+feedback, set logs, workout logs, the plans written for them and their unused private exercises,
+ends their relationships, deletes their setup tokens and anonymises the `users` row
+(`User#anonymise`: name `Usuário removido`, email/CPF/CREF/password/consent set to NULL,
+`deleted_at` set; V29 relaxes `ck_users_trainer_cpf` and V30 `email NOT NULL` for deleted rows
+only). The email is NULL, never a placeholder: a predictable one could be claimed by a live account
+first and block the deletion on `uq_users_email_lower`. Addresses on the `.invalid` TLD are refused
+on every write (`Emails#isReserved`, INVALID_ARGUMENT) as defence in depth. The row stays because
+plans the user wrote for others point at it. A deleted account is missing everywhere:
+`findRoleById` (tokens die), `UserService#findByIdOrThrow` (GetUser, UpdateUser, RecordConsent,
+SetUserPassword, DeleteUser are `NOT_FOUND`, ADMIN included), the email lookup (VerifyCredentials),
+`ListUsers`, `ListUsersWithoutPassword`, `CreatePasswordSetupToken`, and every lookup that would
+attach new data to a user: `CreateClientForTrainer` (the trainer), `CreateTrainingPlan` (trainer or
+client) and `GetOrStartWorkoutLog` (the client) are `NOT_FOUND` for a deleted one. Any new lookup
+of a user that writes must filter `User#isDeleted` too. Each deletion logs one INFO line with
+actor id, user id and role only.
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's

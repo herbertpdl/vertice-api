@@ -352,4 +352,24 @@ class TrainingPlanServiceTest {
 
         verify(trainingPlanRepository).delete(plan);
     }
+
+    /** A deleted account (P1-05) is missing on either side: no plan is written by or for one. */
+    @Test
+    void createTrainingPlan_byOrForADeletedAccount_isNotFound() {
+        User deletedTrainer = user(1L, Role.TRAINER);
+        deletedTrainer.anonymise(java.time.Instant.now());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(deletedTrainer));
+        assertThatThrownBy(() -> service.createTrainingPlan(validCreateRequest().build()))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Trainer with id 1 not found");
+
+        User deletedClient = user(2L, Role.CLIENT);
+        deletedClient.anonymise(java.time.Instant.now());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, Role.TRAINER)));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(deletedClient));
+        assertThatThrownBy(() -> service.createTrainingPlan(validCreateRequest().build()))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Client with id 2 not found");
+        verify(trainingPlanRepository, never()).save(any());
+    }
 }

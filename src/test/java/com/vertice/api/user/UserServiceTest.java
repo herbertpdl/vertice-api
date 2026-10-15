@@ -103,6 +103,50 @@ class UserServiceTest {
         verify(userRepository, never()).save(any());
     }
 
+    /** The .invalid TLD (RFC 2606) is reserved: no account may hold an address there (review of #68). */
+    @Test
+    void createUser_rejectsAReservedInvalidAddress() {
+        for (String email : List.of("deleted+7@invalid", "Someone@Mail.INVALID")) {
+            UserCreateRequest request = UserCreateRequest.newBuilder()
+                    .setName("New Client").setEmail(email).setPassword("supersecret1").setRole(Role.CLIENT).build();
+
+            assertThatThrownBy(() -> service.createUser(request))
+                    .isInstanceOf(ConstraintViolationException.class)
+                    .hasMessage("email: addresses on the .invalid domain are reserved");
+        }
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateUser_rejectsAReservedInvalidAddress() {
+        User existing = new User();
+        existing.setId(1L);
+        existing.setEmail("client@vertice.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+        UserRequest request = UserRequest.newBuilder()
+                .setName("Client").setEmail("deleted+1@invalid").setRole(Role.CLIENT).build();
+
+        assertThatThrownBy(() -> service.updateUser(1L, request))
+                .isInstanceOf(ConstraintViolationException.class);
+        verify(userRepository, never()).save(any());
+    }
+
+    /** A deleted account is missing here, ADMIN or not: nothing is written back into the anonymised row. */
+    @Test
+    void aDeletedAccount_isNotFound_forUpdateAndPassword() {
+        User deleted = new User();
+        deleted.setId(3L);
+        deleted.anonymise(java.time.Instant.now());
+        when(userRepository.findById(3L)).thenReturn(Optional.of(deleted));
+        UserRequest request = UserRequest.newBuilder()
+                .setName("Back").setEmail("back@vertice.com").setRole(Role.CLIENT).build();
+
+        assertThatThrownBy(() -> service.updateUser(3L, request)).isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> service.setPassword(3L, "brandNewPassword1")).isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> service.deleteUser(3L)).isInstanceOf(ResourceNotFoundException.class);
+        verify(userRepository, never()).save(any());
+    }
+
     @Test
     void createUser_rejectsDuplicateEmail() {
         User existing = new User();
@@ -329,7 +373,7 @@ class UserServiceTest {
     void listUsers_withRoleFilter_queriesThatRole_inTheContactView() {
         User trainer = user(1L, com.vertice.api.user.Role.TRAINER, "coach@vertice.com", VALID_CPF);
         trainer.setCref("123456-G/SP");
-        when(userRepository.findByRoleAndIdGreaterThanOrderByIdAsc(com.vertice.api.user.Role.TRAINER, 0L, Limit.of(11)))
+        when(userRepository.findByRoleAndDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(com.vertice.api.user.Role.TRAINER, 0L, Limit.of(11)))
                 .thenReturn(List.of(trainer));
 
         var page = service.listUsers(com.vertice.api.user.Role.TRAINER, 10, 0L);
@@ -341,7 +385,7 @@ class UserServiceTest {
 
     @Test
     void listUsers_withMoreRowsThanThePage_returnsThePageAndATokenForTheRest() {
-        when(userRepository.findByIdGreaterThanOrderByIdAsc(5L, Limit.of(3))).thenReturn(List.of(
+        when(userRepository.findByDeletedAtIsNullAndIdGreaterThanOrderByIdAsc(5L, Limit.of(3))).thenReturn(List.of(
                 user(6L, com.vertice.api.user.Role.CLIENT, "a@vertice.com", VALID_CPF),
                 user(8L, com.vertice.api.user.Role.CLIENT, "b@vertice.com", OTHER_VALID_CPF),
                 user(9L, com.vertice.api.user.Role.CLIENT, "c@vertice.com", VALID_CPF)));
@@ -474,7 +518,7 @@ class UserServiceTest {
     void listUsersWithoutPassword_filtersByRoleWhenGiven() {
         User client = userWithPassword(7L, null);
         client.setRole(com.vertice.api.user.Role.CLIENT);
-        when(userRepository.findByRoleAndPasswordHashIsNull(com.vertice.api.user.Role.CLIENT)).thenReturn(List.of(client));
+        when(userRepository.findByRoleAndPasswordHashIsNullAndDeletedAtIsNull(com.vertice.api.user.Role.CLIENT)).thenReturn(List.of(client));
 
         assertThat(service.listUsersWithoutPassword(com.vertice.api.user.Role.CLIENT))
                 .containsExactly(UserResponse.newBuilder().setId(7L).setName(client.getName()).setRole(Role.CLIENT).build());
@@ -482,10 +526,10 @@ class UserServiceTest {
 
     @Test
     void listUsersWithoutPassword_withoutRole_listsAll() {
-        when(userRepository.findByPasswordHashIsNull()).thenReturn(List.of());
+        when(userRepository.findByPasswordHashIsNullAndDeletedAtIsNull()).thenReturn(List.of());
 
         assertThat(service.listUsersWithoutPassword(null)).isEmpty();
-        verify(userRepository).findByPasswordHashIsNull();
+        verify(userRepository).findByPasswordHashIsNullAndDeletedAtIsNull();
     }
 
     @Test
