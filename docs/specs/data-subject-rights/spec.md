@@ -82,7 +82,9 @@ REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inv
   (GetUser, UpdateUser, RecordConsent, SetUserPassword, DeleteUser → NOT_FOUND), the email lookup
   (VerifyCredentials), and `ListUsers`, which leaves deleted rows out rather than marking them:
   an anonymised row carries nothing ops or the dev login could use. Nothing can be written back
-  into it.
+  into it, or attached to it: the user lookups of `CreateClientForTrainer` (trainer),
+  `CreateTrainingPlan` (trainer and client) and `GetOrStartWorkoutLog` (client) also treat a
+  deleted account as `NOT_FOUND`, ADMIN included (review round 2 of #68).
 - **Health-related data is deleted, not aggregated.** Workout feedback, set logs and workout logs
   are held on the client's consent (D4); with the account gone, so is the basis. Anonymised
   aggregates were the alternative: nothing in the product reads them yet, so keeping them would be
@@ -144,7 +146,8 @@ then the client's plan tree bottom-up, unused exercises, relationships, tokens) 
   log, set log, feedback, setup link and relationship; the deletion succeeds while a live row
   holds the old placeholder address, and every write path refuses a `.invalid` address; a trainer
   with an active client is refused and unchanged; a trainer without one is anonymised, loses the
-  unused exercise, and their client keeps the plan, logs and feedback.
+  unused exercise, and their client keeps the plan, logs and feedback, while ADMIN can neither
+  create a client for that trainer nor a plan under them (`NOT_FOUND`).
 - `UserControllerTest`: self only (client, trainer, ADMIN each delete their own), services denied.
 - `config/DatasourceErrorDetailTest` pins `logServerErrorDetail=false`: the effective Hikari
   property, and a real unique violation whose message names the constraint but not the value.

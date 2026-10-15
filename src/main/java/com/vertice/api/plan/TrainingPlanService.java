@@ -96,8 +96,10 @@ public class TrainingPlanService {
                 .orElseThrow(() -> new ResourceNotFoundException("TrainingPlan", id));
     }
 
+    /** A deleted account (P1-05) is missing: no plan is ever written by or for one, ADMIN included. */
     private User findUserWithRoleOrThrow(Long id, Role role, String resourceName) {
         return userRepository.findById(id)
+                .filter(user -> !user.isDeleted())
                 .filter(user -> user.getRole() == role)
                 .orElseThrow(() -> new ResourceNotFoundException(resourceName, id));
     }

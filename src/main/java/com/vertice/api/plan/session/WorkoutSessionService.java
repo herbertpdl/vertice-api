@@ -138,6 +138,7 @@ public class WorkoutSessionService {
         Workout workout = workoutRepository.findById(workoutId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workout", workoutId));
         User client = userRepository.findById(clientId)
+                .filter(user -> !user.isDeleted())
                 .filter(user -> user.getRole() == Role.CLIENT)
                 .orElseThrow(() -> new ResourceNotFoundException("Client", clientId));
         assertWorkoutAssignedToClient(workout, clientId);

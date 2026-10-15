@@ -90,8 +90,10 @@ public class TrainerClientService {
         return IsTrainersClientResponse.newBuilder().setIsClient(isClient).build();
     }
 
+    /** A deleted account (P1-05) is missing: nobody, ADMIN included, links a client to it. */
     private User findUserWithRoleOrThrow(Long id, com.vertice.api.user.Role role, String resourceName) {
         return userRepository.findById(id)
+                .filter(user -> !user.isDeleted())
                 .filter(user -> user.getRole() == role)
                 .orElseThrow(() -> new ResourceNotFoundException(resourceName, id));
     }

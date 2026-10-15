@@ -7,6 +7,7 @@ import com.vertice.api.generated.grpc.plan.v1.ExerciseSetServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.GetTrainingPlanRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListExerciseSetsRequest;
 import com.vertice.api.generated.grpc.plan.v1.ListWorkoutExercisesRequest;
+import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseEntry;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseServiceGrpc;
@@ -335,6 +336,16 @@ class AccountDeletionIntegrationTest {
         assertThat(count("SELECT count(*) FROM workout_feedback WHERE workout_log_id = :id", workoutLog)).isOne();
         assertCode(() -> as(trainer, UserServiceGrpc::newBlockingStub)
                 .getUser(GetUserRequest.newBuilder().setId(trainer.getId()).build()), Status.Code.UNAUTHENTICATED);
+
+        // Nothing new hangs off the deleted trainer, not even through ADMIN: no client, no plan.
+        assertCode(() -> as(admin, TrainerClientServiceGrpc::newBlockingStub).createClientForTrainer(
+                CreateClientForTrainerRequest.newBuilder().setTrainerId(trainer.getId()).setName("New")
+                        .setEmail("new-of-deleted@account-deletion.example.com").build()), Status.Code.NOT_FOUND);
+        assertThat(userRepository.findByEmail("new-of-deleted@account-deletion.example.com")).isEmpty();
+        assertCode(() -> as(admin, TrainingPlanServiceGrpc::newBlockingStub).createTrainingPlan(
+                TrainingPlanCreateRequest.newBuilder().setName("Under a deleted trainer").setTrainerId(trainer.getId())
+                        .setClientId(client.getId()).setStartDate("2026-01-01").setEndDate("2026-12-31")
+                        .setLevel(com.vertice.api.generated.grpc.plan.v1.PlanLevel.BEGINNER).build()), Status.Code.NOT_FOUND);
     }
 
     private long count(String sql, long id) {

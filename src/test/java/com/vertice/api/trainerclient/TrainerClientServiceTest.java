@@ -198,4 +198,20 @@ class TrainerClientServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Active relationship for client with id 2 not found");
     }
+
+    /** A deleted account (P1-05) is missing: not even ADMIN links a new client to it. */
+    @Test
+    void createClientForTrainer_forADeletedTrainer_isNotFound() {
+        User deleted = new User();
+        deleted.setId(1L);
+        deleted.setRole(com.vertice.api.user.Role.TRAINER);
+        deleted.anonymise(java.time.Instant.now());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(deleted));
+
+        assertThatThrownBy(() -> service.createClientForTrainer(CreateClientForTrainerRequest.newBuilder()
+                .setTrainerId(1L).setName("New").setEmail("new@vertice.com").build()))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(userService, never()).createUser(any());
+        verify(trainerClientRepository, never()).save(any());
+    }
 }

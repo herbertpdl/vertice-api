@@ -205,8 +205,11 @@ on every write (`Emails#isReserved`, INVALID_ARGUMENT) as defence in depth. The 
 plans the user wrote for others point at it. A deleted account is missing everywhere:
 `findRoleById` (tokens die), `UserService#findByIdOrThrow` (GetUser, UpdateUser, RecordConsent,
 SetUserPassword, DeleteUser are `NOT_FOUND`, ADMIN included), the email lookup (VerifyCredentials),
-`ListUsers`, `ListUsersWithoutPassword` and `CreatePasswordSetupToken`. Each deletion logs one INFO
-line with actor id, user id and role only.
+`ListUsers`, `ListUsersWithoutPassword`, `CreatePasswordSetupToken`, and every lookup that would
+attach new data to a user: `CreateClientForTrainer` (the trainer), `CreateTrainingPlan` (trainer or
+client) and `GetOrStartWorkoutLog` (the client) are `NOT_FOUND` for a deleted one. Any new lookup
+of a user that writes must filter `User#isDeleted` too. Each deletion logs one INFO line with
+actor id, user id and role only.
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's
