@@ -152,6 +152,7 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `SetUserPassword` | self, ADMIN |
 | `DeleteUser` | self, ADMIN; FAILED_PRECONDITION while the user has training data (plans, logs, clients, exercises) |
 | `DeleteAccount` | any user, for their own account only (the request has no id); never a service. A TRAINER with active clients gets FAILED_PRECONDITION |
+| `ExportUserData` | any user, for their own data only (the request has no id); never a service. RESOURCE_EXHAUSTED past `vertice.export.*` |
 | `ListTrainingPlans` | TRAINER (own plans), CLIENT (plans for them), ADMIN (as filtered) |
 | `GetTrainingPlan`, `ListWorkouts`, `GetWorkout`, `ListWorkoutExercises`, `GetWorkoutExercise`, `ListExerciseSets`, `GetExerciseSet` | the plan's trainer or client, ADMIN |
 | `CreateTrainingPlan` | TRAINER as themself (client on their active roster), ADMIN |
@@ -210,6 +211,18 @@ attach new data to a user: `CreateClientForTrainer` (the trainer), `CreateTraini
 client) and `GetOrStartWorkoutLog` (the client) are `NOT_FOUND` for a deleted one. Any new lookup
 of a user that writes must filter `User#isDeleted` too. Each deletion logs one INFO line with
 actor id, user id and role only.
+
+**Data export (P1-05).** `ExportUserData` (`user/UserDataExportService`) returns one JSON document
+(`user/UserDataExport` records, `formatVersion` bumped on any renamed or removed key) with
+everything about the caller: profile, consent, relationships, plans as client or trainer with the
+whole tree, their own logs/set logs/feedback, private exercises. Never credentials, never a
+trainer's clients' sessions. `user/UserDataExportQueries` is plain SQL, one query per section with
+`LIMIT max-rows + 1`, in one read-only `REPEATABLE READ` transaction; the JSON is written into a
+`user/BoundedOutputStream` that refuses the write crossing `max-size`, so an oversized document is
+never built whole. Past `vertice.export.max-rows` or `max-size` it is `RESOURCE_EXHAUSTED`
+(`ExportTooLargeException`), never truncated. Hibernate stores `Instant` as UTC wall time in these
+`TIMESTAMP` columns, so any raw-SQL read of one must use `LocalDateTime` at `ZoneOffset.UTC`, not
+`getTimestamp` (which applies the JVM's zone).
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's

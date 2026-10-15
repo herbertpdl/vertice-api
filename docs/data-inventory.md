@@ -38,6 +38,14 @@ Every RPC that returns a user picks one view (`user/UserView`, P1-03). The full 
 vertice-bff narrows this further (for example it masks the CPF unless the trainer asks to reveal
 it, and logs each reveal). See vertice-bff for its own rules.
 
+**Access and portability (LGPD art. 18 II and V).** `ExportUserData` returns everything in section
+3 that is about the caller as one JSON document: their `users` row (credentials excepted), consent,
+their `trainer_clients` rows, every plan they are the client or trainer of with its whole tree, their
+own workout logs with set logs and feedback, and their private exercises. Never included: the
+password hash and `password_setup_tokens` (credentials), and, for a trainer, their clients' logs and
+feedback (the clients' data). Bounded by `vertice.export.*`; past the bound the export is refused,
+not truncated.
+
 ## 3. Inventory by table
 
 "Account retention" means D5: kept while the account is active, deleted or anonymised when it is
@@ -124,8 +132,8 @@ and request metadata. Retention is D6 (30 days, assumption).
 
 - **Consent history and withdrawal** (art. 8 §5, art. 18 IX): today only the latest consent per
   type is kept, and there is no "withdraw" RPC.
-- **Data export** (P1-05 (c)). Account deletion, ending a relationship and the refusal of deletes
-  over recorded data are done.
+- **BFF routes** for these rights (P1-05 step 2): the API side of export, account deletion, ending
+  a relationship and the refusal of deletes over recorded data is done.
 - **ADMIN-initiated account deletion** (a support request on the user's behalf): today only the
   user themself can call `DeleteAccount`.
 - **Purge** expired and used `password_setup_tokens` rows.

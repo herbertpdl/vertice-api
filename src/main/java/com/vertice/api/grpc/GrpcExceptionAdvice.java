@@ -4,6 +4,7 @@ import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.ExerciseInUseException;
+import com.vertice.api.common.exception.ExportTooLargeException;
 import com.vertice.api.common.exception.HasRecordedDataException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.InvalidPasswordSetupTokenException;
@@ -77,6 +78,11 @@ public class GrpcExceptionAdvice {
     @GrpcExceptionHandler(HasRecordedDataException.class)
     public Status handleHasRecordedData(HasRecordedDataException ex) {
         return Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
+    }
+
+    @GrpcExceptionHandler(ExportTooLargeException.class)
+    public Status handleExportTooLarge(ExportTooLargeException ex) {
+        return Status.RESOURCE_EXHAUSTED.withDescription(ex.getMessage());
     }
 
     @GrpcExceptionHandler(BusinessRuleViolationException.class)

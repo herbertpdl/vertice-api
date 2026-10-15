@@ -95,14 +95,14 @@ class WorkoutSessionServiceTest {
         log.setId(id);
         log.setWorkout(workout);
         log.setClient(client);
-        log.setWeekStartDate(java.time.LocalDate.parse("2026-08-24"));
+        log.setWeekStartDate(LocalDate.parse("2026-08-24"));
         log.setStartedAt(Instant.now());
         return log;
     }
 
     @Test
     void getOrStartWorkoutLog_createsNewLogWhenNoneExists() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(client(2L)));
@@ -127,7 +127,7 @@ class WorkoutSessionServiceTest {
     @Test
     void getOrStartWorkoutLog_returnsExistingLogIdempotently() {
         WorkoutLog existing = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
                 .thenReturn(Optional.of(existing));
 
         var request = GetOrStartWorkoutLogRequest.newBuilder()
@@ -142,7 +142,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getOrStartWorkoutLog_throwsWhenWorkoutNotAssignedToClient() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workoutForClient(1L, 3L)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(client(2L)));
@@ -159,7 +159,7 @@ class WorkoutSessionServiceTest {
     @Test
     void getOrStartWorkoutLog_throwsWhenExistingLogIsForAnotherClientsWorkout() {
         WorkoutLog existing = workoutLog(10L, workoutForClient(1L, 3L), client(2L));
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
                 .thenReturn(Optional.of(existing));
 
         var request = GetOrStartWorkoutLogRequest.newBuilder()
@@ -200,7 +200,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getOrStartWorkoutLog_throwsWhenWorkoutMissing() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(99L, 2L, java.time.LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(99L, 2L, LocalDate.parse("2026-08-24")))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(99L)).thenReturn(Optional.empty());
 
@@ -213,7 +213,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getOrStartWorkoutLog_throwsWhenClientIsNotClientRole() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, java.time.LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
         User trainer = new User();
@@ -226,6 +226,27 @@ class WorkoutSessionServiceTest {
 
         assertThatThrownBy(() -> service.getOrStartWorkoutLog(request))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    /** A deleted account (P1-05) is missing: no new log is started for it, ADMIN included. */
+    @Test
+    void getOrStartWorkoutLog_throwsWhenClientAccountIsDeleted() {
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
+                .thenReturn(Optional.empty());
+        when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
+        User deleted = new User();
+        deleted.setId(2L);
+        deleted.setRole(Role.CLIENT);
+        deleted.anonymise(Instant.now());
+        when(userRepository.findById(2L)).thenReturn(Optional.of(deleted));
+
+        var request = GetOrStartWorkoutLogRequest.newBuilder()
+                .setWorkoutId(1L).setClientId(2L).setWeekStartDate("2026-08-24").build();
+
+        assertThatThrownBy(() -> service.getOrStartWorkoutLog(request))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Client with id 2 not found");
+        verify(workoutLogRepository, never()).save(any());
     }
 
     @Test
@@ -353,7 +374,7 @@ class WorkoutSessionServiceTest {
     void listWorkoutLogs_returnsLogsForClientPlanAndWeek() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
         when(workoutLogRepository.findByClientIdAndWorkout_TrainingPlan_IdAndWeekStartDate(
-                2L, 3L, java.time.LocalDate.parse("2026-08-24")))
+                2L, 3L, LocalDate.parse("2026-08-24")))
                 .thenReturn(List.of(log));
 
         var responses = service.listWorkoutLogs(2L, 3L, "2026-08-24");

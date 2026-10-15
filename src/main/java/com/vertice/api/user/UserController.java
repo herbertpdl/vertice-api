@@ -9,6 +9,8 @@ import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
 import com.vertice.api.generated.grpc.user.v1.DeleteAccountRequest;
 import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
+import com.vertice.api.generated.grpc.user.v1.ExportUserDataRequest;
+import com.vertice.api.generated.grpc.user.v1.ExportUserDataResponse;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
@@ -54,6 +56,7 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
 
     private final UserService userService;
     private final AccountDeletionService accountDeletionService;
+    private final UserDataExportService userDataExportService;
     private final PasswordSetupTokenService passwordSetupTokenService;
     private final GrpcRequestValidator validator;
     private final CallerIdentityResolver callerIdentityResolver;
@@ -125,6 +128,14 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
         long userId = authorization.checkDeleteAccount(callerIdentityResolver.resolve());
         accountDeletionService.deleteAccount(userId, userId);
         responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    /** Self only: the caller is resolved first and is whose data is exported (the request has no id). */
+    @Override
+    public void exportUserData(ExportUserDataRequest request, StreamObserver<ExportUserDataResponse> responseObserver) {
+        long userId = authorization.checkExportUserData(callerIdentityResolver.resolve());
+        responseObserver.onNext(ExportUserDataResponse.newBuilder().setJson(userDataExportService.exportUserData(userId)).build());
         responseObserver.onCompleted();
     }
 

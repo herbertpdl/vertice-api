@@ -1,7 +1,7 @@
 # Spec: Data-subject rights: end a relationship, refuse deletes over history, delete and export an account
 
-Status: In progress. PR (a) (relationship end, delete refusals, integrity fallback) and PR (b)
-`DeleteAccount` implemented; PR (c) `ExportUserData` to follow.
+Status: Implemented (vertice-api slice of P1-05): PR (a) relationship end, delete refusals and the
+integrity fallback; PR (b) `DeleteAccount`; PR (c) `ExportUserData`. The BFF routes are step 2.
 Owner: hebertpdl@gmail.com
 Related: Vertice health audit 2026-10-09, plan item P1-05 (findings COMP-API-001, PROD-API-001,
 REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inventory.md` (D5);
@@ -108,6 +108,35 @@ REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inv
   after the other and the second gets `UNAUTHENTICATED`/`NOT_FOUND`.
 - **Audit:** one INFO line, `Account deleted: actorId=… userId=… role=…`, with no PII. The
   `audit_events` table is P2-08.
+- **`ExportUserData` returns one JSON document in a proto string** (LGPD art. 18 II and V). JSON
+  is the portable format a person can open or hand to another service; a structured proto would
+  only be readable through our own clients, and the BFF can pass the string through as a file.
+  `formatVersion` changes whenever a key is renamed or removed.
+- **What the export holds** is everything stored *about the caller*, per the data inventory:
+  profile (email, CPF, CREF included: it is their own), consent, every relationship on either side
+  with the other party's id and name, every plan they are the client or the trainer of (whole tree:
+  workouts, exercises, sets, notes), their own workout logs with set logs and feedback, and their
+  private exercises. Left out: the password hash and setup tokens (credentials, which no RPC
+  returns), and, for a trainer, their clients' sessions and feedback (those clients' data; the
+  trainer reads them in the product, but they are not the trainer's personal data).
+- **Bounded, never truncated.** Each section is read with `LIMIT max-rows + 1`
+  (`vertice.export.max-rows`, default 20 000), and the document is serialized straight into a
+  `BoundedOutputStream` that refuses the write crossing `vertice.export.max-size` (default 3 MB,
+  under gRPC's 4 MiB default receive limit that the BFF's client keeps). So an oversized document
+  is stopped while it is being written, never built whole first (review of #69: 20 000 feedback
+  rows of 2 000 escaped characters would otherwise be hundreds of MB of JSON per request). The
+  buffer stores at most `max-size` bytes; its backing array grows by doubling, so at most twice
+  that. Past either limit the RPC is `RESOURCE_EXHAUSTED`, naming the section and
+  limit only: a silently partial export would misstate what we hold. Today's largest accounts are
+  orders of magnitude below; paging or streaming is a follow-up if one ever reaches the bound.
+- **One consistent snapshot:** a read-only `REPEATABLE READ` transaction, so a set logged mid-export
+  can't appear without its log. Plain SQL, one set-based query per section (children first, grouped
+  by parent), so the cost doesn't grow with the number of plans or logs.
+- **Timestamps** are read as UTC wall-clock time, the way Hibernate stores `Instant` in these
+  `TIMESTAMP` columns, so they match what every other RPC returns (an integration test compares one
+  with the entity). Self only, like `DeleteAccount`; a deleted account's token is already
+  `UNAUTHENTICATED`, and the profile query filters `deleted_at` as well.
+- **Audit:** one INFO line, `User data exported: userId=… bytes=…`.
 
 ## 1. `EndTrainerClientRelationship`
 
@@ -126,7 +155,17 @@ trainer rule, runs the `AccountDeletionRepository` statements (feedback, set log
 then the client's plan tree bottom-up, unused exercises, relationships, tokens) and calls
 `User#anonymise` with the database clock.
 
-## 3. Tests
+## 3. `ExportUserData`
+
+`UserService.ExportUserData(ExportUserDataRequest{}) returns (ExportUserDataResponse{json})`.
+Controller: `UserAuthorization#checkExportUserData` (any user; a service is `PERMISSION_DENIED`)
+returns the caller's id; `UserDataExportService#exportUserData` reads every section through
+`UserDataExportQueries`, builds `UserDataExport` (records whose fields are the JSON keys),
+serializes it with Boot's `JsonMapper` into a `BoundedOutputStream` (the size check happens on
+every write; Jackson's wrapping of the refusal is unwrapped). `ExportTooLargeException` maps to
+`RESOURCE_EXHAUSTED`.
+
+## 4. Tests
 
 - `plan/RecordedDataIntegrationTest`: a populated plan (workout, two sets, a completed log with one
   set logged, feedback). Every refused delete answers `FAILED_PRECONDITION` with its message and
@@ -151,11 +190,24 @@ then the client's plan tree bottom-up, unused exercises, relationships, tokens) 
 - `UserControllerTest`: self only (client, trainer, ADMIN each delete their own), services denied.
 - `config/DatasourceErrorDetailTest` pins `logServerErrorDetail=false`: the effective Hikari
   property, and a real unique violation whose message names the constraint but not the value.
+- `user/UserDataExportIntegrationTest` (a trainer with two clients, each with a plan, a completed
+  log with a set log and feedback): the client's export holds their profile, consent,
+  relationship, plan tree, log, set log and feedback, with timestamps equal to the entities', and
+  nothing of the other client nor any credential; the trainer's holds both plans, both
+  relationships and their exercise but no client session; services are refused and a deleted
+  account's token can't export. The class pins the JVM to `America/Sao_Paulo` and writes a known
+  wall-clock value into a `TIMESTAMP` column, asserting the exact `…Z` instant, so a zone-shifting
+  read fails on CI (UTC) too. `UserDataExportLimitsTest`: a section past `max-rows` is
+  `RESOURCE_EXHAUSTED`. `UserDataExportServiceTest`: a document many times the serializer's buffer
+  is refused from inside the write (the refusal's stack holds both the bounded stream and Jackson),
+  a document exactly at the bound is returned, and a missing account is `NOT_FOUND`.
+  `BoundedOutputStreamTest`: the write crossing the limit stores nothing of itself.
 
-## 4. Follow-ups
+## 5. Follow-ups
 
-- (c) `ExportUserData` (this spec, next PR).
-- vertice-bff: `DELETE /auth/me` → `DeleteAccount` (P1-05 step 2).
+- vertice-bff (P1-05 step 2): `DELETE /auth/me` → `DeleteAccount`, `GET /auth/me/export` →
+  `ExportUserData` (as a JSON file download), `GET/PATCH /auth/me`.
+- Paging or streaming the export, if an account ever reaches the bounds.
 - ADMIN-initiated `DeleteAccount` for a support request.
 - vertice-bff: `DELETE /clients/:id` calls `EndTrainerClientRelationship` instead of `DeleteUser`
   (P1-05 step 2).

@@ -183,6 +183,14 @@ public class UserAuthorization {
         throw denied(caller, "delete an account");
     }
 
+    /** Like {@link #checkDeleteAccount}: any user, for their own data only; never a service. */
+    public long checkExportUserData(Caller caller) {
+        if (caller instanceof CallerIdentity user) {
+            return user.userId();
+        }
+        throw denied(caller, "export user data");
+    }
+
     /** First access through a setup link: the BFF's service identity only. */
     public void checkSetPasswordWithToken(Caller caller) {
         if (!caller.isService(ServiceSubject.BFF)) {
