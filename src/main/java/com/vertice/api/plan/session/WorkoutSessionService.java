@@ -79,7 +79,7 @@ public class WorkoutSessionService {
                 .orElseGet(SetLog::new);
         setLog.setWorkoutLog(workoutLog);
         setLog.setExerciseSet(exerciseSet);
-        setLog.setWeight(ProtoDecimals.stringToDecimal(request.getWeight()));
+        setLog.setWeight(ProtoDecimals.stringToWeight(request.getWeight()));
         setLog.setReps(request.getReps());
         setLog.setRecordedAt(DbInstants.now());
         return setLogMapper.toResponse(setLogRepository.save(setLog));

@@ -37,6 +37,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -93,7 +94,7 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     @Override
     public void createUser(UserCreateRequest request, StreamObserver<UserResponse> responseObserver) {
         validator.validate(new CreateValidation(request.getName(), Emails.normalize(request.getEmail()), request.getPassword(),
-                request.getCpf(), ProtoStrings.emptyToNull(request.getAcceptedTermsVersion())));
+                request.getCpf(), request.getCref(), ProtoStrings.emptyToNull(request.getAcceptedTermsVersion())));
         requireRole(request.getRole());
         // No account without an accepted Terms / Privacy Policy version on record (P1-04).
         if (request.getAcceptedTermsVersion().isEmpty()) {
@@ -107,7 +108,8 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     public void updateUser(UpdateUserRequest request, StreamObserver<UserResponse> responseObserver) {
-        validator.validate(new UpdateValidation(request.getUser().getName(), Emails.normalize(request.getUser().getEmail()), request.getUser().getCpf()));
+        validator.validate(new UpdateValidation(request.getUser().getName(), Emails.normalize(request.getUser().getEmail()),
+                request.getUser().getCpf(), request.getUser().getCref()));
         requireRole(request.getUser().getRole());
         authorization.checkUpdateUser(callerIdentityResolver.resolve(), request.getId(), domainRole(request.getUser().getRole()));
         responseObserver.onNext(UserView.DETAIL.restrict(userService.updateUser(request.getId(), request.getUser())));
@@ -228,10 +230,11 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     }
 
     private record CreateValidation(
-            @NotBlank String name,
-            @NotBlank @Email String email,
+            @NotBlank @Size(max = 255) String name,
+            @NotBlank @Email @Size(max = 255) String email,
             @NotBlank @Password String password,
             @Cpf String cpf,
+            @Size(max = 20) String cref,
             @Pattern(regexp = CONSENT_VERSION) String acceptedTermsVersion) {
     }
 
@@ -239,9 +242,10 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     }
 
     private record UpdateValidation(
-            @NotBlank String name,
-            @NotBlank @Email String email,
-            @Cpf String cpf) {
+            @NotBlank @Size(max = 255) String name,
+            @NotBlank @Email @Size(max = 255) String email,
+            @Cpf String cpf,
+            @Size(max = 20) String cref) {
     }
 
     private record PageValidation(@PositiveOrZero int pageSize) {

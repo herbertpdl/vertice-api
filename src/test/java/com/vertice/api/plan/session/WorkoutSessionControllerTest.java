@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
 import static com.vertice.api.plan.PlanCallers.CLIENT_ID;
 import static com.vertice.api.plan.PlanCallers.OTHER_CLIENT_ID;
 import static com.vertice.api.plan.PlanCallers.PARTIES;
@@ -367,5 +368,16 @@ class WorkoutSessionControllerTest {
     private static GetOrStartWorkoutLogRequest getOrStart(long clientId) {
         return GetOrStartWorkoutLogRequest.newBuilder()
                 .setWorkoutId(WORKOUT_ID).setClientId(clientId).setWeekStartDate("2026-08-24").build();
+    }
+
+    // Upper bound (P1-09): logged reps follow WorkoutLimits.MAX_REPS; the weight's precision is
+    // checked by ProtoDecimals in the service (ProtoDecimalsTest).
+
+    @Test
+    void recordSetLog_withRepsAtTheBound_isAccepted_andPastIt_throwsInvalidArgument() {
+        stub.recordSetLog(RecordSetLogRequest.newBuilder().setWorkoutLogId(1L).setExerciseSetId(5L).setReps(1_000).build());
+
+        assertInvalidField(() -> stub.recordSetLog(RecordSetLogRequest.newBuilder()
+                .setWorkoutLogId(1L).setExerciseSetId(5L).setReps(1_001).build()), "reps");
     }
 }

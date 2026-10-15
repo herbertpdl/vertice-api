@@ -28,6 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
 import static com.vertice.api.plan.PlanCallers.PARTIES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -254,5 +255,33 @@ class WorkoutExerciseControllerTest {
     void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
         callers.assertNoServiceOrAnonymous(c -> c.createWorkoutExercise(WorkoutExerciseCreateRequest.newBuilder()
                 .setWorkoutId(WORKOUT_ID).setExerciseId(2L).setOrder(1).build()));
+    }
+
+    // Upper bounds (P1-09): WorkoutLimits, and VARCHAR(255) for notes.
+
+    private static WorkoutExerciseCreateRequest.Builder validCreateRequest() {
+        return WorkoutExerciseCreateRequest.newBuilder().setWorkoutId(1L).setExerciseId(2L).setOrder(1);
+    }
+
+    @Test
+    void createWorkoutExercise_atEveryUpperBound_isAccepted() {
+        stub.createWorkoutExercise(validCreateRequest().setOrder(1_000).setRestSecondsBetweenSets(3_600)
+                .setNotes("n".repeat(255)).build());
+    }
+
+    @Test
+    void createWorkoutExercise_pastAnUpperBound_throwsInvalidArgument() {
+        assertInvalidField(() -> stub.createWorkoutExercise(validCreateRequest().setOrder(1_001).build()), "order");
+        assertInvalidField(() -> stub.createWorkoutExercise(validCreateRequest().setRestSecondsBetweenSets(3_601).build()),
+                "restSecondsBetweenSets");
+        assertInvalidField(() -> stub.createWorkoutExercise(validCreateRequest().setNotes("n".repeat(256)).build()), "notes");
+    }
+
+    @Test
+    void updateWorkoutExercise_pastAnUpperBound_throwsInvalidArgument() {
+        assertInvalidField(() -> stub.updateWorkoutExercise(UpdateWorkoutExerciseRequest.newBuilder().setId(WORKOUT_EXERCISE_ID)
+                .setWorkoutExercise(WorkoutExerciseRequest.newBuilder().setOrder(1_001)).build()), "order");
+        assertInvalidField(() -> stub.updateWorkoutExercise(UpdateWorkoutExerciseRequest.newBuilder().setId(WORKOUT_EXERCISE_ID)
+                .setWorkoutExercise(WorkoutExerciseRequest.newBuilder().setOrder(1).setNotes("n".repeat(256))).build()), "notes");
     }
 }

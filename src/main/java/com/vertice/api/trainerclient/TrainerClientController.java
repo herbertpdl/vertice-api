@@ -19,6 +19,7 @@ import io.grpc.stub.StreamObserver;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -66,8 +67,8 @@ public class TrainerClientController extends TrainerClientServiceGrpc.TrainerCli
 
     private record CreateValidation(
             @Min(1) long trainerId,
-            @NotBlank String name,
-            @NotBlank @Email String email,
+            @NotBlank @Size(max = 255) String name,
+            @NotBlank @Email @Size(max = 255) String email,
             @Password String password,
             @Cpf String cpf) {
     }

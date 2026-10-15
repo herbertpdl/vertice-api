@@ -28,6 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static com.vertice.api.grpc.GrpcAssertions.assertInvalidField;
 import static com.vertice.api.plan.PlanCallers.assertAllowed;
 import static com.vertice.api.plan.PlanCallers.assertDenied;
 
@@ -306,5 +307,23 @@ class TrainerClientControllerTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    // Upper bounds (P1-09): users.name and email are VARCHAR(255). Both addresses are valid for
+    // @Email (64-character local part, labels of at most 63), so only the length decides.
+    private static final String EMAIL_255 = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(58) + ".com";
+    private static final String EMAIL_256 = "a".repeat(64) + "@" + "b".repeat(63) + "." + "c".repeat(63) + "." + "d".repeat(59) + ".com";
+
+    @Test
+    void createClientForTrainer_withNameAndEmailAtTheBound_isAccepted() {
+        when(trainerClientService.createClientForTrainer(any())).thenReturn(UserResponse.getDefaultInstance());
+
+        stub.createClientForTrainer(validCreateRequest().setName("n".repeat(255)).setEmail(EMAIL_255).build());
+    }
+
+    @Test
+    void createClientForTrainer_pastTheBound_throwsInvalidArgument() {
+        assertInvalidField(() -> stub.createClientForTrainer(validCreateRequest().setName("n".repeat(256)).build()), "name");
+        assertInvalidField(() -> stub.createClientForTrainer(validCreateRequest().setEmail(EMAIL_256).build()), "email");
     }
 }
