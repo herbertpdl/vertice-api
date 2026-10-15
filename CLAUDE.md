@@ -217,10 +217,12 @@ actor id, user id and role only.
 everything about the caller: profile, consent, relationships, plans as client or trainer with the
 whole tree, their own logs/set logs/feedback, private exercises. Never credentials, never a
 trainer's clients' sessions. `user/UserDataExportQueries` is plain SQL, one query per section with
-`LIMIT max-rows + 1`, in one read-only `REPEATABLE READ` transaction; past `vertice.export.max-rows`
-or `max-size` it is `RESOURCE_EXHAUSTED` (`ExportTooLargeException`), never truncated. Hibernate
-stores `Instant` as UTC wall time in these `TIMESTAMP` columns, so any raw-SQL read of one must use
-`LocalDateTime` at `ZoneOffset.UTC`, not `getTimestamp` (which applies the JVM's zone).
+`LIMIT max-rows + 1`, in one read-only `REPEATABLE READ` transaction; the JSON is written into a
+`user/BoundedOutputStream` that refuses the write crossing `max-size`, so an oversized document is
+never built whole. Past `vertice.export.max-rows` or `max-size` it is `RESOURCE_EXHAUSTED`
+(`ExportTooLargeException`), never truncated. Hibernate stores `Instant` as UTC wall time in these
+`TIMESTAMP` columns, so any raw-SQL read of one must use `LocalDateTime` at `ZoneOffset.UTC`, not
+`getTimestamp` (which applies the JVM's zone).
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's

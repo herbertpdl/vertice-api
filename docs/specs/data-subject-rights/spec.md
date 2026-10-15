@@ -120,9 +120,13 @@ REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inv
   returns), and, for a trainer, their clients' sessions and feedback (those clients' data; the
   trainer reads them in the product, but they are not the trainer's personal data).
 - **Bounded, never truncated.** Each section is read with `LIMIT max-rows + 1`
-  (`vertice.export.max-rows`, default 20 000) and the document is measured after serialization
-  (`vertice.export.max-size`, default 3 MB, under gRPC's 4 MiB default receive limit that the
-  BFF's client keeps). Past either limit the RPC is `RESOURCE_EXHAUSTED`, naming the section and
+  (`vertice.export.max-rows`, default 20 000), and the document is serialized straight into a
+  `BoundedOutputStream` that refuses the write crossing `vertice.export.max-size` (default 3 MB,
+  under gRPC's 4 MiB default receive limit that the BFF's client keeps). So an oversized document
+  is stopped while it is being written, never built whole first (review of #69: 20 000 feedback
+  rows of 2 000 escaped characters would otherwise be hundreds of MB of JSON per request). The
+  buffer stores at most `max-size` bytes; its backing array grows by doubling, so at most twice
+  that. Past either limit the RPC is `RESOURCE_EXHAUSTED`, naming the section and
   limit only: a silently partial export would misstate what we hold. Today's largest accounts are
   orders of magnitude below; paging or streaming is a follow-up if one ever reaches the bound.
 - **One consistent snapshot:** a read-only `REPEATABLE READ` transaction, so a set logged mid-export
@@ -157,7 +161,8 @@ then the client's plan tree bottom-up, unused exercises, relationships, tokens) 
 Controller: `UserAuthorization#checkExportUserData` (any user; a service is `PERMISSION_DENIED`)
 returns the caller's id; `UserDataExportService#exportUserData` reads every section through
 `UserDataExportQueries`, builds `UserDataExport` (records whose fields are the JSON keys),
-serializes it with Boot's `JsonMapper` and checks the size. `ExportTooLargeException` maps to
+serializes it with Boot's `JsonMapper` into a `BoundedOutputStream` (the size check happens on
+every write; Jackson's wrapping of the refusal is unwrapped). `ExportTooLargeException` maps to
 `RESOURCE_EXHAUSTED`.
 
 ## 4. Tests
@@ -190,8 +195,13 @@ serializes it with Boot's `JsonMapper` and checks the size. `ExportTooLargeExcep
   relationship, plan tree, log, set log and feedback, with timestamps equal to the entities', and
   nothing of the other client nor any credential; the trainer's holds both plans, both
   relationships and their exercise but no client session; services are refused and a deleted
-  account's token can't export. `UserDataExportLimitsTest`: a section past `max-rows` is
-  `RESOURCE_EXHAUSTED`. `UserDataExportServiceTest`: the size bound, and a missing account.
+  account's token can't export. The class pins the JVM to `America/Sao_Paulo` and writes a known
+  wall-clock value into a `TIMESTAMP` column, asserting the exact `…Z` instant, so a zone-shifting
+  read fails on CI (UTC) too. `UserDataExportLimitsTest`: a section past `max-rows` is
+  `RESOURCE_EXHAUSTED`. `UserDataExportServiceTest`: a document many times the serializer's buffer
+  is refused from inside the write (the refusal's stack holds both the bounded stream and Jackson),
+  a document exactly at the bound is returned, and a missing account is `NOT_FOUND`.
+  `BoundedOutputStreamTest`: the write crossing the limit stores nothing of itself.
 
 ## 5. Follow-ups
 
