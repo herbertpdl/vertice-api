@@ -6,6 +6,8 @@ import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.InvalidPasswordSetupTokenException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.user.v1.ConsentState;
+import com.vertice.api.generated.grpc.user.v1.ConsentType;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
 import com.vertice.api.generated.grpc.user.v1.DeleteUserRequest;
@@ -13,6 +15,7 @@ import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
 import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
+import com.vertice.api.generated.grpc.user.v1.RecordConsentRequest;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.SetPasswordWithTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
@@ -826,6 +829,121 @@ class UserControllerTest {
     void setPasswordWithToken_anonymous_isUnauthenticated() {
         assertCode(() -> anonymous.setPasswordWithToken(SetPasswordWithTokenRequest.newBuilder()
                 .setToken("abc").setPassword("brandNewPassword1").build()), Status.Code.UNAUTHENTICATED);
+    }
+
+    // --- P1-04: consent ---
+
+    private static final ConsentState CONSENT = ConsentState.newBuilder()
+            .setAcceptedTermsVersion("2026-10-14").setTermsAcceptedAt("2026-10-14T12:00:00Z").build();
+
+    /** Registration until vertice-bff sends the version: accepted without it (the switch is off). */
+    @Test
+    void createUser_withoutTermsVersion_isAcceptedWhileTheSwitchIsOff() {
+        when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.TRAINER).build());
+
+        bff.createUser(UserCreateRequest.newBuilder()
+                .setName("Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build());
+
+        verify(userService).createUser(any());
+    }
+
+    @Test
+    void createUser_withTermsVersion_passesItToTheService() {
+        when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.TRAINER).build());
+        UserCreateRequest request = UserCreateRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com")
+                .setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).setAcceptedTermsVersion("2026-10-14").build();
+
+        bff.createUser(request);
+
+        verify(userService).createUser(request);
+    }
+
+    @Test
+    void createUser_withMalformedTermsVersion_throwsInvalidArgument() {
+        UserCreateRequest.Builder request = UserCreateRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com")
+                .setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER);
+
+        assertInvalidArgument(() -> bff.createUser(request.setAcceptedTermsVersion(" ").build()));
+        assertInvalidArgument(() -> bff.createUser(request.setAcceptedTermsVersion("v".repeat(33)).build()));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void createUser_clientWithoutCpf_passesValidation() {
+        when(userService.createUser(any())).thenReturn(UserResponse.newBuilder().setId(1L).setRole(Role.CLIENT).build());
+
+        bff.createUser(UserCreateRequest.newBuilder()
+                .setName("Client").setEmail("client@vertice.com").setPassword("supersecret1").setRole(Role.CLIENT).build());
+
+        verify(userService).createUser(any());
+    }
+
+    @Test
+    void getUser_self_includesTheConsentState() {
+        UserResponse stored = UserResponse.newBuilder().setId(CLIENT_ID).setConsent(CONSENT).build();
+        when(userService.getUser(CLIENT_ID)).thenReturn(stored);
+
+        assertThat(client.getUser(GetUserRequest.newBuilder().setId(CLIENT_ID).build()).getConsent()).isEqualTo(CONSENT);
+    }
+
+    @Test
+    void getUser_adminOrActiveTrainer_doNotSeeTheConsentState() {
+        when(userService.getUser(CLIENT_ID)).thenReturn(UserResponse.newBuilder().setId(CLIENT_ID).setCpf(VALID_CPF).setConsent(CONSENT).build());
+
+        for (var caller : List.of(admin, trainer)) {
+            UserResponse response = caller.getUser(GetUserRequest.newBuilder().setId(CLIENT_ID).build());
+            assertThat(response.hasConsent()).isFalse();
+            assertThat(response.getCpf()).isEqualTo(VALID_CPF);
+        }
+    }
+
+    @Test
+    void updateUser_responseCarriesNoConsentState() {
+        when(userService.updateUser(eq(CLIENT_ID), any())).thenReturn(UserResponse.newBuilder().setId(CLIENT_ID).setConsent(CONSENT).build());
+
+        UserResponse response = client.updateUser(UpdateUserRequest.newBuilder().setId(CLIENT_ID)
+                .setUser(UserRequest.newBuilder().setName("Client").setEmail("client@vertice.com").setRole(Role.CLIENT)).build());
+
+        assertThat(response.hasConsent()).isFalse();
+    }
+
+    @Test
+    void recordConsent_recordsForTheCallerThemself() {
+        when(userService.recordConsent(CLIENT_ID, ConsentType.HEALTH_DATA, "2026-10-14")).thenReturn(CONSENT);
+
+        ConsentState state = client.recordConsent(RecordConsentRequest.newBuilder()
+                .setType(ConsentType.HEALTH_DATA).setVersion("2026-10-14").build());
+
+        assertThat(state).isEqualTo(CONSENT);
+    }
+
+    /** There is no user id to aim at: an ADMIN's call records the ADMIN's own consent. */
+    @Test
+    void recordConsent_asAdmin_recordsTheAdminsOwn() {
+        when(userService.recordConsent(ADMIN_ID, ConsentType.TERMS, "2026-10-14")).thenReturn(CONSENT);
+
+        admin.recordConsent(RecordConsentRequest.newBuilder().setType(ConsentType.TERMS).setVersion("2026-10-14").build());
+
+        verify(userService).recordConsent(ADMIN_ID, ConsentType.TERMS, "2026-10-14");
+    }
+
+    @Test
+    void recordConsent_asAService_isPermissionDenied_andAnonymousUnauthenticated() {
+        RecordConsentRequest request = RecordConsentRequest.newBuilder().setType(ConsentType.TERMS).setVersion("2026-10-14").build();
+
+        assertPermissionDenied(() -> bff.recordConsent(request));
+        assertPermissionDenied(() -> ops.recordConsent(request));
+        assertCode(() -> anonymous.recordConsent(request), Status.Code.UNAUTHENTICATED);
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void recordConsent_withoutTypeOrVersion_throwsInvalidArgument() {
+        assertInvalidArgument(() -> client.recordConsent(RecordConsentRequest.newBuilder().setVersion("2026-10-14").build()));
+        assertInvalidArgument(() -> client.recordConsent(RecordConsentRequest.newBuilder().setType(ConsentType.TERMS).build()));
+        assertInvalidArgument(() -> client.recordConsent(RecordConsentRequest.newBuilder()
+                .setType(ConsentType.TERMS).setVersion("2026 10 14").build()));
+        verifyNoInteractions(userService);
     }
 
     private void assertInvalidArgument(ThrowingCallable callable) {

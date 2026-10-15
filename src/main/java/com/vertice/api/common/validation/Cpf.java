@@ -11,7 +11,9 @@ import java.lang.annotation.Target;
 
 /**
  * Validates a Brazilian CPF (individual taxpayer ID): exactly 11 digits, not one of the ten
- * all-same-digit sequences, and passes the official two check-digit algorithm.
+ * all-same-digit sequences, and passes the official two check-digit algorithm. Null or empty passes,
+ * like the standard constraints: a CPF is optional for a CLIENT and required for a TRAINER
+ * (P1-04), which {@code UserService} enforces.
  */
 @Documented
 @Constraint(validatedBy = CpfValidator.class)

@@ -17,4 +17,10 @@ public final class ProtoStrings {
     public static String nullToEmpty(String value) {
         return value == null ? "" : value;
     }
+
+    /** The request direction: proto3's empty string ("unset") becomes a {@code null} column value. */
+    @Named("emptyToNull")
+    public static String emptyToNull(String value) {
+        return value == null || value.isEmpty() ? null : value;
+    }
 }

@@ -4,6 +4,8 @@ import com.vertice.api.common.exception.DuplicateCpfException;
 import com.vertice.api.common.exception.DuplicateEmailException;
 import com.vertice.api.common.exception.InvalidCredentialsException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.user.v1.ConsentState;
+import com.vertice.api.generated.grpc.user.v1.ConsentType;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.UserCreateRequest;
 import com.vertice.api.generated.grpc.user.v1.UserRequest;
@@ -19,6 +21,8 @@ import org.springframework.data.domain.Limit;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -194,6 +198,130 @@ class UserServiceTest {
         assertThatThrownBy(() -> service.updateUser(1L, request))
                 .isInstanceOf(DuplicateEmailException.class);
         verify(userRepository, never()).save(any());
+    }
+
+    // --- P1-04: optional CPF for clients, consent records ---
+
+    @Test
+    void createUser_trainerWithoutCpf_isRefused() {
+        UserCreateRequest request = UserCreateRequest.newBuilder()
+                .setName("New Coach").setEmail("coach@vertice.com").setPassword("supersecret1").setRole(Role.TRAINER).build();
+
+        assertThatThrownBy(() -> service.createUser(request))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessageContaining("cpf");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void createUser_clientWithoutCpf_storesNullCpf_withoutACpfLookup() {
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserResponse response = service.createUser(UserCreateRequest.newBuilder()
+                .setName("New Client").setEmail("client@vertice.com").setRole(Role.CLIENT).build());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getCpf()).isNull();
+        assertThat(response.getCpf()).isEmpty();
+        verify(userRepository, never()).findByCpf(any());
+    }
+
+    @Test
+    void createUser_withTermsVersion_recordsItAcceptedNow() {
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        Instant before = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+        service.createUser(UserCreateRequest.newBuilder().setName("New Coach").setEmail("coach@vertice.com")
+                .setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).setAcceptedTermsVersion("2026-10-14").build());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getAcceptedTermsVersion()).isEqualTo("2026-10-14");
+        assertThat(captor.getValue().getTermsAcceptedAt()).isBetween(before, Instant.now());
+        assertThat(captor.getValue().getHealthDataConsentAt()).isNull();
+    }
+
+    @Test
+    void createUser_withoutTermsVersion_recordsNoAcceptance() {
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.createUser(UserCreateRequest.newBuilder().setName("New Coach").setEmail("coach@vertice.com")
+                .setPassword("supersecret1").setCpf(VALID_CPF).setRole(Role.TRAINER).build());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getAcceptedTermsVersion()).isNull();
+        assertThat(captor.getValue().getTermsAcceptedAt()).isNull();
+    }
+
+    @Test
+    void updateUser_trainerRemovingCpf_isRefused() {
+        User existing = new User();
+        existing.setId(1L);
+        existing.setEmail("coach@vertice.com");
+        existing.setCpf(VALID_CPF);
+        existing.setRole(com.vertice.api.user.Role.TRAINER);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        UserRequest request = UserRequest.newBuilder().setName("Coach").setEmail("coach@vertice.com").setRole(Role.TRAINER).build();
+
+        assertThatThrownBy(() -> service.updateUser(1L, request)).isInstanceOf(ConstraintViolationException.class);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateUser_clientRemovingCpf_storesNull() {
+        User existing = new User();
+        existing.setId(1L);
+        existing.setEmail("client@vertice.com");
+        existing.setCpf(VALID_CPF);
+        existing.setRole(com.vertice.api.user.Role.CLIENT);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.updateUser(1L, UserRequest.newBuilder().setName("Client").setEmail("client@vertice.com").setRole(Role.CLIENT).build());
+
+        assertThat(existing.getCpf()).isNull();
+    }
+
+    @Test
+    void recordConsent_terms_setsVersionAndTime_andReturnsTheState() {
+        User user = new User();
+        user.setId(5L);
+        when(userRepository.findById(5L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        ConsentState state = service.recordConsent(5L, ConsentType.TERMS, "2026-10-14");
+
+        assertThat(user.getAcceptedTermsVersion()).isEqualTo("2026-10-14");
+        assertThat(state.getAcceptedTermsVersion()).isEqualTo("2026-10-14");
+        assertThat(state.getTermsAcceptedAt()).isEqualTo(user.getTermsAcceptedAt().toString());
+        assertThat(state.getHealthDataConsentVersion()).isEmpty();
+        assertThat(state.getHealthDataConsentAt()).isEmpty();
+    }
+
+    @Test
+    void recordConsent_healthData_replacesAnEarlierRecord() {
+        User user = new User();
+        user.setId(5L);
+        user.consentToHealthData("v1", Instant.parse("2026-01-01T00:00:00Z"));
+        when(userRepository.findById(5L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        service.recordConsent(5L, ConsentType.HEALTH_DATA, "v2");
+
+        assertThat(user.getHealthDataConsentVersion()).isEqualTo("v2");
+        assertThat(user.getHealthDataConsentAt()).isAfter(Instant.parse("2026-01-01T00:00:00Z"));
+        assertThat(user.getAcceptedTermsVersion()).isNull();
+    }
+
+    @Test
+    void recordConsent_throwsWhenMissing() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.recordConsent(99L, ConsentType.TERMS, "v1"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

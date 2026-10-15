@@ -1,8 +1,11 @@
 package com.vertice.api.user;
 
+import com.vertice.api.common.time.DbInstants;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.ToString;
+
+import java.time.Instant;
 
 @Data
 @Entity
@@ -19,7 +22,9 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false, unique = true)
+    // null for a CLIENT who didn't give one; a TRAINER always has one (UserService, P1-04). Unique
+    // when set (V27's partial index).
+    @Column(length = 11)
     private String cpf;
 
     @Column(length = 20)
@@ -34,4 +39,45 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
+
+    // Consent records (P1-04, docs/data-inventory.md): the version of the text the user accepted and
+    // when. Both null until the user accepts; RecordConsent overwrites them with the latest acceptance.
+    @Column(name = "accepted_terms_version", length = 32)
+    private String acceptedTermsVersion;
+
+    @Column(name = "terms_accepted_at")
+    private Instant termsAcceptedAt;
+
+    @Column(name = "health_data_consent_version", length = 32)
+    private String healthDataConsentVersion;
+
+    @Column(name = "health_data_consent_at")
+    private Instant healthDataConsentAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @PrePersist
+    void onCreate() {
+        createdAt = DbInstants.now();
+        updatedAt = createdAt;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = DbInstants.now();
+    }
+
+    public void acceptTerms(String version, Instant at) {
+        acceptedTermsVersion = version;
+        termsAcceptedAt = at;
+    }
+
+    public void consentToHealthData(String version, Instant at) {
+        healthDataConsentVersion = version;
+        healthDataConsentAt = at;
+    }
 }

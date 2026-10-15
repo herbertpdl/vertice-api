@@ -56,7 +56,7 @@ public class TrainerClientService {
         trainerClient.setStartedAt(DbInstants.now());
         trainerClientRepository.save(trainerClient);
 
-        return createdClient;
+        return UserView.DETAIL.restrict(createdClient);
     }
 
     /**

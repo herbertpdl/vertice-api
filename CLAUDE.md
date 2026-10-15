@@ -141,11 +141,12 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | --- | --- |
 | `VerifyCredentials` | `service:bff` (login); a user for their own stored email only (`POST /auth/password`) |
 | `CreateUser` | `service:bff` (register), never with role ADMIN |
+| `RecordConsent` | any user, for themself only (the request has no user id; ADMIN can't consent for anyone else); never a service |
 | `SetPasswordWithToken` | `service:bff` |
 | `ListUsers` | ADMIN, `service:ops`; anonymous under `local` (BFF `VERIFY_PASSWORDS=false` dev login). Paginated (`page_size` ≤ 100, default 100; `page_token`) |
 | `ListUsersWithoutPassword` | ADMIN (all); TRAINER, narrowed to their active clients (BFF setup-link reissue) |
 | `CreatePasswordSetupToken` | `service:ops`, ADMIN; TRAINER for their active client who has no password yet |
-| `GetUser` | self, ADMIN, the target's active trainer (detail view); a trainer with any plan for the target gets the summary view (dashboard names of former clients) |
+| `GetUser` | self (self view), ADMIN, the target's active trainer (detail view); a trainer with any plan for the target gets the summary view (dashboard names of former clients) |
 | `UpdateUser` | ADMIN (anything); self or the target's active trainer, role unchanged |
 | `SetUserPassword` | self, ADMIN |
 | `DeleteUser` | self, ADMIN |
@@ -174,9 +175,21 @@ messages (`Email already in use`, `CPF already in use`) that never echo the valu
 
 | View | Fields | RPCs |
 | --- | --- | --- |
-| detail | everything | `GetUser` (self, ADMIN, active trainer), `UpdateUser`, `CreateClientForTrainer` |
+| self | everything, consent state included | `GetUser` for the user themself |
+| detail | everything but the consent state | `GetUser` (ADMIN, active trainer), `UpdateUser`, `CreateClientForTrainer` |
 | contact | id, name, role, email | `ListUsers` (ops setup links, local dev login match by email), `CreateUser`, `VerifyCredentials` (the BFF's session) |
 | summary | id, name, role | `ListClientsForTrainer` (the BFF roster), `ListUsersWithoutPassword`, `GetUser` for a trainer who only has a plan with the target |
+
+**Consent and CPF (P1-04).** `users` records the Terms version a user accepted
+(`accepted_terms_version`, `terms_accepted_at`, set by `CreateUser` or `RecordConsent(TERMS)`) and
+the health-data consent (`health_data_consent_version`, `health_data_consent_at`,
+`RecordConsent(HEALTH_DATA)`), each version and time together (V27 check constraints). `CreateUser`
+accepts a registration without the version while `vertice.consent.terms-required-on-registration`
+is off (the default until vertice-bff sends it). CPF is optional for a CLIENT and required for a
+TRAINER (`UserService`, backstopped by V27's `ck_users_trainer_cpf`); an empty CPF is stored as
+NULL, and `uq_users_cpf` is a partial unique index over set values. `docs/data-inventory.md` lists
+every personal-data column with its purpose, legal basis, retention and readers; its product/legal
+decisions are pending legal review.
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. Role changes are ADMIN-only. Non-local test contexts must set a valid (≥32-byte,
