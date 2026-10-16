@@ -18,6 +18,23 @@
 -- *session's* TimeZone, which would shift every historic row by the migrating client's offset.
 -- Date-only business columns (`training_plans.start_date`/`end_date`, `workout_logs.week_start_date`)
 -- stay DATE: they are local calendar days, not instants, and DATE carries no zone to get wrong.
+--
+-- DEPLOY IMPACT — read before running this against production.
+--   * Each ALTER COLUMN ... TYPE takes ACCESS EXCLUSIVE on its table and fully rewrites it (the
+--     relfilenode changes); no read or write of that table proceeds meanwhile.
+--   * Flyway runs this file in a single transaction, so the locks are NOT released table by table:
+--     every one is held until the last rewrite commits. The window therefore covers `users`,
+--     `workout_logs`, `set_logs`, `workout_feedback`, `password_setup_tokens` and
+--     `trainer_clients` at once — in practice the whole API is down for the duration.
+--   * Size the window first. `set_logs` and `workout_logs` are the tables that grow without bound:
+--     check their row counts and `pg_total_relation_size` before deploying, and schedule
+--     accordingly. At current volumes this is seconds; it does not stay that way for ever.
+--   * Set `lock_timeout` on the deploying session so this queues behind, rather than blocks, live
+--     traffic: a pending ACCESS EXCLUSIVE also stalls every later reader of the same table.
+--   * NOT idempotent if re-run by hand. A second pass over an already-converted column computes
+--     `timestamptz AT TIME ZONE 'UTC'` → bare timestamp → back to timestamptz via the *session's*
+--     zone, shifting every instant by that offset. Flyway's checksum makes this impossible through
+--     normal channels; an incident re-run applying the file manually is the real risk.
 
 ALTER TABLE workout_logs
     ALTER COLUMN started_at   TYPE TIMESTAMPTZ USING started_at AT TIME ZONE 'UTC',
@@ -48,10 +65,14 @@ ALTER TABLE users
     ALTER COLUMN updated_at             TYPE TIMESTAMPTZ USING updated_at             AT TIME ZONE 'UTC',
     ALTER COLUMN deleted_at             TYPE TIMESTAMPTZ USING deleted_at             AT TIME ZONE 'UTC';
 
--- ALTER TYPE re-casts a column default through the new type, which would leave the broken
--- `now()::timestamp` reading in place. Restate them so they are plain TIMESTAMPTZ `now()`, correct
--- in any session zone. (Hibernate always supplies these three on insert; the defaults only matter
--- to raw SQL and future migrations.)
+-- Defensive, and a no-op on PostgreSQL 12+: ALTER TYPE re-derives a column default against the new
+-- type, so the implicit `now()`-into-TIMESTAMP cast is dropped and the default is already a plain
+-- TIMESTAMPTZ `now()` by this point — measured on PG 16, where the ALTER TYPEs above *alone* leave a
+-- default that stores the true instant from a UTC+14 session (asserted by
+-- InstantColumnsTimestamptzMigrationTest). These three statements only make the intended default
+-- explicit rather than inherited from that re-derivation. Don't cite them as load-bearing; the
+-- `USING ... AT TIME ZONE 'UTC'` clauses above are the part that is.
+-- (Hibernate supplies all three columns on insert anyway; the defaults matter only to raw SQL.)
 ALTER TABLE trainer_clients ALTER COLUMN started_at SET DEFAULT now();
 ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now();
 ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now();

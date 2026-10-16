@@ -16,6 +16,8 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -97,23 +99,31 @@ class InstantColumnsTimestamptzMigrationTest {
     }
 
     /**
-     * The restated {@code DEFAULT now()} is the point of the last three statements: ALTER TYPE
-     * re-casts the old default through the new type, which would keep the broken
-     * session-zone-dependent reading.
+     * What actually fixes the broken {@code DEFAULT now()}, split so the answer is not guessed at.
+     * The type change alone is enough: PostgreSQL re-derives a column default against the new type,
+     * dropping the implicit {@code now()}-into-TIMESTAMP cast that made the old default read the
+     * session's zone. So V31's three trailing {@code SET DEFAULT now()} statements are defensive and
+     * a no-op on PG 12+ — asserted here rather than asserted in a comment, because V31 used to
+     * claim the opposite.
+     *
+     * <p>Under {@code hostileTimeZoneTest} the session is at UTC+14, so a default that still went
+     * through the session's zone would be 14 hours out and both halves would fail.
      */
     @Test
-    void afterMigration_theDatabaseSideDefaultStoresTheTrueInstant() {
+    void theTypeChangeAlone_fixesTheDatabaseSideDefault_andRestatingItChangesNothing() {
         inRolledBackTransaction(() -> {
             revertToPreV31();
 
-            jdbc.execute(migrationSql());
+            jdbc.execute(typeChangesOnly());
+            assertThat(defaultExpressionOf("users", "created_at"))
+                    .as("the implicit cast to TIMESTAMP is re-derived away")
+                    .isEqualTo("now()");
+            assertThat(instantOfNewUser("after the type change alone"))
+                    .isCloseTo(Instant.now(), within(5, ChronoUnit.MINUTES));
 
-            Long id = jdbc.queryForObject("""
-                    INSERT INTO users (name, email, role) VALUES ('post-v31 default', ?, 'CLIENT')
-                    RETURNING id
-                    """, Long.class, "tz-migration-" + System.nanoTime() + "@example.com");
-            assertThat(instantOf(id, "created_at")).isCloseTo(Instant.now(), within(5, ChronoUnit.MINUTES));
-            assertThat(instantOf(id, "updated_at")).isCloseTo(Instant.now(), within(5, ChronoUnit.MINUTES));
+            jdbc.execute(defaultRestatementsOnly());
+            assertThat(instantOfNewUser("after restating the default"))
+                    .isCloseTo(Instant.now(), within(5, ChronoUnit.MINUTES));
         });
     }
 
@@ -130,6 +140,50 @@ class InstantColumnsTimestamptzMigrationTest {
         jdbc.execute("ALTER TABLE trainer_clients ALTER COLUMN started_at SET DEFAULT now()");
         jdbc.execute("ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now()");
         jdbc.execute("ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now()");
+    }
+
+    /** V31's `ALTER COLUMN ... TYPE` statements, without the trailing `SET DEFAULT` ones. */
+    private static String typeChangesOnly() {
+        return statementsOf(migrationSql(), false);
+    }
+
+    /** Only V31's trailing `SET DEFAULT now()` statements. */
+    private static String defaultRestatementsOnly() {
+        return statementsOf(migrationSql(), true);
+    }
+
+    /**
+     * Splits the real migration file so each half can be applied on its own. Taken from the file
+     * rather than retyped here, so the two halves can't drift from what Flyway runs. Comment lines
+     * go first: the file's prose contains semicolons, so splitting on them before stripping comments
+     * would cut sentences into "statements".
+     */
+    private static String statementsOf(String sql, boolean setDefaults) {
+        String withoutComments = sql.lines()
+                .filter(line -> !line.stripLeading().startsWith("--"))
+                .collect(Collectors.joining("\n"));
+        return Stream.of(withoutComments.split(";"))
+                .map(String::strip)
+                .filter(statement -> !statement.isEmpty())
+                .filter(statement -> statement.contains("SET DEFAULT") == setDefaults)
+                .collect(Collectors.joining(";\n", "", ";"));
+    }
+
+    private String defaultExpressionOf(String table, String column) {
+        return jdbc.queryForObject("""
+                SELECT pg_get_expr(d.adbin, d.adrelid)
+                  FROM pg_attrdef d
+                  JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+                 WHERE d.adrelid = ?::regclass AND a.attname = ?
+                """, String.class, table, column);
+    }
+
+    private Instant instantOfNewUser(String name) {
+        Long id = jdbc.queryForObject("""
+                INSERT INTO users (name, email, role) VALUES (?, ?, 'CLIENT') RETURNING id
+                """, Long.class, name, "tz-migration-" + System.nanoTime() + "@example.com");
+        assertThat(instantOf(id, "updated_at")).isEqualTo(instantOf(id, "created_at"));
+        return instantOf(id, "created_at");
     }
 
     private Instant instantOf(Long userId, String column) {

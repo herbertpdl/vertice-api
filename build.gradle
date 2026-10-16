@@ -84,6 +84,18 @@ tasks.register('hostileTimeZoneTest', Test) {
 	// Asserted by the test itself, so this task can't silently stop pinning the zone.
 	systemProperty 'vertice.test.expectedTimeZone', hostileTimeZone
 	environment 'TZ', hostileTimeZone
+
+	// The in-test check is @EnabledIfSystemProperty, so dropping the properties above would skip it
+	// rather than fail, quietly turning this task into a second copy of `test`. Check the wiring here
+	// too, where it can't be skipped.
+	doFirst {
+		['user.timezone', 'vertice.test.expectedTimeZone'].each { key ->
+			if (systemProperties[key] != hostileTimeZone) {
+				throw new GradleException("hostileTimeZoneTest must set -D${key}=${hostileTimeZone} " +
+						"(found: ${systemProperties[key]}); without it this task proves nothing.")
+			}
+		}
+	}
 }
 
 tasks.named('check') {
