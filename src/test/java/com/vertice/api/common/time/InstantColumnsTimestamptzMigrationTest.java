@@ -103,25 +103,34 @@ class InstantColumnsTimestamptzMigrationTest {
      * The type change alone is enough: PostgreSQL re-derives a column default against the new type,
      * dropping the implicit {@code now()}-into-TIMESTAMP cast that made the old default read the
      * session's zone. So V31's three trailing {@code SET DEFAULT now()} statements are defensive and
-     * a no-op on PG 12+ — asserted here rather than asserted in a comment, because V31 used to
-     * claim the opposite.
+     * change nothing — asserted here rather than asserted in a comment, because V31 used to claim
+     * the opposite.
      *
-     * <p>Under {@code hostileTimeZoneTest} the session is at UTC+14, so a default that still went
-     * through the session's zone would be 14 hours out and both halves would fail.
+     * <p>Both the mechanism and the effect are checked. The mechanism is the default expression's
+     * result type, not its printed form: {@code pg_get_expr} suppresses implicit coercions, so it
+     * prints {@code now()} before and after and can prove nothing (review of #72). The effect is a
+     * row inserted through the default — and under {@code hostileTimeZoneTest} the session is at
+     * UTC+14, so a default still going through the session's zone would be 14 hours out.
      */
     @Test
     void theTypeChangeAlone_fixesTheDatabaseSideDefault_andRestatingItChangesNothing() {
         inRolledBackTransaction(() -> {
             revertToPreV31();
+            assertThat(defaultResultTypeOf("users", "created_at"))
+                    .as("pre-V31 the default is now() coerced into the column's bare timestamp")
+                    .isEqualTo("timestamp without time zone");
 
             jdbc.execute(typeChangesOnly());
-            assertThat(defaultExpressionOf("users", "created_at"))
-                    .as("the implicit cast to TIMESTAMP is re-derived away")
-                    .isEqualTo("now()");
+            assertThat(defaultResultTypeOf("users", "created_at"))
+                    .as("the type change alone re-derives the default, dropping that coercion")
+                    .isEqualTo("timestamp with time zone");
             assertThat(instantOfNewUser("after the type change alone"))
                     .isCloseTo(Instant.now(), within(5, ChronoUnit.MINUTES));
 
             jdbc.execute(defaultRestatementsOnly());
+            assertThat(defaultResultTypeOf("users", "created_at"))
+                    .as("restating the default leaves it exactly as the type change left it")
+                    .isEqualTo("timestamp with time zone");
             assertThat(instantOfNewUser("after restating the default"))
                     .isCloseTo(Instant.now(), within(5, ChronoUnit.MINUTES));
         });
@@ -142,14 +151,27 @@ class InstantColumnsTimestamptzMigrationTest {
         jdbc.execute("ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now()");
     }
 
-    /** V31's `ALTER COLUMN ... TYPE` statements, without the trailing `SET DEFAULT` ones. */
+    /**
+     * V31's `ALTER COLUMN ... TYPE` statements, without the trailing `SET DEFAULT` ones — one per
+     * table. The count is asserted because both drift directions are otherwise silent: a seventh
+     * table added to V31 would go unconverted here, and a splitter that matched nothing would make
+     * the test below pass by doing nothing at all.
+     */
     private static String typeChangesOnly() {
-        return statementsOf(migrationSql(), false);
+        String sql = statementsOf(migrationSql(), false);
+        assertThat(countStatements(sql)).as("V31's ALTER ... TYPE statements").isEqualTo(6);
+        return sql;
     }
 
-    /** Only V31's trailing `SET DEFAULT now()` statements. */
+    /** Only V31's trailing `SET DEFAULT now()` statements — one per column that has a default. */
     private static String defaultRestatementsOnly() {
-        return statementsOf(migrationSql(), true);
+        String sql = statementsOf(migrationSql(), true);
+        assertThat(countStatements(sql)).as("V31's SET DEFAULT statements").isEqualTo(3);
+        return sql;
+    }
+
+    private static long countStatements(String sql) {
+        return sql.chars().filter(c -> c == ';').count();
     }
 
     /**
@@ -169,9 +191,17 @@ class InstantColumnsTimestamptzMigrationTest {
                 .collect(Collectors.joining(";\n", "", ";"));
     }
 
-    private String defaultExpressionOf(String table, String column) {
+    /**
+     * The type a column's DEFAULT expression evaluates to, which is what tells a re-derived
+     * {@code now()} apart from one coerced into a bare timestamp. It has to come out of the stored
+     * node tree ({@code pg_attrdef.adbin}): {@code pg_get_expr} renders implicit coercions
+     * invisibly, printing plain {@code now()} in both states, and there is no catalog column for a
+     * default's result type. The node field is the outer {@code FUNCEXPR}'s
+     * {@code :funcresulttype}, an OID that {@code format_type} turns back into a readable name.
+     */
+    private String defaultResultTypeOf(String table, String column) {
         return jdbc.queryForObject("""
-                SELECT pg_get_expr(d.adbin, d.adrelid)
+                SELECT format_type(substring(d.adbin::text from ':funcresulttype (\\d+)')::oid, NULL)
                   FROM pg_attrdef d
                   JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
                  WHERE d.adrelid = ?::regclass AND a.attname = ?

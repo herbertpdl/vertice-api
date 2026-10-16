@@ -70,8 +70,11 @@ class UserDataExportIntegrationTest {
     /** A Monday, as {@code week_start_date} requires. */
     private static final String WEEK = "2026-03-02";
     /**
-     * Not UTC, so reading a {@code TIMESTAMP} column in the JVM's zone instead of as UTC shows up as
-     * a shifted instant here, on CI (which runs in UTC) as much as locally.
+     * Not UTC, so any zone the export read relied on would be visibly the wrong one here, on CI
+     * (which runs in UTC) as much as locally. Against the bare {@code TIMESTAMP} columns these were
+     * before V31 that surfaced as a shifted instant; now they are {@code TIMESTAMPTZ} it surfaces as
+     * a failure to read the column at all (see
+     * {@link #timestamps_areExportedAsTheUtcInstantTheColumnHolds}).
      */
     private static final TimeZone NON_UTC = TimeZone.getTimeZone("America/Sao_Paulo");
     private static TimeZone originalZone;
