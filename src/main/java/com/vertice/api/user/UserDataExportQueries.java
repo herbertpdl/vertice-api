@@ -203,9 +203,13 @@ class UserDataExportQueries {
 
     /**
      * These columns are {@code TIMESTAMPTZ} (V31), so the driver knows the instant exactly and no
-     * zone has to be assumed here. Read as {@link OffsetDateTime} rather than {@code getTimestamp}:
-     * {@code java.sql.Timestamp} goes through the JVM's default zone, which is the dependency V31
-     * removed.
+     * zone has to be assumed here. {@link OffsetDateTime} rather than {@code getTimestamp} is a
+     * house-style choice, not a correctness one: for a {@code TIMESTAMPTZ} column
+     * {@code getTimestamp} yields the right instant too (measured in both zones). It is the legacy
+     * {@code java.sql.Timestamp} semantics that are worth avoiding — against the bare
+     * {@code TIMESTAMP} column this used to be, {@code getTimestamp} genuinely did resolve the
+     * stored wall clock through the JVM's zone, and the pre-V31 code had to compensate by reading
+     * {@code LocalDateTime} at {@code ZoneOffset.UTC}.
      */
     private static Instant instant(ResultSet rs, String column) throws SQLException {
         OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);

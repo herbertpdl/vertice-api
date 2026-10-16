@@ -214,9 +214,13 @@ class UserDataExportIntegrationTest {
     /**
      * A known instant written straight into the {@code TIMESTAMPTZ} column (V31) comes back as that
      * same instant, with the JVM in a non-UTC zone (see {@link #NON_UTC}); Hibernate reads it the
-     * same way. A reader that applied the JVM's zone would give 13:15:30.123456Z instead. The
-     * literal carries its offset explicitly: a bare {@code TIMESTAMP '…'} would be resolved against
-     * the session's zone, which is exactly the ambiguity V31 removed.
+     * same way. The literal carries its offset explicitly: a bare {@code TIMESTAMP '…'} would be
+     * resolved against the session's zone, which is exactly the ambiguity V31 removed — before V31
+     * that bare form was the convention, and this test asserted 10:15:30.123456Z against a reader
+     * that would otherwise have shifted it to 13:15:30.123456Z. Post-V31 the old
+     * {@code LocalDateTime}-at-UTC reader doesn't shift the value, it fails outright
+     * ("Cannot convert the column of type TIMESTAMPTZ to … LocalDateTime"), so what this now pins is
+     * that the column holds a true instant and the export reports exactly it.
      */
     @Test
     void timestamps_areExportedAsTheUtcInstantTheColumnHolds() {

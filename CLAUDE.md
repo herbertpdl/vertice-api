@@ -222,8 +222,8 @@ trainer's clients' sessions. `user/UserDataExportQueries` is plain SQL, one quer
 `user/BoundedOutputStream` that refuses the write crossing `max-size`, so an oversized document is
 never built whole. Past `vertice.export.max-rows` or `max-size` it is `RESOURCE_EXHAUSTED`
 (`ExportTooLargeException`), never truncated. Its timestamp columns are `TIMESTAMPTZ`, so a raw-SQL
-read of one uses `getObject(column, OffsetDateTime.class).toInstant()`, never `getTimestamp` (which
-applies the JVM's zone) — see "Time: instants vs. business dates".
+read of one uses `getObject(column, OffsetDateTime.class).toInstant()` — see "Time: instants vs.
+business dates".
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's
@@ -325,7 +325,12 @@ Two different kinds of value, and conflating them is what XREPO-006/REL-API-008 
   is `TIMESTAMPTZ`; casting it into `TIMESTAMP` uses the session's zone, which pgjdbc takes from the
   JVM's). A new `Instant` column must be `TIMESTAMPTZ`. In raw SQL, read one as
   `OffsetDateTime` (`UserDataExportQueries#instant`) and write one with an explicit offset — a bare
-  `TIMESTAMP '…'` literal is resolved against the session's zone.
+  `TIMESTAMP '…'` literal is resolved against the session's zone. Reading with `getTimestamp` is
+  correct for a `TIMESTAMPTZ` column; `OffsetDateTime` is the house style, to stay on `java.time`.
+- **Converting an `Instant` column rewrites its table.** `ALTER COLUMN … TYPE timestamptz` takes
+  ACCESS EXCLUSIVE and rewrites, and Flyway runs a migration file in one transaction, so the locks
+  on every table in the file are held until the last one finishes. Size the window against
+  `set_logs`/`workout_logs` and set `lock_timeout` for the deploy — see V31's header.
 - **Business dates are never derived from an instant here.** The API computes no `today` and no week
   start: `week_start_date` (validated to be a Monday) and a plan's `start_date`/`end_date` arrive as
   `yyyy-MM-dd` from the caller and are stored as `DATE`, so no zone can shift them. Deriving the
