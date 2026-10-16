@@ -1,0 +1,87 @@
+-- P2-02 (REL-API-008, XREPO-006): every column mapped to a Java `Instant` becomes TIMESTAMPTZ, so
+-- a point in time is stored as a point in time instead of a bare wall-clock reading whose zone is
+-- a convention nothing enforces.
+--
+-- Why this rather than pinning the JVM/Hibernate zone: Hibernate already binds an `Instant` as UTC
+-- wall clock regardless of the JVM zone (verified in BusinessTimeZoneIntegrationTest), so
+-- `hibernate.jdbc.time_zone=UTC` would change nothing. What *is* zone-dependent is the two DB-side
+-- `DEFAULT now()` clauses below: `now()` is TIMESTAMPTZ and casting it into TIMESTAMP uses the
+-- session's TimeZone, which pgjdbc sets from the JVM's. On a JVM in America/Sao_Paulo those
+-- defaults wrote local wall clock into a column every reader interprets as UTC — a silent 3-hour
+-- error. `-Duser.timezone=UTC` *would* have fixed that defect, and more cheaply: pgjdbc propagates
+-- the JVM zone to the session, so pinning the JVM to UTC makes the cast correct. The reason to
+-- prefer TIMESTAMPTZ is not that pinning fails — it is that pinning holds only for this JVM, while
+-- a psql session, an ops script, a future column default or one lost deployment flag reintroduces
+-- the same defect silently. TIMESTAMPTZ puts the guarantee in the schema, where no caller has to
+-- remember it.
+--
+-- Existing rows are reinterpreted, not rewritten: `USING col AT TIME ZONE 'UTC'` labels each
+-- stored wall-clock reading with the zone it already meant, so every instant keeps its value. The
+-- `AT TIME ZONE 'UTC'` clause is load-bearing — a bare `ALTER COLUMN ... TYPE TIMESTAMPTZ` uses the
+-- *session's* TimeZone, which would shift every historic row by the migrating client's offset.
+-- Date-only business columns (`training_plans.start_date`/`end_date`, `workout_logs.week_start_date`)
+-- stay DATE: they are local calendar days, not instants, and DATE carries no zone to get wrong.
+--
+-- DEPLOY IMPACT — read before running this against production.
+--   * Each ALTER COLUMN ... TYPE takes ACCESS EXCLUSIVE on its table and fully rewrites it (the
+--     relfilenode changes); no read or write of that table proceeds meanwhile.
+--   * Flyway runs this file in a single transaction, so the locks are NOT released table by table:
+--     every one is held until the last rewrite commits. The window therefore covers `users`,
+--     `workout_logs`, `set_logs`, `workout_feedback`, `password_setup_tokens` and
+--     `trainer_clients` at once — in practice the whole API is down for the duration.
+--   * Size the window first. `set_logs` and `workout_logs` are the tables that grow without bound:
+--     check their row counts and `pg_total_relation_size` before deploying, and schedule
+--     accordingly. At current volumes this is seconds; it does not stay that way for ever.
+--   * Set `lock_timeout` on the deploying session, so that rather than waiting indefinitely the
+--     ALTER aborts and can be retried in a quieter moment. That matters because a *pending* ACCESS
+--     EXCLUSIVE also stalls every later reader of the same table: without a timeout, one long
+--     transaction holding the table turns this migration into a queue of blocked queries behind it.
+--   * NOT idempotent if re-run by hand. A second pass over an already-converted column computes
+--     `timestamptz AT TIME ZONE 'UTC'` → bare timestamp → back to timestamptz via the *session's*
+--     zone, shifting every instant by that offset. Through Flyway this can't happen: the applied
+--     version row in `flyway_schema_history` means the file is never run twice (the checksum is a
+--     different guard — it detects edits to an already-applied file). An incident re-run applying
+--     this file manually is the real risk.
+
+ALTER TABLE workout_logs
+    ALTER COLUMN started_at   TYPE TIMESTAMPTZ USING started_at AT TIME ZONE 'UTC',
+    ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING completed_at AT TIME ZONE 'UTC';
+
+ALTER TABLE set_logs
+    ALTER COLUMN recorded_at TYPE TIMESTAMPTZ USING recorded_at AT TIME ZONE 'UTC';
+
+ALTER TABLE workout_feedback
+    ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+
+ALTER TABLE password_setup_tokens
+    ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC',
+    ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC',
+    ALTER COLUMN used_at    TYPE TIMESTAMPTZ USING used_at    AT TIME ZONE 'UTC';
+
+-- The partial indexes on `ended_at IS NULL` (uq_trainer_clients_active_client,
+-- idx_trainer_clients_trainer_active) are rebuilt by ALTER TYPE; the predicate is a null check, so
+-- it stays valid.
+ALTER TABLE trainer_clients
+    ALTER COLUMN started_at TYPE TIMESTAMPTZ USING started_at AT TIME ZONE 'UTC',
+    ALTER COLUMN ended_at   TYPE TIMESTAMPTZ USING ended_at   AT TIME ZONE 'UTC';
+
+ALTER TABLE users
+    ALTER COLUMN terms_accepted_at      TYPE TIMESTAMPTZ USING terms_accepted_at      AT TIME ZONE 'UTC',
+    ALTER COLUMN health_data_consent_at TYPE TIMESTAMPTZ USING health_data_consent_at AT TIME ZONE 'UTC',
+    ALTER COLUMN created_at             TYPE TIMESTAMPTZ USING created_at             AT TIME ZONE 'UTC',
+    ALTER COLUMN updated_at             TYPE TIMESTAMPTZ USING updated_at             AT TIME ZONE 'UTC',
+    ALTER COLUMN deleted_at             TYPE TIMESTAMPTZ USING deleted_at             AT TIME ZONE 'UTC';
+
+-- Defensive, and in practice a no-op: ALTER TYPE re-derives a column default against the new type,
+-- so the implicit `now()`-into-TIMESTAMP cast is dropped and the default is already a plain
+-- TIMESTAMPTZ `now()` by this point. Measured on PG 16 — the ALTER TYPEs above *alone* leave a
+-- default whose result type is `timestamp with time zone` and which stores the true instant from a
+-- UTC+14 session (both asserted by InstantColumnsTimestamptzMigrationTest). The re-derivation
+-- mechanism is much older than that, but 16 is the only version this was checked against, so take
+-- the no-op as verified there and not as a general guarantee. These three statements only make the
+-- intended default explicit rather than inherited. Don't cite them as load-bearing; the
+-- `USING ... AT TIME ZONE 'UTC'` clauses above are the part that is.
+-- (Hibernate supplies all three columns on insert anyway; the defaults matter only to raw SQL.)
+ALTER TABLE trainer_clients ALTER COLUMN started_at SET DEFAULT now();
+ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now();
+ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now();

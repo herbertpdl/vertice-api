@@ -132,10 +132,13 @@ REL-API-003, and the API parts of COMP-BFF-001 and PRIV-BFF-003); `docs/data-inv
 - **One consistent snapshot:** a read-only `REPEATABLE READ` transaction, so a set logged mid-export
   can't appear without its log. Plain SQL, one set-based query per section (children first, grouped
   by parent), so the cost doesn't grow with the number of plans or logs.
-- **Timestamps** are read as UTC wall-clock time, the way Hibernate stores `Instant` in these
-  `TIMESTAMP` columns, so they match what every other RPC returns (an integration test compares one
-  with the entity). Self only, like `DeleteAccount`; a deleted account's token is already
-  `UNAUTHENTICATED`, and the profile query filters `deleted_at` as well.
+- **Timestamps** are read as `OffsetDateTime` and converted with `toInstant()`, so they match what
+  every other RPC returns (an integration test compares one with the entity). These columns are
+  `TIMESTAMPTZ` (V31, P2-02), so the driver knows the instant exactly and no zone is assumed
+  anywhere in the read — see CLAUDE.md, "Time: instants vs. business dates". (Until V31 they were
+  bare `TIMESTAMP` holding UTC wall clock, which this section read back at `ZoneOffset.UTC`.) Self
+  only, like `DeleteAccount`; a deleted account's token is already `UNAUTHENTICATED`, and the
+  profile query filters `deleted_at` as well.
 - **Audit:** one INFO line, `User data exported: userId=… bytes=…`.
 
 ## 1. `EndTrainerClientRelationship`
@@ -196,8 +199,8 @@ every write; Jackson's wrapping of the refusal is unwrapped). `ExportTooLargeExc
   nothing of the other client nor any credential; the trainer's holds both plans, both
   relationships and their exercise but no client session; services are refused and a deleted
   account's token can't export. The class pins the JVM to `America/Sao_Paulo` and writes a known
-  wall-clock value into a `TIMESTAMP` column, asserting the exact `…Z` instant, so a zone-shifting
-  read fails on CI (UTC) too. `UserDataExportLimitsTest`: a section past `max-rows` is
+  instant into the `TIMESTAMPTZ` column with an explicit `+00` offset, asserting the exact `…Z`
+  instant, so a zone-shifting read fails on CI (UTC) too. `UserDataExportLimitsTest`: a section past `max-rows` is
   `RESOURCE_EXHAUSTED`. `UserDataExportServiceTest`: a document many times the serializer's buffer
   is refused from inside the write (the refusal's stack holds both the bounded stream and Jackson),
   a document exactly at the bound is returned, and a missing account is `NOT_FOUND`.

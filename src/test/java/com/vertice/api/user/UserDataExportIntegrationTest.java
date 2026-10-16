@@ -70,8 +70,11 @@ class UserDataExportIntegrationTest {
     /** A Monday, as {@code week_start_date} requires. */
     private static final String WEEK = "2026-03-02";
     /**
-     * Not UTC, so reading a {@code TIMESTAMP} column in the JVM's zone instead of as UTC shows up as
-     * a shifted instant here, on CI (which runs in UTC) as much as locally.
+     * Not UTC, so any zone the export read relied on would be visibly the wrong one here, on CI
+     * (which runs in UTC) as much as locally. Against the bare {@code TIMESTAMP} columns these were
+     * before V31 that surfaced as a shifted instant; now they are {@code TIMESTAMPTZ} it surfaces as
+     * a failure to read the column at all (see
+     * {@link #timestamps_areExportedAsTheUtcInstantTheColumnHolds}).
      */
     private static final TimeZone NON_UTC = TimeZone.getTimeZone("America/Sao_Paulo");
     private static TimeZone originalZone;
@@ -212,14 +215,20 @@ class UserDataExportIntegrationTest {
     }
 
     /**
-     * A known wall-clock value written straight into the {@code TIMESTAMP} column comes out as that
-     * value in UTC, with the JVM in a non-UTC zone (see {@link #NON_UTC}); Hibernate reads it the
-     * same way. Reading it in the JVM's zone would give 13:15:30.123456Z instead.
+     * A known instant written straight into the {@code TIMESTAMPTZ} column (V31) comes back as that
+     * same instant, with the JVM in a non-UTC zone (see {@link #NON_UTC}); Hibernate reads it the
+     * same way. The literal carries its offset explicitly: a bare {@code TIMESTAMP '…'} would be
+     * resolved against the session's zone, which is exactly the ambiguity V31 removed — before V31
+     * that bare form was the convention, and this test asserted 10:15:30.123456Z against a reader
+     * that would otherwise have shifted it to 13:15:30.123456Z. Post-V31 the old
+     * {@code LocalDateTime}-at-UTC reader doesn't shift the value, it fails outright
+     * ("Cannot convert the column of type TIMESTAMPTZ to … LocalDateTime"), so what this now pins is
+     * that the column holds a true instant and the export reports exactly it.
      */
     @Test
     void timestamps_areExportedAsTheUtcInstantTheColumnHolds() {
         assertThat(TimeZone.getDefault()).isEqualTo(NON_UTC);
-        jdbc.update("UPDATE workout_logs SET started_at = TIMESTAMP '2026-03-02 10:15:30.123456' WHERE id = :id",
+        jdbc.update("UPDATE workout_logs SET started_at = TIMESTAMPTZ '2026-03-02 10:15:30.123456+00' WHERE id = :id",
                 Map.of("id", workoutLog));
 
         JsonNode log = jsonMapper.readTree(export(client)).at("/workoutLogs/0");

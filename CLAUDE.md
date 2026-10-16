@@ -221,9 +221,9 @@ trainer's clients' sessions. `user/UserDataExportQueries` is plain SQL, one quer
 `LIMIT max-rows + 1`, in one read-only `REPEATABLE READ` transaction; the JSON is written into a
 `user/BoundedOutputStream` that refuses the write crossing `max-size`, so an oversized document is
 never built whole. Past `vertice.export.max-rows` or `max-size` it is `RESOURCE_EXHAUSTED`
-(`ExportTooLargeException`), never truncated. Hibernate stores `Instant` as UTC wall time in these
-`TIMESTAMP` columns, so any raw-SQL read of one must use `LocalDateTime` at `ZoneOffset.UTC`, not
-`getTimestamp` (which applies the JVM's zone).
+(`ExportTooLargeException`), never truncated. Its timestamp columns are `TIMESTAMPTZ`, so a raw-SQL
+read of one uses `getObject(column, OffsetDateTime.class).toInstant()` — see "Time: instants vs.
+business dates".
 
 "Active trainer" means a `trainer_clients` row with `ended_at IS NULL` and the target in role
 CLIENT. `EndTrainerClientRelationship` sets `ended_at` and nothing else (P1-05): the client's
@@ -307,6 +307,47 @@ centralized rather than repeated per mapper: `ProtoDates`, `ProtoInstants`, `Pro
 mappers reference these via `@Named` methods. Enum zero-values (e.g. `DAY_OF_WEEK_UNSPECIFIED`)
 map to Java `null` via `@ValueMapping(source = "..._UNSPECIFIED", target = MappingConstants.NULL)`
 — follow this same pattern for any new proto enum requiring a Java-side mapping.
+
+### Time: instants vs. business dates
+
+Two different kinds of value, and conflating them is what XREPO-006/REL-API-008 were (P2-02).
+**The business time zone is `America/Sao_Paulo`.** The rule the BFF and the web mirror
+(`vertice-bff/docs/api-contract.md`):
+
+| Kind | Java | Column | Over the wire | Examples |
+| --- | --- | --- | --- | --- |
+| **Instant** — a point in time | `Instant` | `TIMESTAMPTZ` | ISO-8601 with the `Z` designator (`ProtoInstants`) | `started_at`, `completed_at`, `recorded_at`, `created_at`, `updated_at`, `deleted_at`, `terms_accepted_at`, `expires_at` |
+| **Business date** — a local calendar day in `America/Sao_Paulo` | `LocalDate` | `DATE` | `yyyy-MM-dd`, no zone, no time (`ProtoDates`) | `training_plans.start_date`/`end_date`, `workout_logs.week_start_date` |
+
+- **Instants are stored as instants.** V31 moved every `Instant` column to `TIMESTAMPTZ`. Hibernate
+  already bound an `Instant` as UTC whatever the JVM's zone, but a bare `TIMESTAMP` left the zone as
+  an unenforced convention, and the DB-side `DEFAULT now()` clauses genuinely got it wrong (`now()`
+  is `TIMESTAMPTZ`; casting it into `TIMESTAMP` uses the session's zone, which pgjdbc takes from the
+  JVM's). A new `Instant` column must be `TIMESTAMPTZ`. In raw SQL, read one as
+  `OffsetDateTime` (`UserDataExportQueries#instant`) and write one with an explicit offset — a bare
+  `TIMESTAMP '…'` literal is resolved against the session's zone. Reading with `getTimestamp` is
+  correct for a `TIMESTAMPTZ` column; `OffsetDateTime` is the house style, to stay on `java.time`.
+- **Converting an `Instant` column rewrites its table.** `ALTER COLUMN … TYPE timestamptz` takes
+  ACCESS EXCLUSIVE and rewrites, and Flyway runs a migration file in one transaction, so the locks
+  on every table in the file are held until the last one finishes. Size the window against
+  `set_logs`/`workout_logs` and set `lock_timeout` for the deploy — see V31's header.
+- **Business dates are never derived from an instant here.** The API computes no `today` and no week
+  start: `week_start_date` (validated to be a Monday) and a plan's `start_date`/`end_date` arrive as
+  `yyyy-MM-dd` from the caller and are stored as `DATE`, so no zone can shift them. Deriving the
+  local day of an instant is the caller's job, and it must use `America/Sao_Paulo`, not a UTC slice
+  (`new Date().toISOString().slice(0,10)` is the bug this replaced). If the API ever needs its own
+  "today", it must take the zone explicitly — never `LocalDate.now()`.
+- **Never assume a fixed −03:00.** Brazil observed DST until 2019, so rows from before then were
+  recorded at −02:00. Use the `America/Sao_Paulo` zone rules, not an offset.
+- **Correctness must not depend on the host.** No `TZ`, `user.timezone` or
+  `hibernate.jdbc.time_zone` setting is required, and none may become required.
+  `common/time/BusinessTimeZoneIntegrationTest` states the whole contract and runs twice: in the
+  ordinary `test` task, and again under the `hostileTimeZoneTest` Gradle task with the JVM pinned to
+  `Pacific/Kiritimati` (UTC+14, across the date line from the business zone). `check` depends on it,
+  so `./gradlew build` runs both. Add to that test rather than starting a new one.
+- Historic rows are left as they are: V31 reinterprets stored values as the UTC they already were
+  (`USING col AT TIME ZONE 'UTC'`) and rewrites no data. Logs keyed by a UTC-derived week keep their
+  key; the rule applies going forward.
 
 ### Testing pattern: one Service test + one Controller test per aggregate
 
