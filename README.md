@@ -46,6 +46,31 @@ All business functionality is implemented as gRPC services, defined as `.proto` 
 gRPC server reflection (for tools like `grpcurl`) is disabled by default and only enabled under
 the `local` profile.
 
+### Dates and times
+
+**The business time zone is `America/Sao_Paulo`.** Every field the API exposes is one of two kinds,
+and clients must treat them differently:
+
+| Kind | Over the wire | Meaning | Examples |
+| --- | --- | --- | --- |
+| **Instant** | ISO-8601 with the `Z` designator, e.g. `2026-10-17T01:00:00Z` | An absolute point in time. Stored as `TIMESTAMPTZ`. Format it for display in the viewer's (or the business) zone — never read the UTC clock off the string. | `startedAt`, `completedAt`, `recordedAt`, `createdAt` |
+| **Business date** | `yyyy-MM-dd`, e.g. `2026-10-31` | A local calendar day in `America/Sao_Paulo`. No time, no zone. Stored as `DATE`. | a plan's `startDate`/`endDate`, a log's `weekStartDate` |
+
+Consequences for callers:
+
+- **Never put a business date through a UTC conversion.** `new Date("2026-10-31")` is UTC midnight,
+  which renders as 30/10/2026 in Brazil. Parse the three parts, or parse it as local midnight.
+- **Derive "today" and the week start in `America/Sao_Paulo`**, not from
+  `new Date().toISOString().slice(0, 10)` (that is the UTC day, so it flips at 21:00 local). The API
+  computes neither: `weekStartDate` (which must be a Monday) and a plan's dates are supplied by the
+  caller and stored verbatim.
+- **Don't assume a fixed −03:00 offset.** Brazil observed DST until 2019, so older instants were
+  recorded at −02:00. Use the zone, not an offset.
+- The API's correctness does not depend on the server's `TZ` or `user.timezone`, and must not start
+  to: `./gradlew build` runs the time-zone contract test a second time with the JVM pinned to
+  `Pacific/Kiritimati` (UTC+14). See [`CLAUDE.md`](CLAUDE.md) ("Time: instants vs. business dates")
+  for the API-side rules.
+
 ### Proto contract
 
 The `.proto` files under `src/main/proto/vertice` are the single source of truth for the API
@@ -170,6 +195,14 @@ To run the full build (compile, generate proto sources, run tests) the same way 
 
 ```sh
 ./gradlew build
+```
+
+`build` also runs `hostileTimeZoneTest`, which re-runs the time-zone contract test
+(`common/time/BusinessTimeZoneIntegrationTest`) with the JVM pinned to `Pacific/Kiritimati`
+(UTC+14) — proof that nothing depends on the host's zone. To run just that:
+
+```sh
+./gradlew hostileTimeZoneTest
 ```
 
 ## Project structure
