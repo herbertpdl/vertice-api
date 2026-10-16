@@ -22,8 +22,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -203,13 +202,14 @@ class UserDataExportQueries {
     }
 
     /**
-     * Hibernate writes {@link Instant} fields into these {@code TIMESTAMP} (no time zone) columns
-     * as UTC wall-clock time, so they are read back the same way: the instant every other RPC
-     * returns. {@code getTimestamp} would apply the JVM's zone instead and shift the value.
+     * These columns are {@code TIMESTAMPTZ} (V31), so the driver knows the instant exactly and no
+     * zone has to be assumed here. Read as {@link OffsetDateTime} rather than {@code getTimestamp}:
+     * {@code java.sql.Timestamp} goes through the JVM's default zone, which is the dependency V31
+     * removed.
      */
     private static Instant instant(ResultSet rs, String column) throws SQLException {
-        LocalDateTime value = rs.getObject(column, LocalDateTime.class);
-        return value == null ? null : value.toInstant(ZoneOffset.UTC);
+        OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
+        return value == null ? null : value.toInstant();
     }
 
     private static LocalDate date(ResultSet rs, String column) throws SQLException {

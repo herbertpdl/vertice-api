@@ -212,14 +212,16 @@ class UserDataExportIntegrationTest {
     }
 
     /**
-     * A known wall-clock value written straight into the {@code TIMESTAMP} column comes out as that
-     * value in UTC, with the JVM in a non-UTC zone (see {@link #NON_UTC}); Hibernate reads it the
-     * same way. Reading it in the JVM's zone would give 13:15:30.123456Z instead.
+     * A known instant written straight into the {@code TIMESTAMPTZ} column (V31) comes back as that
+     * same instant, with the JVM in a non-UTC zone (see {@link #NON_UTC}); Hibernate reads it the
+     * same way. A reader that applied the JVM's zone would give 13:15:30.123456Z instead. The
+     * literal carries its offset explicitly: a bare {@code TIMESTAMP '…'} would be resolved against
+     * the session's zone, which is exactly the ambiguity V31 removed.
      */
     @Test
     void timestamps_areExportedAsTheUtcInstantTheColumnHolds() {
         assertThat(TimeZone.getDefault()).isEqualTo(NON_UTC);
-        jdbc.update("UPDATE workout_logs SET started_at = TIMESTAMP '2026-03-02 10:15:30.123456' WHERE id = :id",
+        jdbc.update("UPDATE workout_logs SET started_at = TIMESTAMPTZ '2026-03-02 10:15:30.123456+00' WHERE id = :id",
                 Map.of("id", workoutLog));
 
         JsonNode log = jsonMapper.readTree(export(client)).at("/workoutLogs/0");

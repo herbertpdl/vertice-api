@@ -63,6 +63,33 @@ protobuf {
 	}
 }
 
+// The time-zone contract (P2-02) must not depend on the host's zone, so the test that states it
+// runs twice: once in the ordinary `test` task (whatever zone the machine or CI runner is in, which
+// is UTC on GitHub's) and once here with the JVM pinned 14 hours away from the business zone, on the
+// far side of the date line. pgjdbc hands the JVM's zone to the database session, so this covers
+// the DB side too. `check` depends on it, so `./gradlew build` runs both.
+def hostileTimeZone = 'Pacific/Kiritimati'
+tasks.register('hostileTimeZoneTest', Test) {
+	description = "Runs the time-zone contract test with the JVM pinned to ${hostileTimeZone} (UTC+14)."
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	filter {
+		includeTestsMatching 'com.vertice.api.common.time.BusinessTimeZoneIntegrationTest'
+		// V31's `USING col AT TIME ZONE 'UTC'` is only provably session-zone-independent when the
+		// migration is rehearsed from a session that isn't in UTC.
+		includeTestsMatching 'com.vertice.api.common.time.InstantColumnsTimestamptzMigrationTest'
+	}
+	systemProperty 'user.timezone', hostileTimeZone
+	// Asserted by the test itself, so this task can't silently stop pinning the zone.
+	systemProperty 'vertice.test.expectedTimeZone', hostileTimeZone
+	environment 'TZ', hostileTimeZone
+}
+
+tasks.named('check') {
+	dependsOn 'hostileTimeZoneTest'
+}
+
 tasks.withType(Test).configureEach {
 	useJUnitPlatform()
 	// Keep the developer's shell out of the test JVM: an exported VERTICE_ENV would make
