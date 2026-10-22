@@ -8,11 +8,19 @@ import java.util.Optional;
 
 public interface WorkoutLogRepository extends JpaRepository<WorkoutLog, Long> {
 
-    Optional<WorkoutLog> findByWorkoutIdAndClientIdAndWeekStartDate(Long workoutId, Long clientId, LocalDate weekStartDate);
+    Optional<WorkoutLog> findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(
+            Long workoutId, Long clientId, LocalDate weekStartDate, WorkoutLogStatus status);
 
-    List<WorkoutLog> findByClientIdAndWorkout_TrainingPlan_IdAndWeekStartDate(Long clientId, Long trainingPlanId, LocalDate weekStartDate);
+    List<WorkoutLog> findByClientIdAndWorkout_TrainingPlan_IdAndWeekStartDateAndStatusNot(
+            Long clientId, Long trainingPlanId, LocalDate weekStartDate, WorkoutLogStatus status);
 
-    Optional<WorkoutLog> findFirstByClientIdAndWorkoutIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(Long clientId, Long workoutId);
+    Optional<WorkoutLog> findFirstByClientIdAndWorkoutIdAndStatusOrderByCompletedAtDesc(
+            Long clientId, Long workoutId, WorkoutLogStatus status);
+
+    /** Sessions left in progress from weeks before {@code weekStartDate} (the weekly rollover). */
+    List<WorkoutLog> findByStatusAndWeekStartDateBefore(WorkoutLogStatus status, LocalDate weekStartDate);
+
+    List<WorkoutLog> findByClientIdAndStatusAndWeekStartDateBefore(Long clientId, WorkoutLogStatus status, LocalDate weekStartDate);
 
     boolean existsByWorkoutId(Long workoutId);
 

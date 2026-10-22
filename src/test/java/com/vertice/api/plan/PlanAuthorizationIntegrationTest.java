@@ -34,6 +34,7 @@ import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
@@ -331,7 +332,7 @@ class PlanAuthorizationIntegrationTest {
     }
 
     private static SubmitWorkoutFeedbackRequest feedback(long workoutLogId) {
-        return SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(workoutLogId).setText("Heavy today").build();
+        return SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(workoutLogId).setText("Heavy today").build();
     }
 
     private static WorkoutExerciseEntry entry(long exerciseId) {

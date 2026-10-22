@@ -136,8 +136,9 @@ class OwnershipInvariantsIntegrationTest {
         for (Workout w : List.of(workout, otherWorkout)) {
             setLogRepository.deleteAll(setLogRepository.findByWorkoutId(w.getId()));
             for (User c : List.of(client, otherClient)) {
-                workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(w.getId(), c.getId(), LocalDate.parse(WEEK))
-                        .ifPresent(workoutLogRepository::delete);
+                workoutLogRepository.findAll().stream()
+                        .filter(l -> l.getWorkout().getId().equals(w.getId()) && l.getClient().getId().equals(c.getId()) && l.getWeekStartDate().equals(LocalDate.parse(WEEK)))
+                        .forEach(workoutLogRepository::delete);
             }
         }
         planIds.forEach(trainingPlanRepository::deleteById);
@@ -173,8 +174,8 @@ class OwnershipInvariantsIntegrationTest {
         assertThat(log.getClientId()).isEqualTo(client.getId());
 
         assertFailedPrecondition(() -> startLog(trainerSession, otherWorkout, client));
-        assertThat(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(
-                otherWorkout.getId(), client.getId(), LocalDate.parse(WEEK))).isEmpty();
+        assertThat(workoutLogRepository.findAll().stream()
+                .filter(l -> l.getWorkout().getId().equals(otherWorkout.getId()) && l.getClient().getId().equals(client.getId()) && l.getWeekStartDate().equals(LocalDate.parse(WEEK)))).isEmpty();
     }
 
     @Test

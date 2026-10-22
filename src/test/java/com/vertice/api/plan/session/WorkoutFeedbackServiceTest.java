@@ -1,6 +1,7 @@
 package com.vertice.api.plan.session;
 
 import com.vertice.api.common.exception.ResourceNotFoundException;
+import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.plan.TrainingPlan;
 import com.vertice.api.plan.workout.Workout;
@@ -63,6 +64,8 @@ class WorkoutFeedbackServiceTest {
         log.setWorkout(workout);
         log.setClient(client);
         log.setCompletedAt(Instant.now());
+        log.setStatus(WorkoutLogStatus.COMPLETED);
+        log.setCompletionKind(CompletionKind.CLIENT);
         return log;
     }
 
@@ -72,7 +75,7 @@ class WorkoutFeedbackServiceTest {
         when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
         when(workoutFeedbackRepository.save(any(WorkoutFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        var request = SubmitWorkoutFeedbackRequest.newBuilder()
+        var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(10L).setText("Great session, felt strong today!").build();
 
         var response = service.submitWorkoutFeedback(request);
@@ -89,7 +92,7 @@ class WorkoutFeedbackServiceTest {
     void submitWorkoutFeedback_throwsWhenWorkoutLogMissing() {
         when(workoutLogRepository.findById(99L)).thenReturn(Optional.empty());
 
-        var request = SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(99L).setText("Feedback").build();
+        var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(99L).setText("Feedback").build();
 
         assertThatThrownBy(() -> service.submitWorkoutFeedback(request))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -100,9 +103,11 @@ class WorkoutFeedbackServiceTest {
     void submitWorkoutFeedback_throwsWhenWorkoutLogNotCompleted() {
         WorkoutLog log = completedLog(10L);
         log.setCompletedAt(null);
+        log.setStatus(WorkoutLogStatus.IN_PROGRESS);
+        log.setCompletionKind(null);
         when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
 
-        var request = SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(10L).setText("Feedback").build();
+        var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(10L).setText("Feedback").build();
 
         assertThatThrownBy(() -> service.submitWorkoutFeedback(request))
                 .isInstanceOf(ConstraintViolationException.class);
@@ -143,7 +148,7 @@ class WorkoutFeedbackServiceTest {
         when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(completedLog(10L)));
         when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(10L);
 
-        var request = SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(10L).setText("Feedback").build();
+        var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(10L).setText("Feedback").build();
 
         assertThatThrownBy(() -> service.submitWorkoutFeedback(request))
                 .isInstanceOf(ConstraintViolationException.class)
@@ -157,7 +162,7 @@ class WorkoutFeedbackServiceTest {
         when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(9L);
         when(workoutFeedbackRepository.save(any(WorkoutFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        var response = service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        var response = service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(10L).setText("Tenth").build());
 
         assertThat(response.getText()).isEqualTo("Tenth");

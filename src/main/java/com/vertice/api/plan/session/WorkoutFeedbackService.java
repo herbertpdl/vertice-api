@@ -31,7 +31,7 @@ public class WorkoutFeedbackService {
     public WorkoutFeedbackResponse submitWorkoutFeedback(SubmitWorkoutFeedbackRequest request) {
         WorkoutLog workoutLog = workoutLogRepository.findById(request.getWorkoutLogId())
                 .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", request.getWorkoutLogId()));
-        if (workoutLog.getCompletedAt() == null) {
+        if (workoutLog.getStatus() != WorkoutLogStatus.COMPLETED) {
             throw new ConstraintViolationException("workoutLogId: workout session is not completed yet", Set.of());
         }
         if (workoutFeedbackRepository.countByWorkoutLogId(workoutLog.getId()) >= MAX_FEEDBACK_PER_LOG) {
@@ -41,7 +41,8 @@ public class WorkoutFeedbackService {
 
         WorkoutFeedback feedback = new WorkoutFeedback();
         feedback.setWorkoutLog(workoutLog);
-        feedback.setText(request.getText());
+        feedback.setText(request.getText().strip());
+        feedback.setRating(WorkoutFeedbackMapper.fromProto(request.getRating()));
         feedback.setCreatedAt(DbInstants.now());
         return workoutFeedbackMapper.toResponse(workoutFeedbackRepository.save(feedback));
     }

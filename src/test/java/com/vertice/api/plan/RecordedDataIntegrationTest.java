@@ -23,6 +23,7 @@ import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
@@ -145,7 +146,7 @@ class RecordedDataIntegrationTest {
                 .setWeight("80").setReps(5).build());
         sessions.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(workoutLog).build());
         as(client, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
-                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(workoutLog).setText("Heavy today").build());
+                SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(workoutLog).setText("Heavy today").build());
     }
 
     @AfterEach

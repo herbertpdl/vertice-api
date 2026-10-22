@@ -12,6 +12,7 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
@@ -305,7 +306,7 @@ class UserDataExportIntegrationTest {
                 .setWeight("80").setReps(5).build());
         sessions.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(log).build());
         as(of, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
-                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(log).setText(feedback).build());
+                SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(log).setText(feedback).build());
         return log;
     }
 

@@ -1,0 +1,2 @@
+- [Dependency graph disabled](project_dependency_graph_disabled.md) — no dependency-review on herbertpdl repos; vertice-api CI uses Grype dependency-scan
+- [P1-05 split](project_p105_split.md) — data-subject rights as PRs (a) #67, (b) #68 merged; (c) #69 open; BFF step 2 next

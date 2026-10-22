@@ -10,7 +10,7 @@ import com.vertice.api.grpc.CallerIdentityResolver;
 import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
@@ -27,7 +27,8 @@ public class WorkoutFeedbackController extends WorkoutFeedbackServiceGrpc.Workou
     @Override
     public void submitWorkoutFeedback(SubmitWorkoutFeedbackRequest request, StreamObserver<WorkoutFeedbackResponse> responseObserver) {
         CallerIdentity caller = callerIdentityResolver.requireUser();
-        validator.validate(new SubmitValidation(request.getWorkoutLogId(), request.getText()));
+        validator.validate(new SubmitValidation(request.getWorkoutLogId(), request.getText(),
+                WorkoutFeedbackMapper.fromProto(request.getRating())));
         authorization.checkSubmitWorkoutFeedback(caller, request.getWorkoutLogId());
         responseObserver.onNext(workoutFeedbackService.submitWorkoutFeedback(request));
         responseObserver.onCompleted();
@@ -44,7 +45,8 @@ public class WorkoutFeedbackController extends WorkoutFeedbackServiceGrpc.Workou
         responseObserver.onCompleted();
     }
 
-    private record SubmitValidation(@Min(1) long workoutLogId, @NotBlank @Size(max = 2000) String text) {
+    /** The rating is required (UNSPECIFIED maps to null); the text is optional. */
+    private record SubmitValidation(@Min(1) long workoutLogId, @Size(max = 2000) String text, @NotNull FeedbackRating rating) {
     }
 
     private record ListValidation(@Min(1) long trainerId) {

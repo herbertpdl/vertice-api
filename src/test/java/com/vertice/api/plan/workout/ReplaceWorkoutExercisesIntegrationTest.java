@@ -130,8 +130,9 @@ class ReplaceWorkoutExercisesIntegrationTest {
     @AfterEach
     void tearDown() throws InterruptedException {
         setLogRepository.deleteAll(setLogRepository.findByWorkoutId(workout.getId()));
-        workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(workout.getId(), client.getId(), LocalDate.of(2026, 3, 2))
-                .ifPresent(workoutLogRepository::delete);
+        workoutLogRepository.findAll().stream()
+                        .filter(l -> l.getWorkout().getId().equals(workout.getId()) && l.getClient().getId().equals(client.getId()) && l.getWeekStartDate().equals(LocalDate.of(2026, 3, 2)))
+                        .forEach(workoutLogRepository::delete);
         workoutRepository.deleteById(workout.getId());
         trainingPlanRepository.deleteById(trainingPlan.getId());
         exerciseRepository.deleteById(exercise.getId());
