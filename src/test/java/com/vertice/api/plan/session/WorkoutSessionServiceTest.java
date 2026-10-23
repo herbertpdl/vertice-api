@@ -261,7 +261,7 @@ class WorkoutSessionServiceTest {
         WorkoutLog log = workoutLog(10L, workout, client(2L));
         ExerciseSet exerciseSet = exerciseSet(5L, workout);
 
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet));
         when(setLogRepository.findByWorkoutLogIdAndExerciseSetId(10L, 5L)).thenReturn(Optional.empty());
         when(setLogRepository.save(any(SetLog.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -288,7 +288,7 @@ class WorkoutSessionServiceTest {
         existing.setExerciseSet(exerciseSet);
         existing.setWeight(java.math.BigDecimal.valueOf(50));
 
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet));
         when(setLogRepository.findByWorkoutLogIdAndExerciseSetId(10L, 5L)).thenReturn(Optional.of(existing));
         when(setLogRepository.save(any(SetLog.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -305,7 +305,7 @@ class WorkoutSessionServiceTest {
     @Test
     void recordSetLog_throwsWhenExerciseSetBelongsToAnotherWorkout() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet(5L, workout(7L))));
 
         var request = RecordSetLogRequest.newBuilder()
@@ -324,7 +324,7 @@ class WorkoutSessionServiceTest {
         log.setStatus(WorkoutLogStatus.COMPLETED);
         log.setCompletionKind(CompletionKind.CLIENT);
 
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
 
         var request = RecordSetLogRequest.newBuilder()
                 .setWorkoutLogId(10L).setExerciseSetId(5L).setReps(8).build();
@@ -337,7 +337,7 @@ class WorkoutSessionServiceTest {
     @Test
     void recordSetLog_throwsWhenExerciseSetMissing() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(99L)).thenReturn(Optional.empty());
 
         var request = RecordSetLogRequest.newBuilder().setWorkoutLogId(10L).setExerciseSetId(99L).build();

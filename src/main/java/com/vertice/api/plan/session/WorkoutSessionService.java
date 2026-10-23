@@ -119,7 +119,8 @@ public class WorkoutSessionService {
     }
 
     public SetLogResponse recordSetLog(RecordSetLogRequest request) {
-        WorkoutLog workoutLog = findWorkoutLogOrThrow(request.getWorkoutLogId());
+        // Locked like complete, discard and the rollover: a tick waits for them instead of racing.
+        WorkoutLog workoutLog = lockWorkoutLogOrThrow(request.getWorkoutLogId());
         if (!workoutLog.isInProgress()) {
             throw new ConstraintViolationException("workoutLogId: session already completed", Set.of());
         }
