@@ -1,5 +1,6 @@
 package com.vertice.api.plan.session;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
@@ -110,7 +111,7 @@ class WorkoutFeedbackServiceTest {
         var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(10L).setText("Feedback").build();
 
         assertThatThrownBy(() -> service.submitWorkoutFeedback(request))
-                .isInstanceOf(ConstraintViolationException.class);
+                .isInstanceOf(BusinessRuleViolationException.class);
         verify(workoutFeedbackRepository, never()).save(any());
     }
 

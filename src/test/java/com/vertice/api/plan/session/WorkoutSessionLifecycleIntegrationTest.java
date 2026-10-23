@@ -266,12 +266,8 @@ class WorkoutSessionLifecycleIntegrationTest {
                 Map.of("id", twoWeeksAgo), Boolean.class)).isTrue();
         assertThat(sessions().getLastSetLogs(GetLastSetLogsRequest.newBuilder().setClientId(client.getId()).setWorkoutId(workout).build())
                 .getSetLogsList()).extracting(s -> s.getWeight()).containsExactly("80.00");
-        // The same refusal as feedback on a session that isn't finished.
-        assertThatThrownBy(() -> as(client, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
-                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(twoWeeksAgo).setRating(FeedbackRating.FEEDBACK_RATING_HARD).build()))
-                .asInstanceOf(throwable(StatusRuntimeException.class))
-                .extracting(ex -> ex.getStatus().getCode())
-                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+        assertFailedPrecondition(() -> as(client, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
+                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(twoWeeksAgo).setRating(FeedbackRating.FEEDBACK_RATING_HARD).build()));
     }
 
     @Test

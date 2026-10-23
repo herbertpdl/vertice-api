@@ -34,7 +34,8 @@ service WorkoutSessionService {
   rpc GetWorkoutLog(GetWorkoutLogRequest) returns (WorkoutLogResponse);
   // The log's client or ADMIN.
   rpc RecordSetLog(RecordSetLogRequest) returns (SetLogResponse);
-  // The log's client or ADMIN.
+  // The log's client or ADMIN. Idempotent: a finished session comes back unchanged, which may be
+  // one the weekly rollover finished (completion_kind AUTO): the client then skips feedback.
   rpc CompleteWorkoutLog(CompleteWorkoutLogRequest) returns (WorkoutLogResponse);
   // The plan's trainer or client, ADMIN.
   rpc ListWorkoutLogs(ListWorkoutLogsRequest) returns (ListWorkoutLogsResponse);

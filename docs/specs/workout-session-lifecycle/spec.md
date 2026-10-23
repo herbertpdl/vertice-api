@@ -27,7 +27,8 @@ this extends)
 - **Weekly rollover.** `WorkoutWeekRollover` runs Monday 00:05 in `America/Sao_Paulo` (the first
   `@Scheduled` job here, hence `SchedulingConfig`):
   - A session left `IN_PROGRESS` in an earlier week becomes `COMPLETED` with
-    `completion_kind = AUTO` when it has a set log; that's a finish, so it supersedes like one.
+    `completion_kind = AUTO` when it has a set log; that's a finish, so it supersedes like one. That includes an abandoned redo of a completed workout: the owner
+    chose this explicitly (vertice-mobile spec decisions log, 2026-10-22).
   - One with no set log is deleted.
   - `GetOrStart`, `Restart` and `ListWorkoutLogs` run the same pass for their client first, so a
     late or missed job never shows. "This week" is `BusinessDates.currentWeekStart(Clock)`, with a
@@ -35,7 +36,8 @@ this extends)
 - **An automatic finish keeps the client's time.** `completed_at` is the session's last set's
   `recorded_at` (else `started_at`), so an abandoned session neither shows as "trained Monday
   00:05" nor outranks a later full session. "Last time" takes the newest week first. An automatic
-  finish takes no feedback (R27, R70).
+  finish takes no feedback (R27, R70). Feedback on a session that isn't completed, or that was
+  finished automatically, is FAILED_PRECONDITION.
 - **Concurrency.** The rollover's queries take `PESSIMISTIC_WRITE` row locks, and complete,
   discard and untick lock their session (`findWithLockById`). Concurrent passes (the job and a
   client's lazy pass, two devices) wait for each other instead of failing, and Postgres re-checks
