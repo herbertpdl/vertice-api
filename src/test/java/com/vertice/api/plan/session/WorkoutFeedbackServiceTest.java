@@ -190,6 +190,27 @@ class WorkoutFeedbackServiceTest {
         verify(workoutFeedbackRepository, never()).save(any());
     }
 
+    /** The key is looked up before the cap: the 10th feedback's resend still finds it, not a refusal. */
+    @Test
+    void submitWorkoutFeedback_withAKeyAlreadyStored_isReturnedEvenAtTheCap() {
+        WorkoutLog log = completedLog(10L);
+        WorkoutFeedback stored = new WorkoutFeedback();
+        stored.setId(78L);
+        stored.setWorkoutLog(log);
+        stored.setText("");
+        stored.setCreatedAt(Instant.parse("2026-10-23T12:00:00Z"));
+        stored.setClientKey("k-10");
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
+        org.mockito.Mockito.lenient().when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(10L);
+        when(workoutFeedbackRepository.findByWorkoutLogIdAndClientKey(10L, "k-10")).thenReturn(Optional.of(stored));
+
+        var response = service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_EASY)
+                .setWorkoutLogId(10L).setClientKey("k-10").build());
+
+        assertThat(response.getId()).isEqualTo(78L);
+        verify(workoutFeedbackRepository, never()).save(any());
+    }
+
     @Test
     void submitWorkoutFeedback_withANewKey_storesIt() {
         when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(completedLog(10L)));
