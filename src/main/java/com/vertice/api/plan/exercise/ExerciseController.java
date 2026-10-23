@@ -1,6 +1,7 @@
 package com.vertice.api.plan.exercise;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.common.validation.YouTubeVideoUrl;
 import com.vertice.api.generated.grpc.exercise.v1.DeleteExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
@@ -17,7 +18,6 @@ import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
@@ -94,22 +94,13 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
         }
     }
 
-    /**
-     * Exercise videos are YouTube only (client workout experience R61): the client app plays them in
-     * an embedded YouTube player. A watch, shorts, embed or live link, or youtu.be, with an
-     * 11-character video id; the same links vertice-mobile's {@code youtubeVideoId} reads. Empty
-     * clears the video. Existing non-YouTube links stay until the exercise is edited.
-     */
-    static final String YOUTUBE_URL = "^$|^https?://(?:(?:www\\.|m\\.)?youtube(?:-nocookie)?\\.com/"
-            + "(?:watch\\?(?:\\S*&)?v=|shorts/|embed/|live/)|youtu\\.be/)[\\w-]{11}(?:[?&#/]\\S*)?$";
-
     private record ListExercisesValidation(@Size(max = 100) String search) {
     }
 
     private record ExerciseValidation(
             @NotBlank @Size(max = 255) String name,
             @Size(max = 255) String description,
-            @Pattern(regexp = YOUTUBE_URL, message = "must be a YouTube video link (youtube.com or youtu.be)")
-            @Size(max = 500) String videoUrl) {
+            // YouTube only (R61): the client app plays videos in an embedded YouTube player.
+            @YouTubeVideoUrl @Size(max = 500) String videoUrl) {
     }
 }

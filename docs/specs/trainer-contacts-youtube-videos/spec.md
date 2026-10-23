@@ -19,10 +19,12 @@ Related: vertice-mobile `docs/prds/client-workout-experience/prd.md` (R61, R62, 
   and filled in.
   - Callers: the client as themself, or ADMIN. Never a trainer.
   - No active trainer, or a deleted one, is NOT_FOUND.
-- **Exercise videos are YouTube only.** Create and update accept a watch, shorts, embed or live
+- **Exercise videos are YouTube only** (`@YouTubeVideoUrl`, a URL parser mirroring the mobile one, not a regex). Create and update accept a watch, shorts, embed or live
   link, or youtu.be (with `www.`, `m.` and youtube-nocookie.com), carrying an 11-character id: the
   links vertice-mobile's `youtubeVideoId` reads. Existing non-YouTube rows stay until edited; the
   client app hides them (R62).
+- **A role change away from TRAINER clears the contacts**, so switching back never re-exposes
+  them.
 - **LGPD.** Account deletion clears the contacts and switches. The export's profile carries them.
   `docs/data-inventory.md` lists them.
 

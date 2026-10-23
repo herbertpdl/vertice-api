@@ -133,6 +133,15 @@ public class UserService {
         userMapper.updateEntityFromRequest(request, user);
         user.setEmail(email);
         applyContacts(request, user);
+        if (user.getRole() != com.vertice.api.user.Role.TRAINER) {
+            // Contacts are a trainer's: a role change away from TRAINER drops them, so switching back
+            // never re-exposes contacts the trainer didn't choose to show again.
+            user.setWhatsapp(null);
+            user.setInstagram(null);
+            user.setShowEmail(false);
+            user.setShowWhatsapp(false);
+            user.setShowInstagram(false);
+        }
         return userMapper.toResponse(userRepository.save(user));
     }
 

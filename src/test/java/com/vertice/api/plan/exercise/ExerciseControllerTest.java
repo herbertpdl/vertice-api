@@ -294,7 +294,8 @@ class ExerciseControllerTest {
     @ParameterizedTest
     @ValueSource(strings = {"https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://youtu.be/dQw4w9WgXcQ?si=x",
             "https://m.youtube.com/shorts/dQw4w9WgXcQ", "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
-            "https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ"})
+            "https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ", "https://www.YouTube.com/watch?v=dQw4w9WgXcQ",
+            "HTTPS://youtu.be/dQw4w9WgXcQ", "https://www.youtube.com/live/dQw4w9WgXcQ"})
     void createExercise_withAYouTubeLink_isAccepted(String url) {
         when(exerciseService.createExercise(any(), any())).thenReturn(squat());
 
@@ -303,7 +304,8 @@ class ExerciseControllerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"https://vimeo.com/824512", "https://drive.google.com/file/d/abc/view",
-            "https://www.youtube.com/watch?v=short", "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ"})
+            "https://www.youtube.com/watch?v=short", "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com/watch?t=1#&v=dQw4w9WgXcQ", "ftp://youtu.be/dQw4w9WgXcQ"})
     void createExercise_withALinkThatIsNotAYouTubeVideo_throwsInvalidArgument(String url) {
         assertInvalidArgument(() -> stub.createExercise(squatRequest().setVideoUrl(url).build()),
                 "videoUrl: must be a YouTube video link (youtube.com or youtu.be)");

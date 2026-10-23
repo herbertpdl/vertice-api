@@ -4,6 +4,7 @@ import com.vertice.api.generated.grpc.trainerclient.v1.ClientTrainerResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.EndTrainerClientRelationshipRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.GetClientTrainerRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.TrainerClientServiceGrpc;
+import com.vertice.api.generated.grpc.user.v1.DeleteAccountRequest;
 import com.vertice.api.generated.grpc.user.v1.GetUserRequest;
 import com.vertice.api.generated.grpc.user.v1.UpdateUserRequest;
 import com.vertice.api.generated.grpc.user.v1.UserRequest;
@@ -128,6 +129,37 @@ class TrainerContactsIntegrationTest {
                 .setId(client.getId()).setUser(base(client).setWhatsapp("11987654321")).build()), Status.Code.INVALID_ARGUMENT);
         assertCode(() -> updateTrainer(base(trainer).setWhatsapp("(11) 98765-4321")), Status.Code.INVALID_ARGUMENT);
         assertCode(() -> updateTrainer(base(trainer).setInstagram("@rafael")), Status.Code.INVALID_ARGUMENT);
+    }
+
+    /** E35: a contact switched on but left empty isn't shown; ADMIN reads any client's card. */
+    @Test
+    void anEmptyContactSwitchedOn_isLeftOut_andAdminReadsAnyCard() {
+        updateTrainer(base(trainer).setShowWhatsapp(true).setShowInstagram(true).setInstagram("rafael.treina"));
+        User admin = userRepository.save(newUser("Admin", Role.ADMIN));
+        try {
+            ClientTrainerResponse card = trainerCard(admin, client.getId());
+            assertThat(card.getWhatsapp()).isEmpty();
+            assertThat(card.getInstagram()).isEqualTo("rafael.treina");
+            assertCode(() -> trainerCard(admin, 0), Status.Code.INVALID_ARGUMENT);
+        } finally {
+            userRepository.deleteById(admin.getId());
+        }
+    }
+
+    /** Deleting the account clears the contacts (LGPD), and the trainer's card is gone for the client. */
+    @Test
+    void deletingTheTrainersAccount_clearsTheContacts() {
+        updateTrainer(base(trainer).setWhatsapp("11987654321").setInstagram("rafael.treina")
+                .setShowEmail(true).setShowWhatsapp(true).setShowInstagram(true));
+        as(trainer, TrainerClientServiceGrpc::newBlockingStub).endTrainerClientRelationship(
+                EndTrainerClientRelationshipRequest.newBuilder().setTrainerId(trainer.getId()).setClientId(client.getId()).build());
+
+        as(trainer, UserServiceGrpc::newBlockingStub).deleteAccount(DeleteAccountRequest.getDefaultInstance());
+
+        User deleted = userRepository.findById(trainer.getId()).orElseThrow();
+        assertThat(deleted.getWhatsapp()).isNull();
+        assertThat(deleted.getInstagram()).isNull();
+        assertThat(deleted.isShowEmail() || deleted.isShowWhatsapp() || deleted.isShowInstagram()).isFalse();
     }
 
     private ClientTrainerResponse trainerCard(User caller, long clientId) {
