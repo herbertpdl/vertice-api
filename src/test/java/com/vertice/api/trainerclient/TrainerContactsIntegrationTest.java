@@ -162,6 +162,27 @@ class TrainerContactsIntegrationTest {
         assertThat(deleted.isShowEmail() || deleted.isShowWhatsapp() || deleted.isShowInstagram()).isFalse();
     }
 
+    /** A role change away from TRAINER drops the contacts: switching back never re-exposes them. */
+    @Test
+    void leavingTheTrainerRole_clearsTheContacts() {
+        updateTrainer(base(trainer).setWhatsapp("11987654321").setInstagram("rafael.treina")
+                .setShowEmail(true).setShowWhatsapp(true).setShowInstagram(true));
+        as(trainer, TrainerClientServiceGrpc::newBlockingStub).endTrainerClientRelationship(
+                EndTrainerClientRelationshipRequest.newBuilder().setTrainerId(trainer.getId()).setClientId(client.getId()).build());
+        User admin = userRepository.save(newUser("Admin", Role.ADMIN));
+        try {
+            as(admin, UserServiceGrpc::newBlockingStub).updateUser(UpdateUserRequest.newBuilder().setId(trainer.getId())
+                    .setUser(base(trainer).setRole(com.vertice.api.generated.grpc.user.v1.Role.CLIENT)).build());
+        } finally {
+            userRepository.deleteById(admin.getId());
+        }
+
+        User demoted = userRepository.findById(trainer.getId()).orElseThrow();
+        assertThat(demoted.getWhatsapp()).isNull();
+        assertThat(demoted.getInstagram()).isNull();
+        assertThat(demoted.isShowEmail() || demoted.isShowWhatsapp() || demoted.isShowInstagram()).isFalse();
+    }
+
     private ClientTrainerResponse trainerCard(User caller, long clientId) {
         return as(caller, TrainerClientServiceGrpc::newBlockingStub)
                 .getClientTrainer(GetClientTrainerRequest.newBuilder().setClientId(clientId).build());

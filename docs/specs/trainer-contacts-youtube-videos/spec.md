@@ -36,6 +36,7 @@ Related: vertice-mobile `docs/prds/client-workout-experience/prd.md` (R61, R62, 
   - an update without the fields keeps them;
   - access: the client only, PERMISSION_DENIED for a trainer, NOT_FOUND after the relationship
     ends;
-  - trainers only, and validation.
+  - trainers only, and validation;
+  - a role change away from TRAINER clearing them, and account deletion clearing them.
 - `ExerciseControllerTest`: accepted YouTube forms, and refused Vimeo, Drive, short ids and
   look-alike hosts.
