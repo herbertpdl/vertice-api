@@ -61,10 +61,10 @@ class UserDataExportServiceTest {
     void exportUserData_pastTheSizeBound_isRefusedWhileWriting() {
         stubAnAccount();
         List<UserDataExport.Feedback> feedback = IntStream.range(0, 1_000)
-                .mapToObj(i -> new UserDataExport.Feedback(i, "x".repeat(100), Instant.parse("2026-01-01T00:00:00Z")))
+                .mapToObj(i -> new UserDataExport.Feedback(i, "x".repeat(100), "HARD", Instant.parse("2026-01-01T00:00:00Z")))
                 .toList();
         when(queries.workoutLogs(7L)).thenReturn(List.of(new UserDataExport.WorkoutLog(1L, 2L, 3L,
-                LocalDate.parse("2026-03-02"), Instant.parse("2026-03-02T10:00:00Z"), null, List.of(), feedback)));
+                LocalDate.parse("2026-03-02"), Instant.parse("2026-03-02T10:00:00Z"), null, "IN_PROGRESS", List.of(), feedback)));
         UserDataExportService service = service(DataSize.ofKilobytes(16));
 
         assertThatThrownBy(() -> service.exportUserData(7L))

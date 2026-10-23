@@ -1,15 +1,21 @@
 package com.vertice.api.plan.session;
 
+import com.google.protobuf.Empty;
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.DeleteSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.DiscardWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressRequest;
 import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.ListSetLogsRequest;
+import com.vertice.api.generated.grpc.session.v1.ListSetLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.RestartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.SetLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
@@ -39,6 +45,46 @@ public class WorkoutSessionController extends WorkoutSessionServiceGrpc.WorkoutS
         validator.validate(new GetOrStartValidation(request.getWorkoutId(), request.getClientId(), request.getWeekStartDate()));
         authorization.checkGetOrStartWorkoutLog(caller, request.getWorkoutId(), request.getClientId());
         responseObserver.onNext(workoutSessionService.getOrStartWorkoutLog(request));
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void restartWorkoutLog(RestartWorkoutLogRequest request, StreamObserver<WorkoutLogResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
+        validator.validate(new GetOrStartValidation(request.getWorkoutId(), request.getClientId(), request.getWeekStartDate()));
+        authorization.checkRestartWorkoutLog(caller, request.getWorkoutId(), request.getClientId());
+        responseObserver.onNext(workoutSessionService.restartWorkoutLog(request));
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void discardWorkoutLog(DiscardWorkoutLogRequest request, StreamObserver<Empty> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
+        validator.validate(new GetWorkoutLogValidation(request.getId()));
+        authorization.checkDiscardWorkoutLog(caller, request.getId());
+        workoutSessionService.discardWorkoutLog(request.getId());
+        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void deleteSetLog(DeleteSetLogRequest request, StreamObserver<Empty> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
+        validator.validate(new DeleteSetLogValidation(request.getWorkoutLogId(), request.getExerciseSetId()));
+        authorization.checkRecordSetLog(caller, request.getWorkoutLogId());
+        workoutSessionService.deleteSetLog(request.getWorkoutLogId(), request.getExerciseSetId());
+        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void listSetLogs(ListSetLogsRequest request, StreamObserver<ListSetLogsResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
+        validator.validate(new GetWorkoutLogValidation(request.getWorkoutLogId()));
+        authorization.checkGetWorkoutLog(caller, request.getWorkoutLogId());
+        responseObserver.onNext(ListSetLogsResponse.newBuilder()
+                .addAllSetLogs(workoutSessionService.listSetLogs(request.getWorkoutLogId()))
+                .build());
         responseObserver.onCompleted();
     }
 
@@ -103,6 +149,9 @@ public class WorkoutSessionController extends WorkoutSessionServiceGrpc.WorkoutS
     }
 
     private record GetWorkoutLogValidation(@Min(1) long id) {
+    }
+
+    private record DeleteSetLogValidation(@Min(1) long workoutLogId, @Min(1) long exerciseSetId) {
     }
 
     private record GetExerciseProgressValidation(@Min(1) long clientId, @Min(1) long exerciseId) {

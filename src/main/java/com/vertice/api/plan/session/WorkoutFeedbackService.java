@@ -1,5 +1,6 @@
 package com.vertice.api.plan.session;
 
+import com.vertice.api.common.exception.BusinessRuleViolationException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
@@ -31,8 +32,13 @@ public class WorkoutFeedbackService {
     public WorkoutFeedbackResponse submitWorkoutFeedback(SubmitWorkoutFeedbackRequest request) {
         WorkoutLog workoutLog = workoutLogRepository.findById(request.getWorkoutLogId())
                 .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", request.getWorkoutLogId()));
-        if (workoutLog.getCompletedAt() == null) {
-            throw new ConstraintViolationException("workoutLogId: workout session is not completed yet", Set.of());
+        if (workoutLog.getStatus() != WorkoutLogStatus.COMPLETED) {
+            throw new BusinessRuleViolationException("WorkoutLog %d is not completed".formatted(workoutLog.getId()));
+        }
+        // An automatic finish (the weekly rollover) takes no feedback (R27, R70).
+        if (workoutLog.getCompletionKind() == CompletionKind.AUTO) {
+            throw new BusinessRuleViolationException(
+                    "WorkoutLog %d was finished automatically and takes no feedback".formatted(workoutLog.getId()));
         }
         if (workoutFeedbackRepository.countByWorkoutLogId(workoutLog.getId()) >= MAX_FEEDBACK_PER_LOG) {
             throw new ConstraintViolationException(
@@ -41,7 +47,8 @@ public class WorkoutFeedbackService {
 
         WorkoutFeedback feedback = new WorkoutFeedback();
         feedback.setWorkoutLog(workoutLog);
-        feedback.setText(request.getText());
+        feedback.setText(request.getText().strip());
+        feedback.setRating(WorkoutFeedbackMapper.fromProto(request.getRating()));
         feedback.setCreatedAt(DbInstants.now());
         return workoutFeedbackMapper.toResponse(workoutFeedbackRepository.save(feedback));
     }

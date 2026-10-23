@@ -1,5 +1,6 @@
 package com.vertice.api.user;
 
+import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.generated.grpc.plan.v1.CreateWorkoutWithExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetEntry;
@@ -12,6 +13,7 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
@@ -43,6 +45,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -68,7 +71,8 @@ class UserDataExportIntegrationTest {
 
     static final String SECRET = "non-local-user-data-export-secret-32b";
     /** A Monday, as {@code week_start_date} requires. */
-    private static final String WEEK = "2026-03-02";
+    /** The current business week: sessions can only be started in it. */
+    private static final String WEEK = BusinessDates.currentWeekStart(Clock.systemUTC()).toString();
     /**
      * Not UTC, so any zone the export read relied on would be visibly the wrong one here, on CI
      * (which runs in UTC) as much as locally. Against the bare {@code TIMESTAMP} columns these were
@@ -305,7 +309,7 @@ class UserDataExportIntegrationTest {
                 .setWeight("80").setReps(5).build());
         sessions.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(log).build());
         as(of, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
-                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(log).setText(feedback).build());
+                SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(log).setText(feedback).build());
         return log;
     }
 

@@ -3,6 +3,7 @@ package com.vertice.api.plan.session;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutFeedbackResponse;
+import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
@@ -85,16 +86,16 @@ class WorkoutFeedbackControllerTest {
                 .setId(1L).setWorkoutLogId(10L).setText("Great session!").build();
         when(workoutFeedbackService.submitWorkoutFeedback(any())).thenReturn(feedback);
 
-        WorkoutFeedbackResponse response = stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        WorkoutFeedbackResponse response = stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(10L).setText("Great session!").build());
 
         assertThat(response).isEqualTo(feedback);
     }
 
     @Test
-    void submitWorkoutFeedback_withBlankText_throwsInvalidArgument() {
+    void submitWorkoutFeedback_withoutARating_throwsInvalidArgument() {
         assertThatThrownBy(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
-                .setWorkoutLogId(10L).setText("").build()))
+                .setWorkoutLogId(10L).setText("Feedback").build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
@@ -102,7 +103,7 @@ class WorkoutFeedbackControllerTest {
 
     @Test
     void submitWorkoutFeedback_withZeroWorkoutLogId_throwsInvalidArgument() {
-        assertThatThrownBy(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        assertThatThrownBy(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(0).setText("Feedback").build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
@@ -113,7 +114,7 @@ class WorkoutFeedbackControllerTest {
     void submitWorkoutFeedback_withMissingWorkoutLog_throwsNotFound() {
         when(workoutFeedbackService.submitWorkoutFeedback(any())).thenThrow(new ResourceNotFoundException("WorkoutLog", 99L));
 
-        assertThatThrownBy(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        assertThatThrownBy(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(99L).setText("Feedback").build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
@@ -125,7 +126,7 @@ class WorkoutFeedbackControllerTest {
         when(workoutFeedbackService.submitWorkoutFeedback(any()))
                 .thenThrow(new jakarta.validation.ConstraintViolationException("workout session is not completed yet", Set.of()));
 
-        assertThatThrownBy(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        assertThatThrownBy(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(10L).setText("Feedback").build()))
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
@@ -154,7 +155,7 @@ class WorkoutFeedbackControllerTest {
 
     @Test
     void submitWorkoutFeedback_onlyTheLogsClientAndAdmin() {
-        callers.assertClientRule(c -> c.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        callers.assertClientRule(c -> c.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(WORKOUT_LOG_ID).setText("Great session!").build()));
     }
 
@@ -169,7 +170,7 @@ class WorkoutFeedbackControllerTest {
 
     @Test
     void serviceTokenIsDenied_andNoTokenIsUnauthenticated() {
-        callers.assertNoServiceOrAnonymous(c -> c.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        callers.assertNoServiceOrAnonymous(c -> c.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(WORKOUT_LOG_ID).setText("Great session!").build()));
     }
 
@@ -177,16 +178,16 @@ class WorkoutFeedbackControllerTest {
 
     @Test
     void submitWorkoutFeedback_withTwoThousandCharacters_isAccepted() {
-        stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(WORKOUT_LOG_ID).setText("f".repeat(2_000)).build());
     }
 
     @Test
     void submitWorkoutFeedback_pastTwoThousandCharacters_throwsInvalidArgument() {
-        assertInvalidField(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        assertInvalidField(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(WORKOUT_LOG_ID).setText("f".repeat(2_001)).build()), "text");
         // The 10 KB body from the plan's acceptance criterion.
-        assertInvalidField(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder()
+        assertInvalidField(() -> stub.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
                 .setWorkoutLogId(WORKOUT_LOG_ID).setText("f".repeat(10_240)).build()), "text");
         verify(workoutFeedbackService, never()).submitWorkoutFeedback(any());
     }

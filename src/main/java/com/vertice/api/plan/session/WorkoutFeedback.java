@@ -2,6 +2,8 @@ package com.vertice.api.plan.session;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -30,8 +32,14 @@ public class WorkoutFeedback {
     @JoinColumn(name = "workout_log_id", nullable = false)
     private WorkoutLog workoutLog;
 
+    /** '' when the client only rated the workout. */
     @Column(nullable = false)
     private String text;
+
+    /** Null on feedback given before ratings existed. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private FeedbackRating rating;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

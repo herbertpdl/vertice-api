@@ -58,13 +58,13 @@ public record UserDataExport(
     }
 
     public record WorkoutLog(long id, long workoutId, long planId, LocalDate weekStartDate, Instant startedAt,
-                             Instant completedAt, List<SetLog> setLogs, List<Feedback> feedback) {
+                             Instant completedAt, String status, List<SetLog> setLogs, List<Feedback> feedback) {
     }
 
     public record SetLog(long id, long exerciseSetId, BigDecimal weight, Integer reps, Instant recordedAt) {
     }
 
-    public record Feedback(long id, String text, Instant createdAt) {
+    public record Feedback(long id, String text, String rating, Instant createdAt) {
     }
 
     /** The caller's private exercises (a trainer's own catalogue). */

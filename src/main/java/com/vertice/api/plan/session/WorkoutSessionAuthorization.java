@@ -31,6 +31,18 @@ public class WorkoutSessionAuthorization {
         PlanAccess.requireTrainerOrClient(caller, "workout", workoutId, () -> planAccessRepository.findByWorkoutId(workoutId));
     }
 
+    /** A redo is the client's own (ADMIN too); a trainer never starts one for them. */
+    public void checkRestartWorkoutLog(CallerIdentity caller, long workoutId, long clientId) {
+        PlanAccess.ownId(caller, Role.CLIENT, clientId, "client_id");
+        PlanAccess.requireClient(caller, "restart workout sessions", "workout", workoutId,
+                () -> planAccessRepository.findByWorkoutId(workoutId));
+    }
+
+    public void checkDiscardWorkoutLog(CallerIdentity caller, long workoutLogId) {
+        PlanAccess.requireClient(caller, "discard workout sessions", "workout log", workoutLogId,
+                () -> planAccessRepository.findByWorkoutLogId(workoutLogId));
+    }
+
     public void checkGetWorkoutLog(CallerIdentity caller, long workoutLogId) {
         PlanAccess.requireTrainerOrClient(caller, "workout log", workoutLogId,
                 () -> planAccessRepository.findByWorkoutLogId(workoutLogId));

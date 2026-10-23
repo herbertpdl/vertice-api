@@ -4,6 +4,8 @@ import com.vertice.api.plan.workout.Workout;
 import com.vertice.api.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -47,4 +49,23 @@ public class WorkoutLog {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private WorkoutLogStatus status = WorkoutLogStatus.IN_PROGRESS;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "completion_kind", length = 10)
+    private CompletionKind completionKind;
+
+    public boolean isInProgress() {
+        return status == WorkoutLogStatus.IN_PROGRESS;
+    }
+
+    /** Finishes the session now; the caller supersedes any earlier completed one first. */
+    public void complete(Instant at, CompletionKind kind) {
+        status = WorkoutLogStatus.COMPLETED;
+        completedAt = at;
+        completionKind = kind;
+    }
 }

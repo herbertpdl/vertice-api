@@ -149,22 +149,22 @@ class UserDataExportQueries {
                         integer(rs, "reps"), instant(rs, "recorded_at")))));
 
         Map<Long, List<Feedback>> feedbackByLog = grouped(list("feedback", """
-                SELECT f.id, f.workout_log_id, f.text, f.created_at
+                SELECT f.id, f.workout_log_id, f.text, f.rating, f.created_at
                 FROM workout_feedback f
                 WHERE f.workout_log_id IN (%s)
                 ORDER BY f.workout_log_id, f.id
                 """.formatted(LOGS_OF_USER), userId, (rs, n) -> new Child<>(rs.getLong("workout_log_id"),
-                new Feedback(rs.getLong("id"), rs.getString("text"), instant(rs, "created_at")))));
+                new Feedback(rs.getLong("id"), rs.getString("text"), rs.getString("rating"), instant(rs, "created_at")))));
 
         return list("workout logs", """
-                SELECT l.id, l.workout_id, w.training_plan_id, l.week_start_date, l.started_at, l.completed_at
+                SELECT l.id, l.workout_id, w.training_plan_id, l.week_start_date, l.started_at, l.completed_at, l.status
                 FROM workout_logs l
                 JOIN workouts w ON w.id = l.workout_id
                 WHERE l.client_id = :userId
                 ORDER BY l.week_start_date, l.id
                 """, userId, (rs, n) -> new WorkoutLog(rs.getLong("id"), rs.getLong("workout_id"),
                 rs.getLong("training_plan_id"), date(rs, "week_start_date"), instant(rs, "started_at"),
-                instant(rs, "completed_at"), setLogsByLog.getOrDefault(rs.getLong("id"), List.of()),
+                instant(rs, "completed_at"), rs.getString("status"), setLogsByLog.getOrDefault(rs.getLong("id"), List.of()),
                 feedbackByLog.getOrDefault(rs.getLong("id"), List.of())));
     }
 

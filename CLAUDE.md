@@ -160,8 +160,9 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `UpdateTrainingPlan`, `DeleteTrainingPlan`, `CreateWorkout`, `CreateWorkoutWithExercises`, `UpdateWorkout`, `DeleteWorkout`, `ReplaceWorkoutExercises`, `CreateWorkoutExercise`, `UpdateWorkoutExercise`, `DeleteWorkoutExercise`, `CreateExerciseSet`, `UpdateExerciseSet`, `DeleteExerciseSet` | the plan's trainer, ADMIN |
 | `CloneWorkout` | the trainer of both the source workout's plan and the target plan, ADMIN |
 | `GetOrStartWorkoutLog`, `ListWorkoutLogs`, `GetLastSetLogs` | the plan's trainer, the plan's client (as themself), ADMIN |
-| `GetWorkoutLog` | the log's client, the plan's trainer, ADMIN |
-| `RecordSetLog`, `CompleteWorkoutLog`, `SubmitWorkoutFeedback` | the log's client, ADMIN |
+| `RestartWorkoutLog` | the plan's client (as themself), ADMIN |
+| `GetWorkoutLog`, `ListSetLogs` | the log's client, the plan's trainer, ADMIN |
+| `RecordSetLog`, `DeleteSetLog`, `CompleteWorkoutLog`, `DiscardWorkoutLog`, `SubmitWorkoutFeedback` | the log's client, ADMIN |
 | `GetExerciseProgress` | the client themself, their active trainer, ADMIN |
 | `ListWorkoutFeedback` | TRAINER for their own `trainer_id`, ADMIN |
 | `CreateClientForTrainer`, `ListClientsForTrainer`, `IsTrainersClient` | TRAINER for their own `trainer_id`, ADMIN (any trainer); never a CLIENT or a service |

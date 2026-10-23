@@ -1,5 +1,6 @@
 package com.vertice.api.plan;
 
+import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.CreateWorkoutWithExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
@@ -30,10 +31,15 @@ import com.vertice.api.generated.grpc.plan.v1.WorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutResponse;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.CompleteWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.DeleteSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.RestartWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.ListSetLogsRequest;
+import com.vertice.api.generated.grpc.session.v1.DiscardWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
+import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
@@ -59,6 +65,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -81,7 +88,8 @@ class PlanAuthorizationIntegrationTest {
 
     static final String SECRET = "non-local-plan-authz-test-secret-32b!";
     /** A Monday, as {@code week_start_date} requires. */
-    private static final String WEEK = "2026-03-02";
+    /** The current business week: sessions can only be started in it. */
+    private static final String WEEK = BusinessDates.currentWeekStart(Clock.systemUTC()).toString();
 
     @Autowired
     private UserRepository userRepository;
@@ -230,6 +238,22 @@ class PlanAuthorizationIntegrationTest {
         assertDenied(() -> sessionAsB.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(log.getId()).build()));
         assertDenied(() -> sessionAsB.getOrStartWorkoutLog(startLog(clientB)));
         assertDenied(() -> sessionAsB.getOrStartWorkoutLog(startLog(clientA)));
+        // The lifecycle RPCs: another client neither restarts, discards, unticks nor reads A's sets.
+        assertDenied(() -> sessionAsB.restartWorkoutLog(restartLog(clientB)));
+        assertDenied(() -> sessionAsB.restartWorkoutLog(restartLog(clientA)));
+        assertDenied(() -> sessionAsB.discardWorkoutLog(DiscardWorkoutLogRequest.newBuilder().setId(log.getId()).build()));
+        assertDenied(() -> sessionAsB.deleteSetLog(untick(log.getId())));
+        assertDenied(() -> sessionAsB.listSetLogs(ListSetLogsRequest.newBuilder().setWorkoutLogId(log.getId()).build()));
+        // The plan's trainer reads the sets but never restarts, discards or unticks for the client.
+        WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub sessionAsTrainer = as(trainerA, WorkoutSessionServiceGrpc::newBlockingStub);
+        assertDenied(() -> sessionAsTrainer.restartWorkoutLog(restartLog(clientA)));
+        assertDenied(() -> sessionAsTrainer.discardWorkoutLog(DiscardWorkoutLogRequest.newBuilder().setId(log.getId()).build()));
+        assertDenied(() -> sessionAsTrainer.deleteSetLog(untick(log.getId())));
+        assertThat(sessionAsTrainer.listSetLogs(ListSetLogsRequest.newBuilder().setWorkoutLogId(log.getId()).build())
+                .getSetLogsList()).hasSize(1);
+        // Nothing of A's was removed by the refused calls.
+        assertThat(sessionAsA.listSetLogs(ListSetLogsRequest.newBuilder().setWorkoutLogId(log.getId()).build())
+                .getSetLogsList()).hasSize(1);
 
         WorkoutLogResponse completed = sessionAsA.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(log.getId()).build());
         assertThat(completed.getCompletedAt()).isNotBlank();
@@ -282,8 +306,13 @@ class PlanAuthorizationIntegrationTest {
     void missingIds_arePermissionDenied_notNotFound() {
         assertDenied(() -> as(trainerA, TrainingPlanServiceGrpc::newBlockingStub)
                 .getTrainingPlan(GetTrainingPlanRequest.newBuilder().setId(Long.MAX_VALUE).build()));
-        assertDenied(() -> as(clientA, WorkoutSessionServiceGrpc::newBlockingStub)
-                .completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(Long.MAX_VALUE).build()));
+        WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub sessionAsA = as(clientA, WorkoutSessionServiceGrpc::newBlockingStub);
+        assertDenied(() -> sessionAsA.completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(Long.MAX_VALUE).build()));
+        assertDenied(() -> sessionAsA.discardWorkoutLog(DiscardWorkoutLogRequest.newBuilder().setId(Long.MAX_VALUE).build()));
+        assertDenied(() -> sessionAsA.deleteSetLog(untick(Long.MAX_VALUE)));
+        assertDenied(() -> sessionAsA.listSetLogs(ListSetLogsRequest.newBuilder().setWorkoutLogId(Long.MAX_VALUE).build()));
+        assertDenied(() -> sessionAsA.restartWorkoutLog(RestartWorkoutLogRequest.newBuilder().setWorkoutId(Long.MAX_VALUE)
+                .setClientId(clientA.getId()).setWeekStartDate(WEEK).build()));
     }
 
     /**
@@ -326,12 +355,20 @@ class PlanAuthorizationIntegrationTest {
         return GetOrStartWorkoutLogRequest.newBuilder().setWorkoutId(workoutA).setClientId(client.getId()).setWeekStartDate(WEEK).build();
     }
 
+    private RestartWorkoutLogRequest restartLog(User client) {
+        return RestartWorkoutLogRequest.newBuilder().setWorkoutId(workoutA).setClientId(client.getId()).setWeekStartDate(WEEK).build();
+    }
+
+    private DeleteSetLogRequest untick(long workoutLogId) {
+        return DeleteSetLogRequest.newBuilder().setWorkoutLogId(workoutLogId).setExerciseSetId(setA).build();
+    }
+
     private RecordSetLogRequest recordSet(long workoutLogId) {
         return RecordSetLogRequest.newBuilder().setWorkoutLogId(workoutLogId).setExerciseSetId(setA).setWeight("80").setReps(5).build();
     }
 
     private static SubmitWorkoutFeedbackRequest feedback(long workoutLogId) {
-        return SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(workoutLogId).setText("Heavy today").build();
+        return SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(workoutLogId).setText("Heavy today").build();
     }
 
     private static WorkoutExerciseEntry entry(long exerciseId) {

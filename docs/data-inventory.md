@@ -107,9 +107,9 @@ hold an address on the reserved `.invalid` TLD.
 
 | Column | Personal data | Purpose | Legal basis | Retention | Who can read it |
 | --- | --- | --- | --- | --- | --- |
-| `workout_logs.client_id`, `week_start_date`, `started_at`, `completed_at` | yes: when the client trained | progress tracking | D4 | account | the log's client, the plan's trainer, ADMIN |
+| `workout_logs.client_id`, `week_start_date`, `started_at`, `completed_at`, `status`, `completion_kind` | yes: when the client trained | progress tracking | D4 | account | the log's client, the plan's trainer, ADMIN |
 | `set_logs.weight`, `reps`, `recorded_at` | health-related (performance) | progress tracking (`GetExerciseProgress`) | D4 | account | same |
-| `workout_feedback.text` (free text, up to 2000 characters) | health-related: pain, injury, effort | the trainer adjusts the plan | D4 | account | the client who wrote it, their trainer (`ListWorkoutFeedback`), ADMIN |
+| `workout_feedback.text` (free text, up to 2000 characters, may be empty) and `rating` (how hard the workout felt, five levels) | health-related: pain, injury, effort | the trainer adjusts the plan | D4 | account | the client who wrote it, their trainer (`ListWorkoutFeedback`), ADMIN |
 
 ### `exercises`
 

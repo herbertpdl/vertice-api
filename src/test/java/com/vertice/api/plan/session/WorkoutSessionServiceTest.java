@@ -21,7 +21,9 @@ import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,13 +54,16 @@ class WorkoutSessionServiceTest {
     @Mock
     private ExerciseSetRepository exerciseSetRepository;
 
+    /** Thursday 2026-08-27 in São Paulo: the business week starting Monday 2026-08-24. */
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-08-27T15:00:00Z"), ZoneOffset.UTC);
+
     private WorkoutSessionService service;
 
     @BeforeEach
     void setUp() {
         service = new WorkoutSessionService(workoutLogRepository, setLogRepository,
                 Mappers.getMapper(WorkoutLogMapper.class), Mappers.getMapper(SetLogMapper.class),
-                workoutRepository, userRepository, exerciseSetRepository);
+                workoutRepository, userRepository, exerciseSetRepository, CLOCK);
     }
 
     /** A workout from a plan assigned to client 2, the client every test below logs as. */
@@ -102,7 +108,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getOrStartWorkoutLog_createsNewLogWhenNoneExists() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(eq(1L), eq(2L), eq(LocalDate.parse("2026-08-24")), any()))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(client(2L)));
@@ -127,7 +133,7 @@ class WorkoutSessionServiceTest {
     @Test
     void getOrStartWorkoutLog_returnsExistingLogIdempotently() {
         WorkoutLog existing = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(eq(1L), eq(2L), eq(LocalDate.parse("2026-08-24")), any()))
                 .thenReturn(Optional.of(existing));
 
         var request = GetOrStartWorkoutLogRequest.newBuilder()
@@ -142,7 +148,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getOrStartWorkoutLog_throwsWhenWorkoutNotAssignedToClient() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(eq(1L), eq(2L), eq(LocalDate.parse("2026-08-24")), any()))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workoutForClient(1L, 3L)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(client(2L)));
@@ -159,7 +165,7 @@ class WorkoutSessionServiceTest {
     @Test
     void getOrStartWorkoutLog_throwsWhenExistingLogIsForAnotherClientsWorkout() {
         WorkoutLog existing = workoutLog(10L, workoutForClient(1L, 3L), client(2L));
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(eq(1L), eq(2L), eq(LocalDate.parse("2026-08-24")), any()))
                 .thenReturn(Optional.of(existing));
 
         var request = GetOrStartWorkoutLogRequest.newBuilder()
@@ -200,7 +206,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getOrStartWorkoutLog_throwsWhenWorkoutMissing() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(99L, 2L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(eq(99L), eq(2L), eq(LocalDate.parse("2026-08-24")), any()))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(99L)).thenReturn(Optional.empty());
 
@@ -213,7 +219,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getOrStartWorkoutLog_throwsWhenClientIsNotClientRole() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(eq(1L), eq(2L), eq(LocalDate.parse("2026-08-24")), any()))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
         User trainer = new User();
@@ -231,7 +237,7 @@ class WorkoutSessionServiceTest {
     /** A deleted account (P1-05) is missing: no new log is started for it, ADMIN included. */
     @Test
     void getOrStartWorkoutLog_throwsWhenClientAccountIsDeleted() {
-        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDate(1L, 2L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByWorkoutIdAndClientIdAndWeekStartDateAndStatus(eq(1L), eq(2L), eq(LocalDate.parse("2026-08-24")), any()))
                 .thenReturn(Optional.empty());
         when(workoutRepository.findById(1L)).thenReturn(Optional.of(workout(1L)));
         User deleted = new User();
@@ -255,7 +261,7 @@ class WorkoutSessionServiceTest {
         WorkoutLog log = workoutLog(10L, workout, client(2L));
         ExerciseSet exerciseSet = exerciseSet(5L, workout);
 
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet));
         when(setLogRepository.findByWorkoutLogIdAndExerciseSetId(10L, 5L)).thenReturn(Optional.empty());
         when(setLogRepository.save(any(SetLog.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -282,7 +288,7 @@ class WorkoutSessionServiceTest {
         existing.setExerciseSet(exerciseSet);
         existing.setWeight(java.math.BigDecimal.valueOf(50));
 
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet));
         when(setLogRepository.findByWorkoutLogIdAndExerciseSetId(10L, 5L)).thenReturn(Optional.of(existing));
         when(setLogRepository.save(any(SetLog.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -299,7 +305,7 @@ class WorkoutSessionServiceTest {
     @Test
     void recordSetLog_throwsWhenExerciseSetBelongsToAnotherWorkout() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(5L)).thenReturn(Optional.of(exerciseSet(5L, workout(7L))));
 
         var request = RecordSetLogRequest.newBuilder()
@@ -315,8 +321,10 @@ class WorkoutSessionServiceTest {
     void recordSetLog_throwsWhenWorkoutLogAlreadyCompleted() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
         log.setCompletedAt(Instant.now());
+        log.setStatus(WorkoutLogStatus.COMPLETED);
+        log.setCompletionKind(CompletionKind.CLIENT);
 
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
 
         var request = RecordSetLogRequest.newBuilder()
                 .setWorkoutLogId(10L).setExerciseSetId(5L).setReps(8).build();
@@ -329,7 +337,7 @@ class WorkoutSessionServiceTest {
     @Test
     void recordSetLog_throwsWhenExerciseSetMissing() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(exerciseSetRepository.findById(99L)).thenReturn(Optional.empty());
 
         var request = RecordSetLogRequest.newBuilder().setWorkoutLogId(10L).setExerciseSetId(99L).build();
@@ -341,8 +349,8 @@ class WorkoutSessionServiceTest {
     @Test
     void completeWorkoutLog_setsCompletedAt() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
-        when(workoutLogRepository.save(any(WorkoutLog.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.saveAndFlush(any(WorkoutLog.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = service.completeWorkoutLog(10L);
 
@@ -354,7 +362,9 @@ class WorkoutSessionServiceTest {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
         Instant firstCompletion = Instant.now().minusSeconds(3600);
         log.setCompletedAt(firstCompletion);
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        log.setStatus(WorkoutLogStatus.COMPLETED);
+        log.setCompletionKind(CompletionKind.CLIENT);
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
 
         var response = service.completeWorkoutLog(10L);
 
@@ -364,7 +374,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void completeWorkoutLog_throwsWhenMissing() {
-        when(workoutLogRepository.findById(99L)).thenReturn(Optional.empty());
+        when(workoutLogRepository.findWithLockById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.completeWorkoutLog(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -373,8 +383,8 @@ class WorkoutSessionServiceTest {
     @Test
     void listWorkoutLogs_returnsLogsForClientPlanAndWeek() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findByClientIdAndWorkout_TrainingPlan_IdAndWeekStartDate(
-                2L, 3L, LocalDate.parse("2026-08-24")))
+        when(workoutLogRepository.findByClientIdAndWorkout_TrainingPlan_IdAndWeekStartDateAndStatusNot(
+                2L, 3L, LocalDate.parse("2026-08-24"), WorkoutLogStatus.SUPERSEDED))
                 .thenReturn(List.of(log));
 
         var responses = service.listWorkoutLogs(2L, 3L, "2026-08-24");
@@ -397,7 +407,7 @@ class WorkoutSessionServiceTest {
         setLog.setWorkoutLog(log);
         setLog.setExerciseSet(new ExerciseSet());
 
-        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(2L, 1L))
+        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndStatusOrderByWeekStartDateDescCompletedAtDesc(2L, 1L, WorkoutLogStatus.COMPLETED))
                 .thenReturn(Optional.of(log));
         when(setLogRepository.findByWorkoutLogId(10L)).thenReturn(List.of(setLog));
 
@@ -408,7 +418,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getLastSetLogs_returnsEmptyWhenNoCompletedSession() {
-        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(2L, 1L))
+        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndStatusOrderByWeekStartDateDescCompletedAtDesc(2L, 1L, WorkoutLogStatus.COMPLETED))
                 .thenReturn(Optional.empty());
 
         var responses = service.getLastSetLogs(2L, 1L);
@@ -420,6 +430,8 @@ class WorkoutSessionServiceTest {
         WorkoutLog log = new WorkoutLog();
         log.setWeekStartDate(weekStartDate);
         log.setCompletedAt(Instant.now());
+        log.setStatus(WorkoutLogStatus.COMPLETED);
+        log.setCompletionKind(CompletionKind.CLIENT);
         SetLog setLog = new SetLog();
         setLog.setWorkoutLog(log);
         setLog.setWeight(weight);
