@@ -94,12 +94,22 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
         }
     }
 
+    /**
+     * Exercise videos are YouTube only (client workout experience R61): the client app plays them in
+     * an embedded YouTube player. A watch, shorts, embed or live link, or youtu.be, with an
+     * 11-character video id; the same links vertice-mobile's {@code youtubeVideoId} reads. Empty
+     * clears the video. Existing non-YouTube links stay until the exercise is edited.
+     */
+    static final String YOUTUBE_URL = "^$|^https?://(?:(?:www\\.|m\\.)?youtube(?:-nocookie)?\\.com/"
+            + "(?:watch\\?(?:\\S*&)?v=|shorts/|embed/|live/)|youtu\\.be/)[\\w-]{11}(?:[?&#/]\\S*)?$";
+
     private record ListExercisesValidation(@Size(max = 100) String search) {
     }
 
     private record ExerciseValidation(
             @NotBlank @Size(max = 255) String name,
             @Size(max = 255) String description,
-            @Pattern(regexp = "^$|^https?://\\S+$", message = "must be a valid http(s) URL") @Size(max = 500) String videoUrl) {
+            @Pattern(regexp = YOUTUBE_URL, message = "must be a YouTube video link (youtube.com or youtu.be)")
+            @Size(max = 500) String videoUrl) {
     }
 }

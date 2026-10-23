@@ -10,6 +10,9 @@ public interface TrainerClientRepository extends JpaRepository<TrainerClient, Lo
 
     List<TrainerClient> findByTrainerIdAndEndedAtIsNull(Long trainerId);
 
+    /** A client's active relationship: at most one (V21's partial unique index). */
+    Optional<TrainerClient> findByClientIdAndEndedAtIsNull(Long clientId);
+
     boolean existsByTrainerIdAndEndedAtIsNull(Long trainerId);
 
     boolean existsByTrainerIdAndClientIdAndEndedAtIsNull(Long trainerId, Long clientId);

@@ -166,6 +166,7 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `GetExerciseProgress` | the client themself, their active trainer, ADMIN |
 | `ListWorkoutFeedback` | TRAINER for their own `trainer_id`, ADMIN |
 | `CreateClientForTrainer`, `ListClientsForTrainer`, `IsTrainersClient` | TRAINER for their own `trainer_id`, ADMIN (any trainer); never a CLIENT or a service |
+| `GetClientTrainer` | CLIENT as themself (the request's `client_id` 0 or their own), ADMIN; never a TRAINER |
 | `EndTrainerClientRelationship` | TRAINER for their own `trainer_id` and a client on their active roster, ADMIN (any active relationship); never a CLIENT or a service |
 | `ListExercises` | TRAINER (starter set + own), ADMIN (starter set) |
 | `GetExercise` | TRAINER (starter set or own), ADMIN (starter set), a CLIENT for an exercise in one of their workouts |

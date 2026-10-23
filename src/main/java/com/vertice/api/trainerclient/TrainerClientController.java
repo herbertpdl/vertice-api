@@ -3,8 +3,10 @@ package com.vertice.api.trainerclient;
 import com.google.protobuf.Empty;
 import com.vertice.api.common.validation.Cpf;
 import com.vertice.api.common.validation.Password;
+import com.vertice.api.generated.grpc.trainerclient.v1.ClientTrainerResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.EndTrainerClientRelationshipRequest;
+import com.vertice.api.generated.grpc.trainerclient.v1.GetClientTrainerRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientRequest;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerRequest;
@@ -57,6 +59,15 @@ public class TrainerClientController extends TrainerClientServiceGrpc.TrainerCli
     }
 
     @Override
+    public void getClientTrainer(GetClientTrainerRequest request, StreamObserver<ClientTrainerResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
+        long clientId = authorization.checkGetClientTrainer(caller, request.getClientId());
+        validator.validate(new GetClientTrainerValidation(clientId));
+        responseObserver.onNext(trainerClientService.getClientTrainer(clientId));
+        responseObserver.onCompleted();
+    }
+
+    @Override
     public void endTrainerClientRelationship(EndTrainerClientRelationshipRequest request, StreamObserver<Empty> responseObserver) {
         authorization.checkEndTrainerClientRelationship(callerIdentityResolver.requireUser(),
                 request.getTrainerId(), request.getClientId());
@@ -76,5 +87,8 @@ public class TrainerClientController extends TrainerClientServiceGrpc.TrainerCli
     /** The password is optional here (empty = created without one), but when sent it must meet the policy. */
     private static String emptyToNull(String value) {
         return value.isEmpty() ? null : value;
+    }
+
+    private record GetClientTrainerValidation(@Min(1) long clientId) {
     }
 }

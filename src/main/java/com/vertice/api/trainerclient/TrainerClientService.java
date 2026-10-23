@@ -3,6 +3,7 @@ package com.vertice.api.trainerclient;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.trainerclient.v1.CreateClientForTrainerRequest;
+import com.vertice.api.generated.grpc.trainerclient.v1.ClientTrainerResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.IsTrainersClientResponse;
 import com.vertice.api.generated.grpc.trainerclient.v1.ListClientsForTrainerResponse;
 import com.vertice.api.generated.grpc.user.v1.Role;
@@ -88,6 +89,31 @@ public class TrainerClientService {
     public IsTrainersClientResponse isTrainersClient(Long trainerId, Long clientId) {
         boolean isClient = trainerClientRepository.existsByTrainerIdAndClientIdAndEndedAtIsNull(trainerId, clientId);
         return IsTrainersClientResponse.newBuilder().setIsClient(isClient).build();
+    }
+
+    /**
+     * The client's active trainer with the contacts they chose to show (R74-R79): the name always,
+     * e-mail, WhatsApp and Instagram only when switched on and filled in.
+     */
+    @Transactional(readOnly = true)
+    public ClientTrainerResponse getClientTrainer(Long clientId) {
+        User trainer = trainerClientRepository.findByClientIdAndEndedAtIsNull(clientId)
+                .map(TrainerClient::getTrainer)
+                .filter(user -> !user.isDeleted())
+                .orElseThrow(() -> new ResourceNotFoundException("Active trainer of client", clientId));
+        ClientTrainerResponse.Builder response = ClientTrainerResponse.newBuilder()
+                .setTrainerId(trainer.getId())
+                .setName(trainer.getName());
+        if (trainer.isShowEmail() && trainer.getEmail() != null) {
+            response.setEmail(trainer.getEmail());
+        }
+        if (trainer.isShowWhatsapp() && trainer.getWhatsapp() != null) {
+            response.setWhatsapp(trainer.getWhatsapp());
+        }
+        if (trainer.isShowInstagram() && trainer.getInstagram() != null) {
+            response.setInstagram(trainer.getInstagram());
+        }
+        return response.build();
     }
 
     /** A deleted account (P1-05) is missing: nobody, ADMIN included, links a client to it. */

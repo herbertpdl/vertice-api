@@ -129,8 +129,10 @@ public class UserService {
         assertCpfRequiredForTrainer(request.getCpf(), request.getRole());
         assertCpfAvailable(request.getCpf(), id);
         assertCrefOnlyForTrainer(request.getCref(), request.getRole());
+        assertContactsOnlyForTrainer(request);
         userMapper.updateEntityFromRequest(request, user);
         user.setEmail(email);
+        applyContacts(request, user);
         return userMapper.toResponse(userRepository.save(user));
     }
 
@@ -235,6 +237,37 @@ public class UserService {
      * there's no dedicated trainer table anymore to hold it exclusively, so this is enforced here
      * instead. See docs/specs/user-unification/spec.md section 3.2.
      */
+    /** Contacts only make sense for a TRAINER: their clients see them. */
+    private static void assertContactsOnlyForTrainer(UserRequest request) {
+        boolean setsAny = (request.hasWhatsapp() && !request.getWhatsapp().isEmpty())
+                || (request.hasInstagram() && !request.getInstagram().isEmpty())
+                || (request.hasShowEmail() && request.getShowEmail())
+                || (request.hasShowWhatsapp() && request.getShowWhatsapp())
+                || (request.hasShowInstagram() && request.getShowInstagram());
+        if (setsAny && request.getRole() != com.vertice.api.generated.grpc.user.v1.Role.TRAINER) {
+            throw new ConstraintViolationException("contacts may only be set for TRAINER-role users", Set.of());
+        }
+    }
+
+    /** Applies the contact fields the request carries; a field left out keeps its value. */
+    private static void applyContacts(UserRequest request, User user) {
+        if (request.hasWhatsapp()) {
+            user.setWhatsapp(request.getWhatsapp().isEmpty() ? null : request.getWhatsapp());
+        }
+        if (request.hasInstagram()) {
+            user.setInstagram(request.getInstagram().isEmpty() ? null : request.getInstagram());
+        }
+        if (request.hasShowEmail()) {
+            user.setShowEmail(request.getShowEmail());
+        }
+        if (request.hasShowWhatsapp()) {
+            user.setShowWhatsapp(request.getShowWhatsapp());
+        }
+        if (request.hasShowInstagram()) {
+            user.setShowInstagram(request.getShowInstagram());
+        }
+    }
+
     private void assertCrefOnlyForTrainer(String cref, Role role) {
         if (!cref.isBlank() && role != Role.TRAINER) {
             throw new ConstraintViolationException("cref may only be set for TRAINER-role users", Set.of());

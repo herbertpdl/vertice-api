@@ -27,7 +27,8 @@ public record UserDataExport(
     public static final int FORMAT_VERSION = 1;
 
     public record Profile(long id, String name, String email, String cpf, String cref, String role,
-                          Instant createdAt, Instant updatedAt) {
+                          String whatsapp, String instagram, boolean showEmail, boolean showWhatsapp,
+                          boolean showInstagram, Instant createdAt, Instant updatedAt) {
     }
 
     public record Consent(String acceptedTermsVersion, Instant termsAcceptedAt,

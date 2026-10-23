@@ -51,13 +51,15 @@ class UserDataExportQueries {
 
     Optional<Profile> profile(long userId) {
         return jdbc.query("""
-                        SELECT id, name, email, cpf, cref, role, created_at, updated_at
+                        SELECT id, name, email, cpf, cref, role, whatsapp, instagram, show_email, show_whatsapp,
+                               show_instagram, created_at, updated_at
                         FROM users
                         WHERE id = :userId AND deleted_at IS NULL
                         """, Map.of("userId", userId),
                 (rs, n) -> new Profile(rs.getLong("id"), rs.getString("name"), rs.getString("email"),
-                        rs.getString("cpf"), rs.getString("cref"), rs.getString("role"),
-                        instant(rs, "created_at"), instant(rs, "updated_at")))
+                        rs.getString("cpf"), rs.getString("cref"), rs.getString("role"), rs.getString("whatsapp"),
+                        rs.getString("instagram"), rs.getBoolean("show_email"), rs.getBoolean("show_whatsapp"),
+                        rs.getBoolean("show_instagram"), instant(rs, "created_at"), instant(rs, "updated_at")))
                 .stream().findFirst();
     }
 
