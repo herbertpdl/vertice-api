@@ -28,6 +28,8 @@ import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -281,24 +283,44 @@ class ExerciseControllerTest {
 
     @Test
     void createExercise_withValidVideoUrl_returnsCreated() {
-        ExerciseResponse created = squat().toBuilder().setVideoUrl("https://youtube.com/watch?v=abc123").build();
+        ExerciseResponse created = squat().toBuilder().setVideoUrl("https://youtube.com/watch?v=dQw4w9WgXcQ").build();
         when(exerciseService.createExercise(any(), any())).thenReturn(created);
 
-        ExerciseResponse response = stub.createExercise(squatRequest().setVideoUrl("https://youtube.com/watch?v=abc123").build());
+        ExerciseResponse response = stub.createExercise(squatRequest().setVideoUrl("https://youtube.com/watch?v=dQw4w9WgXcQ").build());
 
-        assertThat(response.getVideoUrl()).isEqualTo("https://youtube.com/watch?v=abc123");
+        assertThat(response.getVideoUrl()).isEqualTo("https://youtube.com/watch?v=dQw4w9WgXcQ");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://youtu.be/dQw4w9WgXcQ?si=x",
+            "https://m.youtube.com/shorts/dQw4w9WgXcQ", "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+            "https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ", "https://www.YouTube.com/watch?v=dQw4w9WgXcQ",
+            "HTTPS://youtu.be/dQw4w9WgXcQ", "https://www.youtube.com/live/dQw4w9WgXcQ"})
+    void createExercise_withAYouTubeLink_isAccepted(String url) {
+        when(exerciseService.createExercise(any(), any())).thenReturn(squat());
+
+        stub.createExercise(squatRequest().setVideoUrl(url).build());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"https://vimeo.com/824512", "https://drive.google.com/file/d/abc/view",
+            "https://www.youtube.com/watch?v=short", "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com/watch?t=1#&v=dQw4w9WgXcQ", "ftp://youtu.be/dQw4w9WgXcQ"})
+    void createExercise_withALinkThatIsNotAYouTubeVideo_throwsInvalidArgument(String url) {
+        assertInvalidArgument(() -> stub.createExercise(squatRequest().setVideoUrl(url).build()),
+                "videoUrl: must be a YouTube video link (youtube.com or youtu.be)");
     }
 
     @Test
     void createExercise_withMalformedVideoUrl_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createExercise(squatRequest().setVideoUrl("not-a-url").build()),
-                "videoUrl: must be a valid http(s) URL");
+                "videoUrl: must be a YouTube video link (youtube.com or youtu.be)");
     }
 
     @Test
     void createExercise_withNonHttpVideoUrl_throwsInvalidArgument() {
         assertInvalidArgument(() -> stub.createExercise(squatRequest().setVideoUrl("ftp://example.com/video.mp4").build()),
-                "videoUrl: must be a valid http(s) URL");
+                "videoUrl: must be a YouTube video link (youtube.com or youtu.be)");
     }
 
     @Test

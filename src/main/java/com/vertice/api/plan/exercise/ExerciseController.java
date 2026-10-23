@@ -1,6 +1,7 @@
 package com.vertice.api.plan.exercise;
 
 import com.google.protobuf.Empty;
+import com.vertice.api.common.validation.YouTubeVideoUrl;
 import com.vertice.api.generated.grpc.exercise.v1.DeleteExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
@@ -17,7 +18,6 @@ import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
@@ -100,6 +100,7 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
     private record ExerciseValidation(
             @NotBlank @Size(max = 255) String name,
             @Size(max = 255) String description,
-            @Pattern(regexp = "^$|^https?://\\S+$", message = "must be a valid http(s) URL") @Size(max = 500) String videoUrl) {
+            // YouTube only (R61): the client app plays videos in an embedded YouTube player.
+            @YouTubeVideoUrl @Size(max = 500) String videoUrl) {
     }
 }

@@ -103,6 +103,13 @@ hold an address on the reserved `.invalid` TLD.
 | `workout_exercises.notes`, `exercise_sets.notes` (free text) | can mention the client's condition | trainer's instructions | D3; D4 if they describe health | account | same |
 | loads (`exercise_sets.weight`, `load_percentage`, `reps`, `duration_seconds`, `rest_seconds`) | health-related (physical capacity) | the prescribed training | D4 | account | same |
 
+### Trainer contacts (`users.whatsapp`, `instagram`, `show_email`, `show_whatsapp`, `show_instagram`)
+
+| Field | Personal? | Purpose | Basis | Retention | Who reads it |
+|---|---|---|---|---|---|
+| `users.whatsapp` (a trainer's number), `users.instagram` (their handle) | yes: contact | the trainer's clients reach them | D1 (the trainer provides them to be contacted) | account; cleared on deletion | the trainer (self view), ADMIN; their active clients only when the matching `show_*` is on (`GetClientTrainer`) |
+| `users.show_email`, `show_whatsapp`, `show_instagram` | no | which contacts the trainer shares; all off until switched on | — | account | the trainer, ADMIN |
+
 ### `workout_logs`, `set_logs`, `workout_feedback`
 
 | Column | Personal data | Purpose | Legal basis | Retention | Who can read it |

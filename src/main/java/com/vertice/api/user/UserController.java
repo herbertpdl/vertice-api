@@ -109,7 +109,8 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
     @Override
     public void updateUser(UpdateUserRequest request, StreamObserver<UserResponse> responseObserver) {
         validator.validate(new UpdateValidation(request.getUser().getName(), Emails.normalize(request.getUser().getEmail()),
-                request.getUser().getCpf(), request.getUser().getCref()));
+                request.getUser().getCpf(), request.getUser().getCref(), request.getUser().getWhatsapp(),
+                request.getUser().getInstagram()));
         requireRole(request.getUser().getRole());
         authorization.checkUpdateUser(callerIdentityResolver.resolve(), request.getId(), domainRole(request.getUser().getRole()));
         responseObserver.onNext(UserView.DETAIL.restrict(userService.updateUser(request.getId(), request.getUser())));
@@ -245,7 +246,9 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
             @NotBlank @Size(max = 255) String name,
             @NotBlank @Email @Size(max = 255) String email,
             @Cpf String cpf,
-            @Size(max = 20) String cref) {
+            @Size(max = 20) String cref,
+            @Pattern(regexp = "^$|^[0-9]{10,11}$", message = "must be 10 or 11 digits (DDD + number)") String whatsapp,
+            @Pattern(regexp = "^$|^[A-Za-z0-9._]{1,30}$", message = "must be an Instagram handle without @") String instagram) {
     }
 
     private record PageValidation(@PositiveOrZero int pageSize) {

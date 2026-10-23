@@ -51,6 +51,18 @@ public class TrainerClientAuthorization {
         }
     }
 
+    /** A client reads their own trainer's card; ADMIN any client's. Trainers never call it. */
+    public long checkGetClientTrainer(CallerIdentity caller, long clientId) {
+        caller.requireRole("read a client's trainer", Role.CLIENT, Role.ADMIN);
+        if (caller.role() == Role.CLIENT) {
+            if (clientId != 0 && clientId != caller.userId()) {
+                throw new PermissionDeniedException("client_id must be your own id");
+            }
+            return caller.userId();
+        }
+        return clientId;
+    }
+
     private static void requireTrainerAsThemselfOrAdmin(CallerIdentity caller, long trainerId, String action) {
         caller.requireRole(action, Role.TRAINER, Role.ADMIN);
         if (caller.role() == Role.TRAINER && trainerId != caller.userId()) {

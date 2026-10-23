@@ -35,6 +35,11 @@ public interface UserMapper {
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "deletedAt", ignore = true)
+    @Mapping(target = "whatsapp", ignore = true)
+    @Mapping(target = "instagram", ignore = true)
+    @Mapping(target = "showEmail", ignore = true)
+    @Mapping(target = "showWhatsapp", ignore = true)
+    @Mapping(target = "showInstagram", ignore = true)
     User toEntity(UserCreateRequest request);
 
     // cref (a CLIENT/ADMIN, or a TRAINER who hasn't set one, see docs/specs/trainer-cref/spec.md),
@@ -44,6 +49,8 @@ public interface UserMapper {
     @Mapping(target = "email", qualifiedByName = "nullToEmpty")
     @Mapping(target = "cref", qualifiedByName = "nullToEmpty")
     @Mapping(target = "cpf", qualifiedByName = "nullToEmpty")
+    @Mapping(target = "whatsapp", qualifiedByName = "nullToEmpty")
+    @Mapping(target = "instagram", qualifiedByName = "nullToEmpty")
     @Mapping(target = "consent", source = "user")
     UserResponse toResponse(User user);
 
@@ -63,6 +70,12 @@ public interface UserMapper {
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "deletedAt", ignore = true)
+    // Contacts are optional fields applied by UserService (a field left out keeps its value).
+    @Mapping(target = "whatsapp", ignore = true)
+    @Mapping(target = "instagram", ignore = true)
+    @Mapping(target = "showEmail", ignore = true)
+    @Mapping(target = "showWhatsapp", ignore = true)
+    @Mapping(target = "showInstagram", ignore = true)
     void updateEntityFromRequest(UserRequest request, @MappingTarget User user);
 
     @ValueMapping(source = "ROLE_UNSPECIFIED", target = MappingConstants.NULL)

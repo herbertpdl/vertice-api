@@ -97,7 +97,7 @@ class UserDataExportServiceTest {
 
     private void stubAnAccount() {
         when(queries.profile(7L)).thenReturn(Optional.of(new UserDataExport.Profile(
-                7L, "Ana", "ana@vertice.com", null, null, "CLIENT", Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z"))));
+                7L, "Ana", "ana@vertice.com", null, null, "CLIENT", null, null, false, false, false, Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-02T00:00:00Z"))));
         when(queries.consent(7L)).thenReturn(new UserDataExport.Consent(null, null, null, null));
         when(queries.relationships(7L)).thenReturn(List.of());
         when(queries.plans(7L)).thenReturn(List.of());

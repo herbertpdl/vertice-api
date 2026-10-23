@@ -64,6 +64,23 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** A trainer's WhatsApp (Brazilian number, digits only) and Instagram handle (no "@"). */
+    @Column(length = 11)
+    private String whatsapp;
+
+    @Column(length = 30)
+    private String instagram;
+
+    /** Which of the trainer's contacts their clients see; all hidden until switched on. */
+    @Column(name = "show_email", nullable = false)
+    private boolean showEmail;
+
+    @Column(name = "show_whatsapp", nullable = false)
+    private boolean showWhatsapp;
+
+    @Column(name = "show_instagram", nullable = false)
+    private boolean showInstagram;
+
     // Set by DeleteAccount (P1-05): the row is kept, anonymised, and no token of it works any more.
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -100,6 +117,11 @@ public class User {
         email = null;
         cpf = null;
         cref = null;
+        whatsapp = null;
+        instagram = null;
+        showEmail = false;
+        showWhatsapp = false;
+        showInstagram = false;
         passwordHash = null;
         acceptTerms(null, null);
         consentToHealthData(null, null);
