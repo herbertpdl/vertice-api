@@ -31,7 +31,8 @@ public class WorkoutFeedbackService {
     public WorkoutFeedbackResponse submitWorkoutFeedback(SubmitWorkoutFeedbackRequest request) {
         WorkoutLog workoutLog = workoutLogRepository.findById(request.getWorkoutLogId())
                 .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", request.getWorkoutLogId()));
-        if (workoutLog.getStatus() != WorkoutLogStatus.COMPLETED) {
+        // An automatic finish (the weekly rollover) takes no feedback (R27, R70).
+        if (workoutLog.getStatus() != WorkoutLogStatus.COMPLETED || workoutLog.getCompletionKind() == CompletionKind.AUTO) {
             throw new ConstraintViolationException("workoutLogId: workout session is not completed yet", Set.of());
         }
         if (workoutFeedbackRepository.countByWorkoutLogId(workoutLog.getId()) >= MAX_FEEDBACK_PER_LOG) {

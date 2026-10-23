@@ -13,6 +13,10 @@ public interface SetLogRepository extends JpaRepository<SetLog, Long> {
 
     boolean existsByWorkoutLogId(Long workoutLogId);
 
+    /** When the client last recorded a set in the session (the time an automatic finish takes). */
+    @Query("SELECT max(sl.recordedAt) FROM SetLog sl WHERE sl.workoutLog.id = :workoutLogId")
+    java.util.Optional<java.time.Instant> findLastRecordedAt(@Param("workoutLogId") Long workoutLogId);
+
     void deleteByWorkoutLogId(Long workoutLogId);
 
     void deleteByWorkoutLogIdAndExerciseSetId(Long workoutLogId, Long exerciseSetId);

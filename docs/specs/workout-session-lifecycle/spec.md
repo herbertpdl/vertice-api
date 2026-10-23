@@ -32,10 +32,14 @@ this extends)
   - `GetOrStart`, `Restart` and `ListWorkoutLogs` run the same pass for their client first, so a
     late or missed job never shows. "This week" is `BusinessDates.currentWeekStart(Clock)`, with a
     `Clock` bean (`ClockConfig`) that tests can fix.
+- **An automatic finish keeps the client's time.** `completed_at` is the session's last set's
+  `recorded_at` (else `started_at`), so an abandoned session neither shows as "trained Monday
+  00:05" nor outranks a later full session. "Last time" takes the newest week first. An automatic
+  finish takes no feedback (R27, R70).
 - **Concurrency.** The rollover's queries take `PESSIMISTIC_WRITE` row locks, and complete,
   discard and untick lock their session (`findWithLockById`). Concurrent passes (the job and a
   client's lazy pass, two devices) wait for each other instead of failing, and Postgres re-checks
-  `status` after the wait.
+  `status` after the wait. The rollover locks in id order, so two passes never deadlock.
 - **New sessions only in the current week.** `GetOrStart` (create path) and `Restart` refuse an
   earlier week with FAILED_PRECONDITION. A session created there would be closed by the next
   rollover pass mid-workout. An existing past session is still returned.

@@ -245,6 +245,35 @@ class WorkoutSessionLifecycleIntegrationTest {
         assertThat(count("SELECT count(*) FROM workout_logs WHERE id = :id", empty)).isZero();
     }
 
+    /**
+     * An automatic finish takes the time of the last set, not the rollover's: an old partial session
+     * closed today doesn't outrank last week's full one as "last time", and takes no feedback.
+     */
+    @Test
+    void anAutomaticFinish_keepsTheTimeOfTheLastSet_andTakesNoFeedback() {
+        long lastWeek = seedLeftover(1);
+        jdbc.update("UPDATE workout_logs SET status = 'COMPLETED', completion_kind = 'CLIENT', completed_at = now() WHERE id = :id",
+                Map.of("id", lastWeek));
+        jdbc.update("INSERT INTO set_logs (workout_log_id, exercise_set_id, weight, reps, recorded_at) VALUES (:log, :set, 80, 5, now())",
+                Map.of("log", lastWeek, "set", firstSet));
+        long twoWeeksAgo = seedLeftover(2);
+        jdbc.update("INSERT INTO set_logs (workout_log_id, exercise_set_id, weight, reps, recorded_at) "
+                + "VALUES (:log, :set, 60, 5, TIMESTAMPTZ '2026-01-05 10:00:00+00')", Map.of("log", twoWeeksAgo, "set", firstSet));
+
+        start(week);
+
+        assertThat(jdbc.queryForObject("SELECT completed_at = TIMESTAMPTZ '2026-01-05 10:00:00+00' FROM workout_logs WHERE id = :id",
+                Map.of("id", twoWeeksAgo), Boolean.class)).isTrue();
+        assertThat(sessions().getLastSetLogs(GetLastSetLogsRequest.newBuilder().setClientId(client.getId()).setWorkoutId(workout).build())
+                .getSetLogsList()).extracting(s -> s.getWeight()).containsExactly("80.00");
+        // The same refusal as feedback on a session that isn't finished.
+        assertThatThrownBy(() -> as(client, WorkoutFeedbackServiceGrpc::newBlockingStub).submitWorkoutFeedback(
+                SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(twoWeeksAgo).setRating(FeedbackRating.FEEDBACK_RATING_HARD).build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
     @Test
     void startingANewWeek_rollsOverTheClientsLeftovers_too() {
         long lastWeek = seedLeftover(1);

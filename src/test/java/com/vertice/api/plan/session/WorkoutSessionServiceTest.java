@@ -407,7 +407,7 @@ class WorkoutSessionServiceTest {
         setLog.setWorkoutLog(log);
         setLog.setExerciseSet(new ExerciseSet());
 
-        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndStatusOrderByCompletedAtDesc(2L, 1L, WorkoutLogStatus.COMPLETED))
+        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndStatusOrderByWeekStartDateDescCompletedAtDesc(2L, 1L, WorkoutLogStatus.COMPLETED))
                 .thenReturn(Optional.of(log));
         when(setLogRepository.findByWorkoutLogId(10L)).thenReturn(List.of(setLog));
 
@@ -418,7 +418,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void getLastSetLogs_returnsEmptyWhenNoCompletedSession() {
-        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndStatusOrderByCompletedAtDesc(2L, 1L, WorkoutLogStatus.COMPLETED))
+        when(workoutLogRepository.findFirstByClientIdAndWorkoutIdAndStatusOrderByWeekStartDateDescCompletedAtDesc(2L, 1L, WorkoutLogStatus.COMPLETED))
                 .thenReturn(Optional.empty());
 
         var responses = service.getLastSetLogs(2L, 1L);

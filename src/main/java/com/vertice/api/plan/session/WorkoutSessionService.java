@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
@@ -109,7 +110,7 @@ public class WorkoutSessionService {
      * session like any finish); one with none is deleted. Returns how many sessions it touched.
      */
     public int rollOver(LocalDate weekStartDate) {
-        return rollOver(workoutLogRepository.findByStatusAndWeekStartDateBefore(WorkoutLogStatus.IN_PROGRESS, weekStartDate));
+        return rollOver(workoutLogRepository.findByStatusAndWeekStartDateBeforeOrderByIdAsc(WorkoutLogStatus.IN_PROGRESS, weekStartDate));
     }
 
     @Transactional(readOnly = true)
@@ -162,7 +163,7 @@ public class WorkoutSessionService {
     @Transactional(readOnly = true)
     public List<SetLogResponse> getLastSetLogs(Long clientId, Long workoutId) {
         return workoutLogRepository
-                .findFirstByClientIdAndWorkoutIdAndStatusOrderByCompletedAtDesc(clientId, workoutId, WorkoutLogStatus.COMPLETED)
+                .findFirstByClientIdAndWorkoutIdAndStatusOrderByWeekStartDateDescCompletedAtDesc(clientId, workoutId, WorkoutLogStatus.COMPLETED)
                 .map(log -> setLogRepository.findByWorkoutLogId(log.getId()).stream().map(setLogMapper::toResponse).toList())
                 .orElse(List.of());
     }
@@ -220,7 +221,7 @@ public class WorkoutSessionService {
 
     /** The client's own leftovers from earlier weeks, before answering about the current one. */
     private void rollOverClient(Long clientId) {
-        rollOver(workoutLogRepository.findByClientIdAndStatusAndWeekStartDateBefore(
+        rollOver(workoutLogRepository.findByClientIdAndStatusAndWeekStartDateBeforeOrderByIdAsc(
                 clientId, WorkoutLogStatus.IN_PROGRESS, BusinessDates.currentWeekStart(clock)));
     }
 
@@ -245,7 +246,11 @@ public class WorkoutSessionService {
                     previous.setStatus(WorkoutLogStatus.SUPERSEDED);
                     workoutLogRepository.saveAndFlush(previous);
                 });
-        workoutLog.complete(DbInstants.now(), kind);
+        // An automatic finish happens days later: it takes the time the client last trained in it.
+        Instant at = kind == CompletionKind.AUTO
+                ? setLogRepository.findLastRecordedAt(workoutLog.getId()).orElse(workoutLog.getStartedAt())
+                : DbInstants.now();
+        workoutLog.complete(at, kind);
         return workoutLogRepository.saveAndFlush(workoutLog);
     }
 
