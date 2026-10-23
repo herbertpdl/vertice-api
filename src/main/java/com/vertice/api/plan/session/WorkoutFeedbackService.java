@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -25,13 +27,27 @@ public class WorkoutFeedbackService {
      */
     static final int MAX_FEEDBACK_PER_LOG = 10;
 
+    private static final Pattern CLIENT_KEY = Pattern.compile("[A-Za-z0-9_-]{1,64}");
+
     private final WorkoutFeedbackRepository workoutFeedbackRepository;
     private final WorkoutFeedbackMapper workoutFeedbackMapper;
     private final WorkoutLogRepository workoutLogRepository;
 
     public WorkoutFeedbackResponse submitWorkoutFeedback(SubmitWorkoutFeedbackRequest request) {
-        WorkoutLog workoutLog = workoutLogRepository.findById(request.getWorkoutLogId())
+        String clientKey = request.getClientKey();
+        if (!clientKey.isEmpty() && !CLIENT_KEY.matcher(clientKey).matches()) {
+            throw new ConstraintViolationException("clientKey: 1-64 characters of [A-Za-z0-9_-]", Set.of());
+        }
+        // Locked: two sends of the same key (a retry racing the first) are serialized, so the
+        // second finds the first instead of adding a duplicate.
+        WorkoutLog workoutLog = workoutLogRepository.findWithLockById(request.getWorkoutLogId())
                 .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", request.getWorkoutLogId()));
+        if (!clientKey.isEmpty()) {
+            Optional<WorkoutFeedback> sent = workoutFeedbackRepository.findByWorkoutLogIdAndClientKey(workoutLog.getId(), clientKey);
+            if (sent.isPresent()) {
+                return workoutFeedbackMapper.toResponse(sent.get());
+            }
+        }
         if (workoutLog.getStatus() != WorkoutLogStatus.COMPLETED) {
             throw new BusinessRuleViolationException("WorkoutLog %d is not completed".formatted(workoutLog.getId()));
         }
@@ -50,6 +66,7 @@ public class WorkoutFeedbackService {
         feedback.setText(request.getText().strip());
         feedback.setRating(WorkoutFeedbackMapper.fromProto(request.getRating()));
         feedback.setCreatedAt(DbInstants.now());
+        feedback.setClientKey(clientKey.isEmpty() ? null : clientKey);
         return workoutFeedbackMapper.toResponse(workoutFeedbackRepository.save(feedback));
     }
 

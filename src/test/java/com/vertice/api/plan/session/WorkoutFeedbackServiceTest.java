@@ -73,7 +73,7 @@ class WorkoutFeedbackServiceTest {
     @Test
     void submitWorkoutFeedback_savesAndResolvesLinkedIds() {
         WorkoutLog log = completedLog(10L);
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(workoutFeedbackRepository.save(any(WorkoutFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
@@ -91,7 +91,7 @@ class WorkoutFeedbackServiceTest {
 
     @Test
     void submitWorkoutFeedback_throwsWhenWorkoutLogMissing() {
-        when(workoutLogRepository.findById(99L)).thenReturn(Optional.empty());
+        when(workoutLogRepository.findWithLockById(99L)).thenReturn(Optional.empty());
 
         var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(99L).setText("Feedback").build();
 
@@ -106,7 +106,7 @@ class WorkoutFeedbackServiceTest {
         log.setCompletedAt(null);
         log.setStatus(WorkoutLogStatus.IN_PROGRESS);
         log.setCompletionKind(null);
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
 
         var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(10L).setText("Feedback").build();
 
@@ -146,7 +146,7 @@ class WorkoutFeedbackServiceTest {
     /** P1-09: at most 10 feedback entries per session, so resubmitting can't grow the trainer's list without bound. */
     @Test
     void submitWorkoutFeedback_whenTheSessionAlreadyHasTenEntries_isRefused() {
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(completedLog(10L)));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(completedLog(10L)));
         when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(10L);
 
         var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD).setWorkoutLogId(10L).setText("Feedback").build();
@@ -159,7 +159,7 @@ class WorkoutFeedbackServiceTest {
 
     @Test
     void submitWorkoutFeedback_withNineEntriesAlready_savesTheTenth() {
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(completedLog(10L)));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(completedLog(10L)));
         when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(9L);
         when(workoutFeedbackRepository.save(any(WorkoutFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -167,5 +167,83 @@ class WorkoutFeedbackServiceTest {
                 .setWorkoutLogId(10L).setText("Tenth").build());
 
         assertThat(response.getText()).isEqualTo("Tenth");
+    }
+
+    /** A resend with the same key (its answer was lost) returns the stored feedback: no duplicate for the trainer. */
+    @Test
+    void submitWorkoutFeedback_withAKeyAlreadyStored_returnsItWithoutSaving() {
+        WorkoutLog log = completedLog(10L);
+        WorkoutFeedback stored = new WorkoutFeedback();
+        stored.setId(77L);
+        stored.setWorkoutLog(log);
+        stored.setText("Pesado");
+        stored.setRating(com.vertice.api.plan.session.FeedbackRating.HARD);
+        stored.setCreatedAt(Instant.parse("2026-10-23T12:00:00Z"));
+        stored.setClientKey("k-1");
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
+        when(workoutFeedbackRepository.findByWorkoutLogIdAndClientKey(10L, "k-1")).thenReturn(Optional.of(stored));
+
+        var response = service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_HARD)
+                .setWorkoutLogId(10L).setText("Pesado").setClientKey("k-1").build());
+
+        assertThat(response.getId()).isEqualTo(77L);
+        verify(workoutFeedbackRepository, never()).save(any());
+    }
+
+    /** The key is looked up before the cap: the 10th feedback's resend still finds it, not a refusal. */
+    @Test
+    void submitWorkoutFeedback_withAKeyAlreadyStored_isReturnedEvenAtTheCap() {
+        WorkoutLog log = completedLog(10L);
+        WorkoutFeedback stored = new WorkoutFeedback();
+        stored.setId(78L);
+        stored.setWorkoutLog(log);
+        stored.setText("");
+        stored.setCreatedAt(Instant.parse("2026-10-23T12:00:00Z"));
+        stored.setClientKey("k-10");
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
+        org.mockito.Mockito.lenient().when(workoutFeedbackRepository.countByWorkoutLogId(10L)).thenReturn(10L);
+        when(workoutFeedbackRepository.findByWorkoutLogIdAndClientKey(10L, "k-10")).thenReturn(Optional.of(stored));
+
+        var response = service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_EASY)
+                .setWorkoutLogId(10L).setClientKey("k-10").build());
+
+        assertThat(response.getId()).isEqualTo(78L);
+        verify(workoutFeedbackRepository, never()).save(any());
+    }
+
+    @Test
+    void submitWorkoutFeedback_withANewKey_storesIt() {
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(completedLog(10L)));
+        when(workoutFeedbackRepository.findByWorkoutLogIdAndClientKey(10L, "k-2")).thenReturn(Optional.empty());
+        when(workoutFeedbackRepository.save(any(WorkoutFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_EASY)
+                .setWorkoutLogId(10L).setClientKey("k-2").build());
+
+        var saved = org.mockito.ArgumentCaptor.forClass(WorkoutFeedback.class);
+        verify(workoutFeedbackRepository).save(saved.capture());
+        assertThat(saved.getValue().getClientKey()).isEqualTo("k-2");
+    }
+
+    @Test
+    void submitWorkoutFeedback_withoutAKey_storesNone() {
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(completedLog(10L)));
+        when(workoutFeedbackRepository.save(any(WorkoutFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_EASY).setWorkoutLogId(10L).build());
+
+        var saved = org.mockito.ArgumentCaptor.forClass(WorkoutFeedback.class);
+        verify(workoutFeedbackRepository).save(saved.capture());
+        assertThat(saved.getValue().getClientKey()).isNull();
+        verify(workoutFeedbackRepository, never()).findByWorkoutLogIdAndClientKey(any(), any());
+    }
+
+    @Test
+    void submitWorkoutFeedback_withAMalformedKey_isRefused() {
+        var request = SubmitWorkoutFeedbackRequest.newBuilder().setRating(FeedbackRating.FEEDBACK_RATING_EASY)
+                .setWorkoutLogId(10L).setClientKey("not a key!").build();
+
+        assertThatThrownBy(() -> service.submitWorkoutFeedback(request)).isInstanceOf(ConstraintViolationException.class);
+        verify(workoutFeedbackRepository, never()).save(any());
     }
 }

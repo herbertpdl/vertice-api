@@ -43,4 +43,8 @@ public class WorkoutFeedback {
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    /** The client's idempotency key for this feedback; null when it sent none. */
+    @Column(name = "client_key", length = 64)
+    private String clientKey;
 }

@@ -314,6 +314,38 @@ class WorkoutSessionLifecycleIntegrationTest {
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
     }
 
+    /** The app resends a feedback whose answer was lost: the same key gives back the same row. */
+    @Test
+    void feedbackWithAClientKey_isStoredOnce() {
+        WorkoutLogResponse log = finishWithWeight(start(week), "80");
+        var feedback = as(client, WorkoutFeedbackServiceGrpc::newBlockingStub);
+        var first = feedback.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(log.getId())
+                .setRating(FeedbackRating.FEEDBACK_RATING_HARD).setText("Pesado").setClientKey("k-1").build());
+        var resend = feedback.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(log.getId())
+                .setRating(FeedbackRating.FEEDBACK_RATING_HARD).setText("Pesado").setClientKey("k-1").build());
+        assertThat(resend.getId()).isEqualTo(first.getId());
+        assertThat(feedbackRows(log.getId())).isEqualTo(1);
+
+        feedback.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(log.getId())
+                .setRating(FeedbackRating.FEEDBACK_RATING_EASY).setClientKey("k-2").build());
+        assertThat(feedbackRows(log.getId())).isEqualTo(2);
+
+        // The index stands behind the lock: a duplicate key for the session can't be inserted.
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO workout_feedback (workout_log_id, text, rating, created_at, client_key) "
+                + "VALUES (:log, '', 'HARD', now(), 'k-1')", Map.of("log", log.getId())))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> feedback.submitWorkoutFeedback(SubmitWorkoutFeedbackRequest.newBuilder().setWorkoutLogId(log.getId())
+                .setRating(FeedbackRating.FEEDBACK_RATING_EASY).setClientKey("a b").build()))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .extracting(ex -> ex.getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    private int feedbackRows(long logId) {
+        return jdbc.queryForObject("SELECT count(*) FROM workout_feedback WHERE workout_log_id = :id", Map.of("id", logId), Integer.class);
+    }
+
     private WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub sessions() {
         return as(client, WorkoutSessionServiceGrpc::newBlockingStub);
     }
