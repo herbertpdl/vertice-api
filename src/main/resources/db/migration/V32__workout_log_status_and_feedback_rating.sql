@@ -11,6 +11,9 @@ ALTER TABLE workout_logs ADD CONSTRAINT ck_workout_logs_completion
     CHECK ((status = 'IN_PROGRESS') = (completed_at IS NULL)
            AND (completion_kind IS NULL OR completion_kind IN ('CLIENT', 'AUTO'))
            AND ((completed_at IS NULL) = (completion_kind IS NULL)));
+-- The unique constraint was the only index leading with workout_id (V28 relies on it for
+-- DeleteWorkout's existence check and the workouts foreign key): keep a plain one in its place.
+CREATE INDEX idx_workout_logs_workout_client_week ON workout_logs (workout_id, client_id, week_start_date);
 ALTER TABLE workout_logs DROP CONSTRAINT uq_workout_logs_workout_client_week;
 CREATE UNIQUE INDEX uq_workout_logs_in_progress
     ON workout_logs (workout_id, client_id, week_start_date) WHERE status = 'IN_PROGRESS';

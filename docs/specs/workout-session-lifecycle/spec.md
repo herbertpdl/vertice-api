@@ -32,6 +32,17 @@ this extends)
   - `GetOrStart`, `Restart` and `ListWorkoutLogs` run the same pass for their client first, so a
     late or missed job never shows. "This week" is `BusinessDates.currentWeekStart(Clock)`, with a
     `Clock` bean (`ClockConfig`) that tests can fix.
+- **Concurrency.** The rollover's queries take `PESSIMISTIC_WRITE` row locks, and complete,
+  discard and untick lock their session (`findWithLockById`). Concurrent passes (the job and a
+  client's lazy pass, two devices) wait for each other instead of failing, and Postgres re-checks
+  `status` after the wait.
+- **New sessions only in the current week.** `GetOrStart` (create path) and `Restart` refuse an
+  earlier week with FAILED_PRECONDITION. A session created there would be closed by the next
+  rollover pass mid-workout. An existing past session is still returned.
+- **Index.** V32 keeps a plain `(workout_id, client_id, week_start_date)` index in place of the
+  dropped unique constraint. V28 relies on it for DeleteWorkout and the workouts foreign key.
+- **Deploy.** Stop-then-start for this release: a pod on the old code that is still running
+  after V32 would set `completed_at` without `status` and trip `ck_workout_logs_completion`.
 - **Feedback rating.** `FeedbackRating` (five levels) is required on new feedback (UNSPECIFIED is
   INVALID_ARGUMENT); old rows keep NULL. The text becomes optional. Feedback still needs a
   `COMPLETED` session (a superseded one can't take new feedback), with at most 10 per session.

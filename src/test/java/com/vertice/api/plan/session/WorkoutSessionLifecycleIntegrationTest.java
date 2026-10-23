@@ -50,6 +50,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
@@ -230,27 +233,50 @@ class WorkoutSessionLifecycleIntegrationTest {
 
     @Test
     void theWeeklyRollover_finishesLeftoversWithASet_andDropsEmptyOnes() {
-        LocalDate thisWeek = LocalDate.parse(week);
-        WorkoutLogResponse withSet = start(thisWeek.minusWeeks(1).toString());
-        record(withSet.getId(), firstSet, "70");
-        WorkoutLogResponse empty = start(thisWeek.minusWeeks(2).toString());
+        long withSet = seedLeftover(1);
+        seedSetLog(withSet, firstSet);
+        long empty = seedLeftover(2);
 
         rollover.rollOver();
 
-        assertThat(statusOf(withSet.getId())).isEqualTo("COMPLETED");
+        assertThat(statusOf(withSet)).isEqualTo("COMPLETED");
         assertThat(jdbc.queryForObject("SELECT completion_kind FROM workout_logs WHERE id = :id",
-                Map.of("id", withSet.getId()), String.class)).isEqualTo("AUTO");
-        assertThat(count("SELECT count(*) FROM workout_logs WHERE id = :id", empty.getId())).isZero();
+                Map.of("id", withSet), String.class)).isEqualTo("AUTO");
+        assertThat(count("SELECT count(*) FROM workout_logs WHERE id = :id", empty)).isZero();
     }
 
     @Test
     void startingANewWeek_rollsOverTheClientsLeftovers_too() {
-        WorkoutLogResponse lastWeek = start(LocalDate.parse(week).minusWeeks(1).toString());
-        record(lastWeek.getId(), firstSet, "70");
+        long lastWeek = seedLeftover(1);
+        seedSetLog(lastWeek, firstSet);
 
         start(week);
 
-        assertThat(statusOf(lastWeek.getId())).isEqualTo("COMPLETED");
+        assertThat(statusOf(lastWeek)).isEqualTo("COMPLETED");
+    }
+
+    /** Two passes over the same leftover (two devices on Monday morning) both succeed. */
+    @Test
+    void concurrentRolloverPasses_bothSucceed() throws Exception {
+        long empty = seedLeftover(1);
+        ListWorkoutLogsRequest list = ListWorkoutLogsRequest.newBuilder().setClientId(client.getId())
+                .setTrainingPlanId(planId()).setWeekStartDate(week).build();
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            List<Future<?>> calls = List.of(pool.submit(() -> sessions().listWorkoutLogs(list)),
+                    pool.submit(() -> sessions().listWorkoutLogs(list)));
+            for (Future<?> call : calls) {
+                call.get(30, TimeUnit.SECONDS);
+            }
+        }
+        assertThat(count("SELECT count(*) FROM workout_logs WHERE id = :id", empty)).isZero();
+    }
+
+    @Test
+    void aSessionCanOnlyBeStartedInTheCurrentWeek() {
+        String lastWeek = LocalDate.parse(week).minusWeeks(1).toString();
+        assertFailedPrecondition(() -> start(lastWeek));
+        assertFailedPrecondition(() -> sessions().restartWorkoutLog(RestartWorkoutLogRequest.newBuilder()
+                .setWorkoutId(workout).setClientId(client.getId()).setWeekStartDate(lastWeek).build()));
     }
 
     @Test
@@ -287,9 +313,24 @@ class WorkoutSessionLifecycleIntegrationTest {
 
     private List<WorkoutLogResponse> weekLogs() {
         return sessions().listWorkoutLogs(ListWorkoutLogsRequest.newBuilder().setClientId(client.getId())
-                .setTrainingPlanId(trainingPlanRepository.findAll().stream()
-                        .filter(p -> p.getClient().getId().equals(client.getId())).findFirst().orElseThrow().getId())
-                .setWeekStartDate(week).build()).getWorkoutLogsList();
+                .setTrainingPlanId(planId()).setWeekStartDate(week).build()).getWorkoutLogsList();
+    }
+
+    private long planId() {
+        return jdbc.queryForObject("SELECT training_plan_id FROM workouts WHERE id = :id", Map.of("id", workout), Long.class);
+    }
+
+    /** A session left in progress {@code weeksAgo} weeks back (the API only starts current-week ones). */
+    private long seedLeftover(int weeksAgo) {
+        return jdbc.queryForObject("""
+                INSERT INTO workout_logs (workout_id, client_id, week_start_date, started_at, status)
+                VALUES (:workout, :client, :week, now(), 'IN_PROGRESS') RETURNING id""",
+                Map.of("workout", workout, "client", client.getId(), "week", LocalDate.parse(week).minusWeeks(weeksAgo)), Long.class);
+    }
+
+    private void seedSetLog(long logId, long setId) {
+        jdbc.update("INSERT INTO set_logs (workout_log_id, exercise_set_id, weight, reps, recorded_at) VALUES (:log, :set, 70, 5, now())",
+                Map.of("log", logId, "set", setId));
     }
 
     private String statusOf(long logId) {

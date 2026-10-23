@@ -1,5 +1,6 @@
 package com.vertice.api.user;
 
+import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.generated.grpc.plan.v1.CreateWorkoutWithExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetEntry;
@@ -46,6 +47,7 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.AbstractStub;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -82,7 +84,8 @@ class AccountDeletionIntegrationTest {
 
     static final String SECRET = "non-local-account-deletion-secret-32b";
     /** A Monday, as {@code week_start_date} requires. */
-    private static final String WEEK = "2026-03-02";
+    /** The current business week: sessions can only be started in it. */
+    private static final String WEEK = BusinessDates.currentWeekStart(Clock.systemUTC()).toString();
 
     @Autowired
     private UserRepository userRepository;

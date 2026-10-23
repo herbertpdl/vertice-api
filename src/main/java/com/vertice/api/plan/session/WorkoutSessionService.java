@@ -83,7 +83,7 @@ public class WorkoutSessionService {
 
     /** Deletes a session in progress with its set logs; a completed one can't be discarded. */
     public void discardWorkoutLog(Long id) {
-        WorkoutLog workoutLog = findWorkoutLogOrThrow(id);
+        WorkoutLog workoutLog = lockWorkoutLogOrThrow(id);
         assertInProgress(workoutLog);
         setLogRepository.deleteByWorkoutLogId(workoutLog.getId());
         workoutLogRepository.delete(workoutLog);
@@ -91,7 +91,7 @@ public class WorkoutSessionService {
 
     /** Unticks a set of a session in progress; unticking a set that wasn't ticked is a no-op. */
     public void deleteSetLog(Long workoutLogId, Long exerciseSetId) {
-        WorkoutLog workoutLog = findWorkoutLogOrThrow(workoutLogId);
+        WorkoutLog workoutLog = lockWorkoutLogOrThrow(workoutLogId);
         assertInProgress(workoutLog);
         setLogRepository.deleteByWorkoutLogIdAndExerciseSetId(workoutLog.getId(), exerciseSetId);
     }
@@ -142,7 +142,7 @@ public class WorkoutSessionService {
 
     /** Idempotent: completing a finished session returns it unchanged. */
     public WorkoutLogResponse completeWorkoutLog(Long id) {
-        WorkoutLog workoutLog = findWorkoutLogOrThrow(id);
+        WorkoutLog workoutLog = lockWorkoutLogOrThrow(id);
         if (workoutLog.isInProgress()) {
             workoutLog = finish(workoutLog, CompletionKind.CLIENT);
         }
@@ -190,7 +190,14 @@ public class WorkoutSessionService {
         return response.build();
     }
 
+    /**
+     * New sessions only in the current week (R20 redoes a workout "finished this week"): a session
+     * created in an earlier week would be closed by the next rollover pass mid-workout.
+     */
     private WorkoutLog startWorkoutLog(Long workoutId, Long clientId, LocalDate weekStartDate) {
+        if (weekStartDate.isBefore(BusinessDates.currentWeekStart(clock))) {
+            throw new BusinessRuleViolationException("A workout session can only be started in the current week");
+        }
         Workout workout = workoutRepository.findById(workoutId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workout", workoutId));
         User client = userRepository.findById(clientId)
@@ -246,6 +253,11 @@ public class WorkoutSessionService {
         if (!workoutLog.isInProgress()) {
             throw new BusinessRuleViolationException("WorkoutLog %d is already completed".formatted(workoutLog.getId()));
         }
+    }
+
+    private WorkoutLog lockWorkoutLogOrThrow(Long id) {
+        return workoutLogRepository.findWithLockById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("WorkoutLog", id));
     }
 
     private WorkoutLog findWorkoutLogOrThrow(Long id) {

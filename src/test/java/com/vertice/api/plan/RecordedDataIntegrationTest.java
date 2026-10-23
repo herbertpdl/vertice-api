@@ -1,5 +1,6 @@
 package com.vertice.api.plan;
 
+import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.generated.grpc.exercise.v1.DeleteExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseServiceGrpc;
 import com.vertice.api.generated.grpc.plan.v1.CreateWorkoutWithExercisesRequest;
@@ -54,6 +55,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -82,7 +84,8 @@ class RecordedDataIntegrationTest {
 
     static final String SECRET = "non-local-recorded-data-test-secret!";
     /** A Monday, as {@code week_start_date} requires. */
-    private static final String WEEK = "2026-03-02";
+    /** The current business week: sessions can only be started in it. */
+    private static final String WEEK = BusinessDates.currentWeekStart(Clock.systemUTC()).toString();
 
     @Autowired
     private UserRepository userRepository;

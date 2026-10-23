@@ -1,5 +1,6 @@
 package com.vertice.api.plan;
 
+import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanCreateRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanRequest;
 import com.vertice.api.generated.grpc.plan.v1.TrainingPlanResponse;
@@ -38,6 +39,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -66,7 +68,8 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 @ActiveProfiles("local")
 class OwnershipInvariantsIntegrationTest {
 
-    private static final String WEEK = "2026-03-02";
+    /** The current business week: sessions can only be started in it. */
+    private static final String WEEK = BusinessDates.currentWeekStart(Clock.systemUTC()).toString();
     private static final AtomicLong CPF_BASE = new AtomicLong(ThreadLocalRandom.current().nextLong(100_000_000L, 900_000_000L));
 
     @Autowired

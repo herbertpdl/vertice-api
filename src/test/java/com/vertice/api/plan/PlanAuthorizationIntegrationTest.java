@@ -1,5 +1,6 @@
 package com.vertice.api.plan;
 
+import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.generated.grpc.plan.v1.CloneWorkoutRequest;
 import com.vertice.api.generated.grpc.plan.v1.CreateWorkoutWithExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.DayOfWeek;
@@ -60,6 +61,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -82,7 +84,8 @@ class PlanAuthorizationIntegrationTest {
 
     static final String SECRET = "non-local-plan-authz-test-secret-32b!";
     /** A Monday, as {@code week_start_date} requires. */
-    private static final String WEEK = "2026-03-02";
+    /** The current business week: sessions can only be started in it. */
+    private static final String WEEK = BusinessDates.currentWeekStart(Clock.systemUTC()).toString();
 
     @Autowired
     private UserRepository userRepository;

@@ -1,5 +1,6 @@
 package com.vertice.api.plan.workout;
 
+import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.generated.grpc.plan.v1.ExerciseSetEntry;
 import com.vertice.api.generated.grpc.plan.v1.ReplaceWorkoutExercisesRequest;
 import com.vertice.api.generated.grpc.plan.v1.WorkoutExerciseEntry;
@@ -30,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.Clock;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,6 +54,9 @@ import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 @SpringBootTest(properties = {"spring.grpc.server.port=19103", "spring.datasource.hikari.maximum-pool-size=3"})
 @ActiveProfiles("local")
 class ReplaceWorkoutExercisesIntegrationTest {
+
+    /** The current business week: sessions can only be started in it. */
+    private static final String CURRENT_WEEK = BusinessDates.currentWeekStart(Clock.systemUTC()).toString();
 
     @Autowired
     private UserRepository userRepository;
@@ -131,7 +136,7 @@ class ReplaceWorkoutExercisesIntegrationTest {
     void tearDown() throws InterruptedException {
         setLogRepository.deleteAll(setLogRepository.findByWorkoutId(workout.getId()));
         workoutLogRepository.findAll().stream()
-                        .filter(l -> l.getWorkout().getId().equals(workout.getId()) && l.getClient().getId().equals(client.getId()) && l.getWeekStartDate().equals(LocalDate.of(2026, 3, 2)))
+                        .filter(l -> l.getWorkout().getId().equals(workout.getId()) && l.getClient().getId().equals(client.getId()) && l.getWeekStartDate().equals(LocalDate.parse(CURRENT_WEEK)))
                         .forEach(workoutLogRepository::delete);
         workoutRepository.deleteById(workout.getId());
         trainingPlanRepository.deleteById(trainingPlan.getId());
@@ -174,7 +179,7 @@ class ReplaceWorkoutExercisesIntegrationTest {
         sessionStub.getOrStartWorkoutLog(GetOrStartWorkoutLogRequest.newBuilder()
                 .setWorkoutId(workout.getId())
                 .setClientId(client.getId())
-                .setWeekStartDate("2026-03-02")
+                .setWeekStartDate(CURRENT_WEEK)
                 .build());
 
         ReplaceWorkoutExercisesRequest request = ReplaceWorkoutExercisesRequest.newBuilder()
@@ -197,7 +202,7 @@ class ReplaceWorkoutExercisesIntegrationTest {
         WorkoutLog workoutLog = new WorkoutLog();
         workoutLog.setWorkout(workout);
         workoutLog.setClient(client);
-        workoutLog.setWeekStartDate(LocalDate.of(2026, 3, 2));
+        workoutLog.setWeekStartDate(LocalDate.parse(CURRENT_WEEK));
         workoutLog.setStartedAt(Instant.now());
         return workoutLogRepository.save(workoutLog);
     }

@@ -14,11 +14,13 @@ service WorkoutSessionService {
   // someone else's id are the same PERMISSION_DENIED.
 
   // The workout's plan's trainer or client, ADMIN. Resumes the week's session in progress, else
-  // returns the week's completed one, else starts one. Sessions left in progress from earlier
-  // weeks are rolled over first (finished when they have a set, deleted when not).
+  // returns the week's completed one, else starts one (only in the current business week:
+  // FAILED_PRECONDITION for an earlier one). Sessions left in progress from earlier weeks are
+  // rolled over first (finished when they have a set, deleted when not).
   rpc GetOrStartWorkoutLog(GetOrStartWorkoutLogRequest) returns (WorkoutLogResponse);
   // The workout's plan's client (as themself), ADMIN. Starts a redo next to the week's completed
-  // session (or resumes the one in progress); finishing it supersedes the completed one.
+  // session (or resumes the one in progress); finishing it supersedes the completed one. Current
+  // business week only (FAILED_PRECONDITION for an earlier one).
   rpc RestartWorkoutLog(RestartWorkoutLogRequest) returns (WorkoutLogResponse);
   // The log's client or ADMIN. Deletes a session in progress and its set logs;
   // FAILED_PRECONDITION once it is completed.

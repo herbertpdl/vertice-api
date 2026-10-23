@@ -349,7 +349,7 @@ class WorkoutSessionServiceTest {
     @Test
     void completeWorkoutLog_setsCompletedAt() {
         WorkoutLog log = workoutLog(10L, workout(1L), client(2L));
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
         when(workoutLogRepository.saveAndFlush(any(WorkoutLog.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = service.completeWorkoutLog(10L);
@@ -364,7 +364,7 @@ class WorkoutSessionServiceTest {
         log.setCompletedAt(firstCompletion);
         log.setStatus(WorkoutLogStatus.COMPLETED);
         log.setCompletionKind(CompletionKind.CLIENT);
-        when(workoutLogRepository.findById(10L)).thenReturn(Optional.of(log));
+        when(workoutLogRepository.findWithLockById(10L)).thenReturn(Optional.of(log));
 
         var response = service.completeWorkoutLog(10L);
 
@@ -374,7 +374,7 @@ class WorkoutSessionServiceTest {
 
     @Test
     void completeWorkoutLog_throwsWhenMissing() {
-        when(workoutLogRepository.findById(99L)).thenReturn(Optional.empty());
+        when(workoutLogRepository.findWithLockById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.completeWorkoutLog(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
