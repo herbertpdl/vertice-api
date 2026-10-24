@@ -13,8 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Who may call the {@code WorkoutSessionService} and {@code WorkoutFeedbackService} RPCs (P1-01).
  * A log belongs to its client: only they (or ADMIN) write into it, complete it or give feedback
- * on it. The plan's trainer reads the logs of their plans, and may open this week's log for their
- * client (vertice-bff's trainer view of a workout session does). A {@code client_id} in a request
+ * on it, and only they (or ADMIN) start one: the plan's trainer reads the logs of their plans but
+ * never opens a session as their client (web-trainer-only-access PRD, R15). A {@code client_id} in a request
  * must be a CLIENT caller's own. Rules and error shape are {@link PlanAccess}'s; the full matrix
  * is in CLAUDE.md.
  */
@@ -26,9 +26,11 @@ public class WorkoutSessionAuthorization {
     private final PlanAccessRepository planAccessRepository;
     private final TrainerClientRepository trainerClientRepository;
 
+    /** Starting (or resuming) a log is the client's own, like a redo; a trainer reads logs instead. */
     public void checkGetOrStartWorkoutLog(CallerIdentity caller, long workoutId, long clientId) {
         PlanAccess.ownId(caller, Role.CLIENT, clientId, "client_id");
-        PlanAccess.requireTrainerOrClient(caller, "workout", workoutId, () -> planAccessRepository.findByWorkoutId(workoutId));
+        PlanAccess.requireClient(caller, "start workout sessions", "workout", workoutId,
+                () -> planAccessRepository.findByWorkoutId(workoutId));
     }
 
     /** A redo is the client's own (ADMIN too); a trainer never starts one for them. */

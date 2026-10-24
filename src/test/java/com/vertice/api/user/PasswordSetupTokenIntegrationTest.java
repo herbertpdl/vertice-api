@@ -93,6 +93,17 @@ class PasswordSetupTokenIntegrationTest {
     }
 
     @Test
+    void usingToken_returnsTheTokensUser_soTheCallerKnowsWhoseFirstAccessItWas() {
+        String token = tokenService.createToken(clientId).getToken();
+
+        var user = tokenService.setPasswordWithToken(token, "myNewPassword1");
+
+        assertThat(user.getId()).isEqualTo(clientId);
+        assertThat(user.getRole()).isEqualTo(com.vertice.api.generated.grpc.user.v1.Role.CLIENT);
+        assertThat(user.getEmail()).isEqualTo(email);
+    }
+
+    @Test
     void reusingToken_isRejected_andKeepsTheFirstPassword() {
         String token = tokenService.createToken(clientId).getToken();
         tokenService.setPasswordWithToken(token, "firstPassword1");

@@ -125,11 +125,16 @@ every bound service and calls it under `local` with no token, as `service:bff` a
 A new RPC is covered automatically: resolve the caller before validating (or add a valid request
 to `VALID_REQUESTS`), and add it to `ALLOWED` only if the token contract lets a service or no
 token call it. Its owner/non-owner rules still need their own controller and integration tests.
+`grpc/ClientRefusalCoverageTest` is the same probe for the CLIENT role (web-trainer-only-access
+R12–R17): every bound RPC outside its `CLIENT_ALLOWED` list is called by the client of a real plan,
+with every id field filled from that plan's tree, and must answer `PERMISSION_DENIED`, leaving
+every table's row count and the content of the seeded rows unchanged. A new RPC a client may call goes into `CLIENT_ALLOWED`; any other is covered
+automatically.
 
 Plan-tree conventions: every RPC needs a user token (`requireUser()`: service → `PERMISSION_DENIED`,
 no token → `UNAUTHENTICATED`). A plan's trainer reads and writes it and everything under it, its
 client only reads, ADMIN bypasses. A workout log belongs to its client: only they (or ADMIN)
-record sets, complete it or send feedback; the plan's trainer reads it. A `trainer_id`/`client_id`
+start it, record sets, complete it or send feedback; the plan's trainer reads it. A `trainer_id`/`client_id`
 in a request is the caller's own for a caller with that role (`0` means "me" where `0` is
 accepted); any other id is `PERMISSION_DENIED`, never silently rewritten. **No existence oracle:**
 to anyone but ADMIN a missing id and someone else's id are the same `PERMISSION_DENIED` (`You do
@@ -144,7 +149,8 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `VerifyCredentials` | `service:bff` (login); a user for their own stored email only (`POST /auth/password`) |
 | `CreateUser` | `service:bff` (register), never with role ADMIN |
 | `RecordConsent` | any user, for themself only (the request has no user id; ADMIN can't consent for anyone else); never a service |
-| `SetPasswordWithToken` | `service:bff` |
+| `SetPasswordWithToken` | `service:bff` (deprecated: use `RedeemPasswordSetupToken`) |
+| `RedeemPasswordSetupToken` | `service:bff`; returns the token's user (contact view) only after the token is consumed |
 | `ListUsers` | ADMIN, `service:ops`; anonymous under `local` (BFF `VERIFY_PASSWORDS=false` dev login). Paginated (`page_size` ≤ 100, default 100; `page_token`) |
 | `ListUsersWithoutPassword` | ADMIN (all); TRAINER, narrowed to their active clients (BFF setup-link reissue) |
 | `CreatePasswordSetupToken` | `service:ops`, ADMIN; TRAINER for their active client who has no password yet |
@@ -159,8 +165,8 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `CreateTrainingPlan` | TRAINER as themself (client on their active roster), ADMIN |
 | `UpdateTrainingPlan`, `DeleteTrainingPlan`, `CreateWorkout`, `CreateWorkoutWithExercises`, `UpdateWorkout`, `DeleteWorkout`, `ReplaceWorkoutExercises`, `CreateWorkoutExercise`, `UpdateWorkoutExercise`, `DeleteWorkoutExercise`, `CreateExerciseSet`, `UpdateExerciseSet`, `DeleteExerciseSet` | the plan's trainer, ADMIN |
 | `CloneWorkout` | the trainer of both the source workout's plan and the target plan, ADMIN |
-| `GetOrStartWorkoutLog`, `ListWorkoutLogs`, `GetLastSetLogs` | the plan's trainer, the plan's client (as themself), ADMIN |
-| `RestartWorkoutLog` | the plan's client (as themself), ADMIN |
+| `ListWorkoutLogs`, `GetLastSetLogs` | the plan's trainer, the plan's client (as themself), ADMIN |
+| `GetOrStartWorkoutLog`, `RestartWorkoutLog` | the plan's client (as themself), ADMIN; never a TRAINER (web-trainer-only-access R15) |
 | `GetWorkoutLog`, `ListSetLogs` | the log's client, the plan's trainer, ADMIN |
 | `RecordSetLog`, `DeleteSetLog`, `CompleteWorkoutLog`, `DiscardWorkoutLog`, `SubmitWorkoutFeedback` | the log's client, ADMIN |
 | `GetExerciseProgress` | the client themself, their active trainer, ADMIN |
@@ -184,7 +190,7 @@ messages (`Email already in use`, `CPF already in use`) that never echo the valu
 | --- | --- | --- |
 | self | everything, consent state included | `GetUser` for the user themself |
 | detail | everything but the consent state | `GetUser` (ADMIN, active trainer), `UpdateUser`, `CreateClientForTrainer` |
-| contact | id, name, role, email | `ListUsers` (ops setup links, local dev login match by email), `CreateUser`, `VerifyCredentials` (the BFF's session) |
+| contact | id, name, role, email | `ListUsers` (ops setup links, local dev login match by email), `CreateUser`, `VerifyCredentials` (the BFF's session), `RedeemPasswordSetupToken` (the web's first-access screen) |
 | summary | id, name, role | `ListClientsForTrainer` (the BFF roster), `ListUsersWithoutPassword`, `GetUser` for a trainer who only has a plan with the target |
 
 **Consent and CPF (P1-04).** `users` records the Terms version a user accepted

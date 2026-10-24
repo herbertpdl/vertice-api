@@ -92,7 +92,6 @@ class OwnershipInvariantsIntegrationTest {
     private TrainingPlanServiceGrpc.TrainingPlanServiceBlockingStub planStub;
     /** The client's session calls and the trainer's plan calls; see {@link #setUp()}. */
     private WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub clientSession;
-    private WorkoutSessionServiceGrpc.WorkoutSessionServiceBlockingStub trainerSession;
     private TrainingPlanServiceGrpc.TrainingPlanServiceBlockingStub trainerPlans;
 
     private User trainer;
@@ -123,7 +122,6 @@ class OwnershipInvariantsIntegrationTest {
         link = trainerClientRepository.save(link);
 
         clientSession = TestJwts.asCaller(sessionStub, client.getId(), Role.CLIENT);
-        trainerSession = TestJwts.asCaller(sessionStub, trainer.getId(), Role.TRAINER);
         trainerPlans = TestJwts.asCaller(planStub, trainer.getId(), Role.TRAINER);
 
         exercise = new Exercise();
@@ -167,16 +165,16 @@ class OwnershipInvariantsIntegrationTest {
     }
 
     /**
-     * The trainer owns both plans, so authorization lets the call through and the service's own
-     * "workout assigned to this client" rule is what refuses it. (As the client, the plan check
-     * would refuse it first, with PERMISSION_DENIED.)
+     * ADMIN skips the plan lookup, so the service's own "workout assigned to this client" rule is
+     * what refuses it. (As the client, the plan check would refuse it first, with PERMISSION_DENIED;
+     * a trainer never starts a log at all, web-trainer-only-access R15.)
      */
     @Test
     void getOrStartWorkoutLog_acceptsOwnWorkoutAndRejectsAnotherClientsWorkout() {
         WorkoutLogResponse log = startLog(clientSession, workout, client);
         assertThat(log.getClientId()).isEqualTo(client.getId());
 
-        assertFailedPrecondition(() -> startLog(trainerSession, otherWorkout, client));
+        assertFailedPrecondition(() -> startLog(TestJwts.asCaller(sessionStub, admin.getId(), Role.ADMIN), otherWorkout, client));
         assertThat(workoutLogRepository.findAll().stream()
                 .filter(l -> l.getWorkout().getId().equals(otherWorkout.getId()) && l.getClient().getId().equals(client.getId()) && l.getWeekStartDate().equals(LocalDate.parse(WEEK)))).isEmpty();
     }
