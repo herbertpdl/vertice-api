@@ -3,6 +3,7 @@ package com.vertice.api.grpc;
 import com.google.protobuf.Message;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.Role;
+import com.vertice.api.generated.grpc.user.v1.RedeemPasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetPasswordWithTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
 import com.vertice.api.generated.grpc.user.v1.UpdateUserRequest;
@@ -82,7 +83,8 @@ class RpcAuthorizationCoverageTest {
     /** The token contract's exceptions: who may call what without a user token. */
     private static final Map<Probe, Set<String>> ALLOWED = Map.of(
             Probe.ANONYMOUS, Set.of(USERS + "ListUsers", "vertice.exercise.v1.ExerciseService/ListMuscleGroups"),
-            Probe.BFF, Set.of(USERS + "VerifyCredentials", USERS + "CreateUser", USERS + "SetPasswordWithToken"),
+            Probe.BFF, Set.of(USERS + "VerifyCredentials", USERS + "CreateUser", USERS + "SetPasswordWithToken",
+                    USERS + "RedeemPasswordSetupToken"),
             Probe.OPS, Set.of(USERS + "ListUsers", USERS + "CreatePasswordSetupToken"));
 
     private static final Map<String, Message> VALID_REQUESTS = Map.of(
@@ -93,7 +95,8 @@ class RpcAuthorizationCoverageTest {
             USERS + "SetUserPassword", SetUserPasswordRequest.newBuilder().setId(NO_SUCH_USER).setPassword(PASSWORD).build(),
             USERS + "VerifyCredentials", VerifyCredentialsRequest.newBuilder().setEmail(PROBE_EMAIL).setPassword(PASSWORD).build(),
             USERS + "CreatePasswordSetupToken", CreatePasswordSetupTokenRequest.newBuilder().setUserId(NO_SUCH_USER).build(),
-            USERS + "SetPasswordWithToken", SetPasswordWithTokenRequest.newBuilder().setToken("probe").setPassword(PASSWORD).build());
+            USERS + "SetPasswordWithToken", SetPasswordWithTokenRequest.newBuilder().setToken("probe").setPassword(PASSWORD).build(),
+            USERS + "RedeemPasswordSetupToken", RedeemPasswordSetupTokenRequest.newBuilder().setToken("probe").setPassword(PASSWORD).build());
 
     private enum Probe {
         ANONYMOUS(null, Status.Code.UNAUTHENTICATED),

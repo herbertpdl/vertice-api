@@ -16,6 +16,7 @@ import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
 import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
 import com.vertice.api.generated.grpc.user.v1.RecordConsentRequest;
+import com.vertice.api.generated.grpc.user.v1.RedeemPasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.SetPasswordWithTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
@@ -174,6 +175,16 @@ public class UserController extends UserServiceGrpc.UserServiceImplBase {
         authorization.checkSetPasswordWithToken(callerIdentityResolver.resolve());
         passwordSetupTokenService.setPasswordWithToken(request.getToken(), request.getPassword());
         responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+    }
+
+    /** {@link #setPasswordWithToken} that also says whose password it was, in the contact view. */
+    @Override
+    public void redeemPasswordSetupToken(RedeemPasswordSetupTokenRequest request, StreamObserver<UserResponse> responseObserver) {
+        validator.validate(new TokenPasswordValidation(request.getToken(), request.getPassword()));
+        authorization.checkSetPasswordWithToken(callerIdentityResolver.resolve());
+        responseObserver.onNext(UserView.CONTACT.restrict(
+                passwordSetupTokenService.setPasswordWithToken(request.getToken(), request.getPassword())));
         responseObserver.onCompleted();
     }
 

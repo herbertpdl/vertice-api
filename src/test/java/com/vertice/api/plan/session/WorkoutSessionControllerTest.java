@@ -302,8 +302,8 @@ class WorkoutSessionControllerTest {
     // Authorization: the plan's trainer, another trainer, the plan's (and log's) client, another client, ADMIN.
 
     @Test
-    void getOrStartWorkoutLog_followsThePlanReadRule() {
-        callers.assertReadRule(c -> c.getOrStartWorkoutLog(getOrStart(CLIENT_ID)));
+    void getOrStartWorkoutLog_onlyThePlansClientAndAdmin() {
+        callers.assertClientRule(c -> c.getOrStartWorkoutLog(getOrStart(CLIENT_ID)));
     }
 
     @Test

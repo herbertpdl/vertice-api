@@ -4,6 +4,7 @@ import com.vertice.api.common.exception.InvalidPasswordSetupTokenException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.user.v1.CreatePasswordSetupTokenResponse;
+import com.vertice.api.generated.grpc.user.v1.UserResponse;
 import com.vertice.api.grpc.ProtoInstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -37,6 +38,7 @@ public class PasswordSetupTokenService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final PasswordSetupProperties properties;
+    private final UserMapper userMapper;
 
     /**
      * Replaces any unused token the user already has, so only the newest link works. A deleted
@@ -64,7 +66,7 @@ public class PasswordSetupTokenService {
     }
 
     /** Consuming the token and setting the password share this transaction: both happen or neither. */
-    public void setPasswordWithToken(String rawToken, String rawPassword) {
+    public UserResponse setPasswordWithToken(String rawToken, String rawPassword) {
         String tokenHash = sha256Hex(rawToken);
         if (tokenRepository.markUsed(tokenHash, DbInstants.now()) == 0) {
             throw new InvalidPasswordSetupTokenException();
@@ -73,7 +75,7 @@ public class PasswordSetupTokenService {
                 .orElseThrow(InvalidPasswordSetupTokenException::new)
                 .getUser();
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
-        userRepository.save(user);
+        return userMapper.toResponse(userRepository.save(user));
     }
 
     private static String newRawToken() {

@@ -20,6 +20,7 @@ import com.vertice.api.generated.grpc.user.v1.ListUsersRequest;
 import com.vertice.api.generated.grpc.user.v1.ListUsersResponse;
 import com.vertice.api.generated.grpc.user.v1.ListUsersWithoutPasswordRequest;
 import com.vertice.api.generated.grpc.user.v1.RecordConsentRequest;
+import com.vertice.api.generated.grpc.user.v1.RedeemPasswordSetupTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.Role;
 import com.vertice.api.generated.grpc.user.v1.SetPasswordWithTokenRequest;
 import com.vertice.api.generated.grpc.user.v1.SetUserPasswordRequest;
@@ -921,6 +922,50 @@ class UserControllerTest {
         assertPermissionDenied(() -> admin.setPasswordWithToken(request));
         assertPermissionDenied(() -> ops.setPasswordWithToken(request));
         verifyNoInteractions(passwordSetupTokenService);
+    }
+
+    @Test
+    void redeemPasswordSetupToken_returnsTheTokensUser_inTheContactView() {
+        when(passwordSetupTokenService.setPasswordWithToken("abc", "brandNewPassword1")).thenReturn(UserResponse.newBuilder()
+                .setId(CLIENT_ID).setName("Client").setEmail("client@example.com").setCpf("11144477735")
+                .setRole(Role.CLIENT).setWhatsapp("11999999999").build());
+
+        UserResponse response = bff.redeemPasswordSetupToken(redeem("abc"));
+
+        assertThat(response).isEqualTo(UserResponse.newBuilder()
+                .setId(CLIENT_ID).setName("Client").setEmail("client@example.com").setRole(Role.CLIENT).build());
+    }
+
+    @Test
+    void redeemPasswordSetupToken_withInvalidToken_failsLikeSetPasswordWithToken() {
+        doThrow(new InvalidPasswordSetupTokenException())
+                .when(passwordSetupTokenService).setPasswordWithToken("used", "brandNewPassword1");
+
+        assertThatThrownBy(() -> bff.redeemPasswordSetupToken(redeem("used")))
+                .asInstanceOf(throwable(StatusRuntimeException.class))
+                .satisfies(ex -> {
+                    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+                    assertThat(ex.getStatus().getDescription()).isEqualTo("Invalid or expired password setup token");
+                });
+    }
+
+    @Test
+    void redeemPasswordSetupToken_onlyTheBff() {
+        assertPermissionDenied(() -> client.redeemPasswordSetupToken(redeem("abc")));
+        assertPermissionDenied(() -> admin.redeemPasswordSetupToken(redeem("abc")));
+        assertPermissionDenied(() -> ops.redeemPasswordSetupToken(redeem("abc")));
+        assertCode(() -> anonymous.redeemPasswordSetupToken(redeem("abc")), Status.Code.UNAUTHENTICATED);
+        verifyNoInteractions(passwordSetupTokenService);
+    }
+
+    @Test
+    void redeemPasswordSetupToken_withBlankToken_throwsInvalidArgument() {
+        assertInvalidArgument(() -> bff.redeemPasswordSetupToken(redeem("")));
+        verifyNoInteractions(passwordSetupTokenService);
+    }
+
+    private static RedeemPasswordSetupTokenRequest redeem(String token) {
+        return RedeemPasswordSetupTokenRequest.newBuilder().setToken(token).setPassword("brandNewPassword1").build();
     }
 
     @Test
