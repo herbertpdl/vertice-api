@@ -127,8 +127,8 @@ to `VALID_REQUESTS`), and add it to `ALLOWED` only if the token contract lets a 
 token call it. Its owner/non-owner rules still need their own controller and integration tests.
 `grpc/ClientRefusalCoverageTest` is the same probe for the CLIENT role (web-trainer-only-access
 R12–R17): every bound RPC outside its `CLIENT_ALLOWED` list is called by the client of a real plan,
-with every id field filled from that plan's tree, and must answer `PERMISSION_DENIED` without
-changing any row. A new RPC a client may call goes into `CLIENT_ALLOWED`; any other is covered
+with every id field filled from that plan's tree, and must answer `PERMISSION_DENIED`, leaving
+every table's row count and the content of the seeded rows unchanged. A new RPC a client may call goes into `CLIENT_ALLOWED`; any other is covered
 automatically.
 
 Plan-tree conventions: every RPC needs a user token (`requireUser()`: service → `PERMISSION_DENIED`,

@@ -96,9 +96,10 @@ class ClientRefusalCoverageTest {
             "TrainerClientService/GetClientTrainer",
             "ExerciseService/GetExercise", "ExerciseService/ListMuscleGroups");
 
-    /** Tables a refused call could have written to (R16). */
+    /** Tables a refused call could have added rows to or removed rows from (R16). */
     private static final List<String> TABLES = List.of("users", "trainer_clients", "training_plans", "workouts",
-            "workout_exercises", "exercise_sets", "exercises", "workout_logs", "password_setup_tokens");
+            "workout_exercises", "exercise_sets", "exercises", "exercise_muscle_groups", "workout_logs", "set_logs",
+            "workout_feedback", "password_setup_tokens");
 
     @Autowired
     private List<BindableService> services;
@@ -122,7 +123,7 @@ class ClientRefusalCoverageTest {
     private Exercise exercise;
     private TrainingPlan plan;
     private Workout workout;
-    private Map<String, Long> counts;
+    private Map<String, Object> snapshot;
 
     @BeforeAll
     void seed() {
@@ -151,7 +152,7 @@ class ClientRefusalCoverageTest {
         plan = trainingPlanRepository.save(plan);
         workout = seedWorkout(plan);
 
-        counts = rowCounts();
+        snapshot = snapshot();
     }
 
     @AfterAll
@@ -178,7 +179,7 @@ class ClientRefusalCoverageTest {
                     () -> assertCode(() -> call(method), Status.Code.PERMISSION_DENIED)));
         }
         tests.add(DynamicTest.dynamicTest("no refused call changed anything",
-                () -> assertThat(rowCounts()).isEqualTo(counts)));
+                () -> assertThat(snapshot()).isEqualTo(snapshot)));
         return tests.stream();
     }
 
@@ -248,14 +249,14 @@ class ClientRefusalCoverageTest {
             case "exercise_id" -> exercise.getId();
             case "trainer_id" -> trainer.getId();
             case "client_id" -> client.getId();
-            case "user_id" -> trainer.getId();
+            case "user_id" -> client.getId();
             case "id" -> switch (service) {
                 case "TrainingPlanService" -> plan.getId();
                 case "WorkoutService" -> workout.getId();
                 case "WorkoutExerciseService" -> workout.getWorkoutExercises().getFirst().getId();
                 case "ExerciseSetService" -> firstSetId();
                 case "ExerciseService" -> exercise.getId();
-                default -> trainer.getId();
+                default -> client.getId();
             };
             default -> null;
         };
@@ -286,11 +287,29 @@ class ClientRefusalCoverageTest {
         return ClientInterceptors.intercept(channel, MetadataUtils.newAttachHeadersInterceptor(headers));
     }
 
-    private Map<String, Long> rowCounts() {
-        Map<String, Long> result = new LinkedHashMap<>();
+    /**
+     * Row counts of every table a refused call could write, plus the full content of the seeded
+     * rows (an in-place update, such as ending the relationship or renaming the workout, keeps the
+     * counts).
+     */
+    private Map<String, Object> snapshot() {
+        Map<String, Object> result = new LinkedHashMap<>();
         for (String table : TABLES) {
             result.put(table, jdbc.queryForObject("SELECT count(*) FROM " + table, Map.of(), Long.class));
         }
+        Map<String, Object> ids = Map.of("trainer", trainer.getId(), "client", client.getId(), "link", link.getId(),
+                "exercise", exercise.getId(), "plan", plan.getId(), "workout", workout.getId());
+        Map<String, String> seeded = Map.of(
+                "users", "t.id IN (:trainer, :client)",
+                "trainer_clients", "t.id = :link",
+                "exercises", "t.id = :exercise",
+                "exercise_muscle_groups", "t.exercise_id = :exercise",
+                "training_plans", "t.id = :plan",
+                "workouts", "t.training_plan_id = :plan",
+                "workout_exercises", "t.workout_id = :workout",
+                "exercise_sets", "t.workout_exercise_id IN (SELECT id FROM workout_exercises WHERE workout_id = :workout)");
+        seeded.forEach((table, where) -> result.put(table + " (seeded rows)", jdbc.queryForObject(
+                "SELECT string_agg(t::text, ',' ORDER BY t.id) FROM " + table + " t WHERE " + where, ids, String.class)));
         return result;
     }
 

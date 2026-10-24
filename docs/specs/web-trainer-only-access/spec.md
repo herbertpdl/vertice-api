@@ -33,8 +33,9 @@ Related: `docs/prds/web-trainer-only-access/prd.md` (R10–R17, E5–E7),
   `grpc/ClientRefusalCoverageTest` calls every bound RPC outside a `CLIENT_ALLOWED` list as the
   client of a real plan (the most permissive client), with every id field, nested ones included,
   filled from that plan's tree, and the other validated fields given valid values. Each call must
-  be `PERMISSION_DENIED`, and the row counts of every table a refused call could write must be
-  unchanged afterwards (R16). A new RPC is covered the moment it is bound; one a client may call
+  be `PERMISSION_DENIED`, and afterwards the row counts of every table a refused call could write,
+  and the full content of the seeded rows (an in-place update keeps the counts), must be unchanged
+  (R16). User ids are filled with the client's own id, the most permissive one. A new RPC is covered the moment it is bound; one a client may call
   has to be added to `CLIENT_ALLOWED` on purpose.
 - **No refusal logging (F6, Low): deferred.** Not asked for, and the BFF already logs upstream
   refusals on the request's logger.
