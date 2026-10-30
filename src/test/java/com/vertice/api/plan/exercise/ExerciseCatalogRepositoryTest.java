@@ -2,6 +2,7 @@ package com.vertice.api.plan.exercise;
 
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
+import com.vertice.api.generated.grpc.exercise.v1.ListExercisesResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
 import com.vertice.api.grpc.CallerIdentity;
 import com.vertice.api.user.Role;
@@ -163,6 +164,8 @@ class ExerciseCatalogRepositoryTest {
 
     private static final long PEITO = 1L;
     private static final long LOMBAR = 12L;
+    /** Lifts the page limit so these tests see the whole ordering at once. */
+    private static final int ALL = Integer.MAX_VALUE;
 
     @Test
     void findVisible_ownFirstThenStarterByName() {
@@ -170,7 +173,7 @@ class ExerciseCatalogRepositoryTest {
         createOwn(trainer, "Zeta own", PEITO);
         createOwn(trainer, "Alpha own", LOMBAR);
 
-        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), 0, ""));
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), 0, "", ALL, 0));
 
         assertThat(names).hasSize(201);
         assertThat(names.subList(0, 2)).containsExactly("Alpha own", "Zeta own");
@@ -182,7 +185,7 @@ class ExerciseCatalogRepositoryTest {
         CallerIdentity trainer = newTrainer("Trainer");
         createOwn(trainer, "Own chest press", PEITO);
 
-        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), PEITO, ""));
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), PEITO, "", ALL, 0));
 
         assertThat(names).hasSize(25);
         assertThat(names.getFirst()).isEqualTo("Own chest press");
@@ -209,7 +212,7 @@ class ExerciseCatalogRepositoryTest {
     void findVisible_groupFilter_includesSecondaryGroupExercises() {
         CallerIdentity trainer = newTrainer("Trainer");
 
-        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), LOMBAR, ""));
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), LOMBAR, "", ALL, 0));
 
         assertThat(names).hasSize(19).contains("Levantamento terra com barra");
         assertThat(names.indexOf("Levantamento terra com barra")).isGreaterThanOrEqualTo(7);
@@ -219,7 +222,7 @@ class ExerciseCatalogRepositoryTest {
     void findVisible_search_caseInsensitiveSubstring() {
         CallerIdentity trainer = newTrainer("Trainer");
 
-        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), 0, "SUPINO"));
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), 0, "SUPINO", ALL, 0));
 
         assertThat(names).isNotEmpty()
                 .contains("Supino reto com barra")
@@ -231,9 +234,9 @@ class ExerciseCatalogRepositoryTest {
     void findVisible_search_wildcardsAreLiteral() {
         CallerIdentity trainer = newTrainer("Trainer");
 
-        assertThat(exerciseService.listExercises(trainer, 0, "%")).isEmpty();
-        assertThat(exerciseService.listExercises(trainer, 0, "_")).isEmpty();
-        assertThat(exerciseService.listExercises(trainer, 0, "\\")).isEmpty();
+        assertThat(exerciseService.listExercises(trainer, 0, "%", 30, 0).getExercisesList()).isEmpty();
+        assertThat(exerciseService.listExercises(trainer, 0, "_", 30, 0).getExercisesList()).isEmpty();
+        assertThat(exerciseService.listExercises(trainer, 0, "\\", 30, 0).getExercisesList()).isEmpty();
     }
 
     @Test
@@ -242,9 +245,9 @@ class ExerciseCatalogRepositoryTest {
         CallerIdentity other = newTrainer("Other");
         createOwn(other, "Supino secreto", PEITO);
 
-        assertThat(names(exerciseRepository.findVisible(trainer.userId(), 0, "secreto"))).isEmpty();
-        assertThat(names(exerciseRepository.findVisible(trainer.userId(), PEITO, ""))).doesNotContain("Supino secreto");
-        assertThat(names(exerciseRepository.findVisible(other.userId(), 0, "secreto"))).containsExactly("Supino secreto");
+        assertThat(names(exerciseRepository.findVisible(trainer.userId(), 0, "secreto", ALL, 0))).isEmpty();
+        assertThat(names(exerciseRepository.findVisible(trainer.userId(), PEITO, "", ALL, 0))).doesNotContain("Supino secreto");
+        assertThat(names(exerciseRepository.findVisible(other.userId(), 0, "secreto", ALL, 0))).containsExactly("Supino secreto");
     }
 
     @Test
@@ -253,7 +256,7 @@ class ExerciseCatalogRepositoryTest {
         createOwn(trainer, "Trainer private", PEITO);
         CallerIdentity admin = new CallerIdentity(newUser("Admin", Role.ADMIN), Role.ADMIN);
 
-        List<Exercise> visible = exerciseRepository.findVisible(admin.userId(), 0, "");
+        List<Exercise> visible = exerciseRepository.findVisible(admin.userId(), 0, "", ALL, 0);
 
         assertThat(visible).hasSize(199).allMatch(Exercise::isStarter);
     }
@@ -262,7 +265,7 @@ class ExerciseCatalogRepositoryTest {
     void findVisible_noFilter_starterByName() {
         CallerIdentity trainer = newTrainer("Trainer");
 
-        assertThat(names(exerciseRepository.findVisible(trainer.userId(), 0, "")))
+        assertThat(names(exerciseRepository.findVisible(trainer.userId(), 0, "", ALL, 0)))
                 .containsExactlyElementsOf(starterNamesByName());
     }
 
@@ -272,7 +275,7 @@ class ExerciseCatalogRepositoryTest {
         createOwn(trainer, "Supino inclinado caseiro", PEITO);
         createOwn(trainer, "Remada inclinado caseira", LOMBAR);
 
-        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), PEITO, "inclinado"));
+        List<String> names = names(exerciseRepository.findVisible(trainer.userId(), PEITO, "inclinado", ALL, 0));
 
         assertThat(names).containsExactly(
                 "Supino inclinado caseiro",
@@ -282,6 +285,68 @@ class ExerciseCatalogRepositoryTest {
                 "Supino inclinado na máquina",
                 "Mergulho nas paralelas com tronco inclinado",
                 "Supino inclinado no Smith");
+    }
+
+    // --- paging ---
+
+    @Test
+    void listExercises_pagesWalkTheWholeOrderingWithoutOverlap() {
+        CallerIdentity trainer = newTrainer("Trainer");
+        createOwn(trainer, "Duplicado", PEITO);
+        createOwn(trainer, "Duplicado", PEITO);
+        List<String> expected = names(exerciseRepository.findVisible(trainer.userId(), 0, "", ALL, 0));
+
+        List<Long> ids = new ArrayList<>();
+        List<String> walked = new ArrayList<>();
+        String token = "";
+        int pages = 0;
+        do {
+            int offset = token.isEmpty() ? 0 : Integer.parseInt(token);
+            ListExercisesResponse page = exerciseService.listExercises(trainer, 0, "", 50, offset);
+            assertThat(page.getExercisesCount()).isLessThanOrEqualTo(50);
+            page.getExercisesList().forEach(e -> {
+                ids.add(e.getId());
+                walked.add(e.getName());
+            });
+            token = page.getNextPageToken();
+            pages++;
+        } while (!token.isEmpty());
+
+        assertThat(pages).isEqualTo(5);
+        assertThat(walked).containsExactlyElementsOf(expected);
+        assertThat(ids).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void listExercises_lastPageHasNoToken() {
+        CallerIdentity trainer = newTrainer("Trainer");
+
+        ListExercisesResponse peito = exerciseService.listExercises(trainer, PEITO, "", 30, 0);
+
+        assertThat(peito.getExercisesCount()).isEqualTo(24);
+        assertThat(peito.getNextPageToken()).isEmpty();
+    }
+
+    @Test
+    void listExercises_exactlyFullPage_hasNoToken() {
+        CallerIdentity trainer = newTrainer("Trainer");
+
+        ListExercisesResponse full = exerciseService.listExercises(trainer, PEITO, "", 24, 0);
+
+        assertThat(full.getExercisesCount()).isEqualTo(24);
+        assertThat(full.getNextPageToken()).isEmpty();
+    }
+
+    @Test
+    void listExercises_fullerList_tokenIsTheNextOffset() {
+        CallerIdentity trainer = newTrainer("Trainer");
+
+        ListExercisesResponse first = exerciseService.listExercises(trainer, PEITO, "", 10, 0);
+        ListExercisesResponse second = exerciseService.listExercises(trainer, PEITO, "", 10, 10);
+
+        assertThat(first.getNextPageToken()).isEqualTo("10");
+        assertThat(second.getNextPageToken()).isEqualTo("20");
+        assertThat(exerciseService.listExercises(trainer, PEITO, "", 10, 20).getNextPageToken()).isEmpty();
     }
 
     private void createOwn(CallerIdentity trainer, String name, long groupId) {

@@ -4,6 +4,8 @@ import com.vertice.api.common.exception.ExerciseInUseException;
 import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
+import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
+import com.vertice.api.generated.grpc.exercise.v1.ListExercisesResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
 import com.vertice.api.grpc.CallerIdentity;
 import com.vertice.api.plan.workout.WorkoutExerciseRepository;
@@ -23,11 +25,13 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -169,7 +173,7 @@ class ExerciseServiceTest {
 
     @Test
     void listExercises_clientRefused() {
-        assertThatThrownBy(() -> service.listExercises(CLIENT, 0, ""))
+        assertThatThrownBy(() -> service.listExercises(CLIENT, 0, "", 30, 0))
                 .isInstanceOf(PermissionDeniedException.class)
                 .hasMessage("Role CLIENT is not allowed to list exercises");
         verifyNoInteractions(exerciseRepository);
@@ -177,20 +181,20 @@ class ExerciseServiceTest {
 
     @Test
     void listExercises_trainerPassesOwnId_adminPassesOwnId() {
-        when(exerciseRepository.findVisible(any(), anyLong(), anyString())).thenReturn(List.of());
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString(), anyInt(), anyInt())).thenReturn(List.of());
 
-        service.listExercises(TRAINER, 0, "");
-        service.listExercises(ADMIN, 0, "");
+        service.listExercises(TRAINER, 0, "", 30, 0);
+        service.listExercises(ADMIN, 0, "", 30, 0);
 
-        verify(exerciseRepository).findVisible(TRAINER.userId(), 0, "");
-        verify(exerciseRepository).findVisible(ADMIN.userId(), 0, "");
+        verify(exerciseRepository).findVisible(TRAINER.userId(), 0, "", 31, 0);
+        verify(exerciseRepository).findVisible(ADMIN.userId(), 0, "", 31, 0);
     }
 
     @Test
     void listExercises_unknownGroup_notFound() {
         when(muscleGroupRepository.existsById(99L)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.listExercises(TRAINER, 99L, ""))
+        assertThatThrownBy(() -> service.listExercises(TRAINER, 99L, "", 30, 0))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("MuscleGroup with id 99 not found");
         verifyNoInteractions(exerciseRepository);
@@ -198,21 +202,45 @@ class ExerciseServiceTest {
 
     @Test
     void listExercises_escapesLikeWildcards() {
-        when(exerciseRepository.findVisible(any(), anyLong(), anyString())).thenReturn(List.of());
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString(), anyInt(), anyInt())).thenReturn(List.of());
 
-        service.listExercises(TRAINER, 0, "50%_a\\b");
+        service.listExercises(TRAINER, 0, "50%_a\\b", 30, 0);
 
-        verify(exerciseRepository).findVisible(TRAINER.userId(), 0, "50\\%\\_a\\\\b");
+        verify(exerciseRepository).findVisible(TRAINER.userId(), 0, "50\\%\\_a\\\\b", 31, 0);
     }
 
     @Test
     void listExercises_trimsSearch() {
         when(muscleGroupRepository.existsById(1L)).thenReturn(true);
-        when(exerciseRepository.findVisible(any(), anyLong(), anyString())).thenReturn(List.of());
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString(), anyInt(), anyInt())).thenReturn(List.of());
 
-        service.listExercises(TRAINER, 1L, "  supino  ");
+        service.listExercises(TRAINER, 1L, "  supino  ", 30, 0);
 
-        verify(exerciseRepository).findVisible(TRAINER.userId(), 1L, "supino");
+        verify(exerciseRepository).findVisible(TRAINER.userId(), 1L, "supino", 31, 0);
+    }
+
+    @Test
+    void listExercises_asksForOneRowMoreThanThePage() {
+        List<Exercise> rows = LongStream.rangeClosed(1, 4)
+                .mapToObj(id -> starterExercise(id, "E" + id)).toList();
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString(), anyInt(), anyInt())).thenReturn(rows);
+
+        ListExercisesResponse page = service.listExercises(TRAINER, 0, "", 3, 6);
+
+        verify(exerciseRepository).findVisible(TRAINER.userId(), 0, "", 4, 6);
+        assertThat(page.getExercisesList()).extracting(ExerciseResponse::getId).containsExactly(1L, 2L, 3L);
+        assertThat(page.getNextPageToken()).isEqualTo("9");
+    }
+
+    @Test
+    void listExercises_shortPage_noToken() {
+        when(exerciseRepository.findVisible(any(), anyLong(), anyString(), anyInt(), anyInt()))
+                .thenReturn(List.of(starterExercise(1L, "Squat")));
+
+        ListExercisesResponse page = service.listExercises(TRAINER, 0, "", 3, 0);
+
+        assertThat(page.getExercisesCount()).isEqualTo(1);
+        assertThat(page.getNextPageToken()).isEmpty();
     }
 
     // --- GetExercise ---

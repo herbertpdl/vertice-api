@@ -29,6 +29,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -43,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.throwable;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -143,7 +145,7 @@ class ExerciseControllerTest {
 
     @Test
     void listExercises_clientToken_permissionDenied() {
-        when(exerciseService.listExercises(new CallerIdentity(CLIENT_ID, Role.CLIENT), 0, ""))
+        when(exerciseService.listExercises(new CallerIdentity(CLIENT_ID, Role.CLIENT), 0, "", 30, 0))
                 .thenThrow(PermissionDeniedException.role(Role.CLIENT, "list exercises"));
 
         assertPermissionDenied(() -> TestJwts.asCaller(anonymousStub, CLIENT_ID, Role.CLIENT)
@@ -193,13 +195,13 @@ class ExerciseControllerTest {
     }
 
     @Test
-    void listExercises_returnsAll() {
-        ExerciseResponse exercise = squat();
-        when(exerciseService.listExercises(any(), anyLong(), anyString())).thenReturn(List.of(exercise));
+    void listExercises_returnsThePage() {
+        ListExercisesResponse page = ListExercisesResponse.newBuilder().addExercises(squat()).setNextPageToken("30").build();
+        when(exerciseService.listExercises(any(), anyLong(), anyString(), anyInt(), anyInt())).thenReturn(page);
 
         ListExercisesResponse response = stub.listExercises(ListExercisesRequest.newBuilder().build());
 
-        assertThat(response.getExercisesList()).containsExactly(exercise);
+        assertThat(response).isEqualTo(page);
     }
 
     @Test
@@ -211,11 +213,48 @@ class ExerciseControllerTest {
 
     @Test
     void listExercises_forwardsFilterAndSearch() {
-        when(exerciseService.listExercises(any(), anyLong(), anyString())).thenReturn(List.of(squat()));
+        when(exerciseService.listExercises(any(), anyLong(), anyString(), anyInt(), anyInt()))
+                .thenReturn(ListExercisesResponse.getDefaultInstance());
 
         stub.listExercises(ListExercisesRequest.newBuilder().setMuscleGroupId(7L).setSearch("  agacha  ").build());
 
-        verify(exerciseService).listExercises(new CallerIdentity(TRAINER_ID, Role.TRAINER), 7L, "agacha");
+        verify(exerciseService).listExercises(new CallerIdentity(TRAINER_ID, Role.TRAINER), 7L, "agacha", 30, 0);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0, 30", "1, 1", "50, 50", "51, 50", "1000, 50"})
+    void listExercises_pageSize_defaultsAndIsCapped(int requested, int expected) {
+        when(exerciseService.listExercises(any(), anyLong(), anyString(), anyInt(), anyInt()))
+                .thenReturn(ListExercisesResponse.getDefaultInstance());
+
+        stub.listExercises(ListExercisesRequest.newBuilder().setPageSize(requested).build());
+
+        verify(exerciseService).listExercises(any(), eq(0L), eq(""), eq(expected), eq(0));
+    }
+
+    @Test
+    void listExercises_negativePageSize_invalidArgument() {
+        assertInvalidArgument(() -> stub.listExercises(ListExercisesRequest.newBuilder().setPageSize(-1).build()),
+                "pageSize: must be greater than or equal to 0");
+        verifyNoInteractions(exerciseService);
+    }
+
+    @Test
+    void listExercises_forwardsPageTokenAsOffset() {
+        when(exerciseService.listExercises(any(), anyLong(), anyString(), anyInt(), anyInt()))
+                .thenReturn(ListExercisesResponse.getDefaultInstance());
+
+        stub.listExercises(ListExercisesRequest.newBuilder().setPageToken("60").build());
+
+        verify(exerciseService).listExercises(any(), eq(0L), eq(""), eq(30), eq(60));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"abc", "0", "-30", "1.5", "99999999999"})
+    void listExercises_malformedPageToken_invalidArgument(String token) {
+        assertInvalidArgument(() -> stub.listExercises(ListExercisesRequest.newBuilder().setPageToken(token).build()),
+                "page_token: invalid");
+        verifyNoInteractions(exerciseService);
     }
 
     @Test
