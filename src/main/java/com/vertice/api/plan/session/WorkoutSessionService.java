@@ -6,11 +6,14 @@ import com.vertice.api.common.time.BusinessDates;
 import com.vertice.api.common.time.DbInstants;
 import com.vertice.api.generated.grpc.session.v1.GetExerciseProgressResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.ListProgressExercisesResponse;
+import com.vertice.api.generated.grpc.session.v1.ProgressExercise;
 import com.vertice.api.generated.grpc.session.v1.ProgressPoint;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
 import com.vertice.api.generated.grpc.session.v1.RestartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.SetLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
+import com.vertice.api.grpc.CallerIdentity;
 import com.vertice.api.grpc.ProtoDates;
 import com.vertice.api.grpc.ProtoDecimals;
 import com.vertice.api.plan.workout.ExerciseSet;
@@ -189,6 +192,20 @@ public class WorkoutSessionService {
                 .setWeekStartDate(ProtoDates.dateToString(week))
                 .setWeight(ProtoDecimals.decimalToString(weight))
                 .build()));
+        return response.build();
+    }
+
+    /**
+     * What a progress picker offers: only exercises with points, never the whole catalog. The
+     * client sees their whole history; anyone else (their trainer, ADMIN) only exercises the
+     * catalog shows them, so another trainer's private exercise names never leak.
+     */
+    @Transactional(readOnly = true)
+    public ListProgressExercisesResponse listProgressExercises(CallerIdentity caller, Long clientId) {
+        long visibleTo = caller.role() == Role.CLIENT ? 0 : caller.userId();
+        ListProgressExercisesResponse.Builder response = ListProgressExercisesResponse.newBuilder();
+        setLogRepository.findProgressExercises(clientId, visibleTo).forEach(row -> response.addExercises(
+                ProgressExercise.newBuilder().setId(row.getId()).setName(row.getName()).build()));
         return response.build();
     }
 

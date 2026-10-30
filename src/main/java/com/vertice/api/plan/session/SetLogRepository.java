@@ -38,6 +38,30 @@ public interface SetLogRepository extends JpaRepository<SetLog, Long> {
             + "ORDER BY sl.workoutLog.weekStartDate ASC")
     List<SetLog> findCompletedSetLogsForClientAndExercise(@Param("clientId") Long clientId, @Param("exerciseId") Long exerciseId);
 
+    /** One exercise with progress points for a client ({@link #findProgressExercises}). */
+    interface ProgressExerciseRow {
+        Long getId();
+
+        String getName();
+    }
+
+    /**
+     * The exercises {@link #findCompletedSetLogsForClientAndExercise} would give a weighted point
+     * for, most recently trained first. {@code visibleTo} limits them to the starter set plus that
+     * user's own exercises ({@code 0} = no limit), the catalog's visibility rule.
+     */
+    @Query("SELECT e.id AS id, e.name AS name FROM SetLog sl "
+            + "JOIN sl.workoutLog wl "
+            + "JOIN sl.exerciseSet es JOIN es.workoutExercise we JOIN we.exercise e "
+            + "LEFT JOIN e.owner o "
+            + "WHERE wl.client.id = :clientId "
+            + "AND wl.status = com.vertice.api.plan.session.WorkoutLogStatus.COMPLETED "
+            + "AND sl.weight IS NOT NULL "
+            + "AND (:visibleTo = 0 OR o IS NULL OR o.id = :visibleTo) "
+            + "GROUP BY e.id, e.name "
+            + "ORDER BY max(wl.weekStartDate) DESC, e.name ASC, e.id ASC")
+    List<ProgressExerciseRow> findProgressExercises(@Param("clientId") Long clientId, @Param("visibleTo") long visibleTo);
+
     @Query("SELECT sl FROM SetLog sl "
             + "WHERE sl.exerciseSet.workoutExercise.workout.id = :workoutId")
     List<SetLog> findByWorkoutId(@Param("workoutId") Long workoutId);

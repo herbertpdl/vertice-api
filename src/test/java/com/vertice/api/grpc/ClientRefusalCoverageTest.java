@@ -91,7 +91,7 @@ class ClientRefusalCoverageTest {
             "WorkoutSessionService/ListSetLogs", "WorkoutSessionService/GetWorkoutLog",
             "WorkoutSessionService/RecordSetLog", "WorkoutSessionService/CompleteWorkoutLog",
             "WorkoutSessionService/ListWorkoutLogs", "WorkoutSessionService/GetLastSetLogs",
-            "WorkoutSessionService/GetExerciseProgress",
+            "WorkoutSessionService/GetExerciseProgress", "WorkoutSessionService/ListProgressExercises",
             "WorkoutFeedbackService/SubmitWorkoutFeedback",
             "TrainerClientService/GetClientTrainer",
             "ExerciseService/GetExercise", "ExerciseService/ListMuscleGroups");

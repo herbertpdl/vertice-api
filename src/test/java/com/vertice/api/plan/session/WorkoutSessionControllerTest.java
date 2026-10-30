@@ -9,6 +9,8 @@ import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.GetWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.ListProgressExercisesRequest;
+import com.vertice.api.generated.grpc.session.v1.ListProgressExercisesResponse;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.ProgressPoint;
@@ -95,6 +97,7 @@ class WorkoutSessionControllerTest {
         when(workoutSessionService.completeWorkoutLog(any())).thenReturn(WorkoutLogResponse.getDefaultInstance());
         when(workoutSessionService.recordSetLog(any())).thenReturn(SetLogResponse.getDefaultInstance());
         when(workoutSessionService.getExerciseProgress(any(), any())).thenReturn(GetExerciseProgressResponse.getDefaultInstance());
+        when(workoutSessionService.listProgressExercises(any(), any())).thenReturn(ListProgressExercisesResponse.getDefaultInstance());
     }
 
     @AfterEach
@@ -351,6 +354,18 @@ class WorkoutSessionControllerTest {
         assertAllowed(() -> callers.admin().getExerciseProgress(request));
         assertDenied(() -> callers.otherTrainer().getExerciseProgress(request));
         assertDenied(() -> callers.otherClient().getExerciseProgress(request));
+    }
+
+    /** The same history as GetExerciseProgress, so the same callers. */
+    @Test
+    void listProgressExercises_clientActiveTrainerAndAdmin_areAllowed_othersDenied() {
+        ListProgressExercisesRequest request = ListProgressExercisesRequest.newBuilder().setClientId(CLIENT_ID).build();
+
+        assertAllowed(() -> callers.client().listProgressExercises(request));
+        assertAllowed(() -> callers.trainer().listProgressExercises(request));
+        assertAllowed(() -> callers.admin().listProgressExercises(request));
+        assertDenied(() -> callers.otherTrainer().listProgressExercises(request));
+        assertDenied(() -> callers.otherClient().listProgressExercises(request));
     }
 
     /** A missing id answers a non-admin exactly like someone else's: no existence oracle. */
