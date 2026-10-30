@@ -14,6 +14,8 @@ import com.vertice.api.generated.grpc.session.v1.ListSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.ListSetLogsResponse;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsResponse;
+import com.vertice.api.generated.grpc.session.v1.ListProgressExercisesRequest;
+import com.vertice.api.generated.grpc.session.v1.ListProgressExercisesResponse;
 import com.vertice.api.generated.grpc.session.v1.RecordSetLogRequest;
 import com.vertice.api.generated.grpc.session.v1.RestartWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.SetLogResponse;
@@ -145,6 +147,16 @@ public class WorkoutSessionController extends WorkoutSessionServiceGrpc.WorkoutS
         responseObserver.onCompleted();
     }
 
+    @Override
+    public void listProgressExercises(ListProgressExercisesRequest request, StreamObserver<ListProgressExercisesResponse> responseObserver) {
+        CallerIdentity caller = callerIdentityResolver.requireUser();
+        validator.validate(new ListProgressExercisesValidation(request.getClientId()));
+        // The same history as GetExerciseProgress, so the same callers.
+        authorization.checkGetExerciseProgress(caller, request.getClientId());
+        responseObserver.onNext(workoutSessionService.listProgressExercises(caller, request.getClientId()));
+        responseObserver.onCompleted();
+    }
+
     private record GetOrStartValidation(@Min(1) long workoutId, @Min(1) long clientId, @NotBlank String weekStartDate) {
     }
 
@@ -155,6 +167,9 @@ public class WorkoutSessionController extends WorkoutSessionServiceGrpc.WorkoutS
     }
 
     private record GetExerciseProgressValidation(@Min(1) long clientId, @Min(1) long exerciseId) {
+    }
+
+    private record ListProgressExercisesValidation(@Min(1) long clientId) {
     }
 
     private record RecordSetLogValidation(

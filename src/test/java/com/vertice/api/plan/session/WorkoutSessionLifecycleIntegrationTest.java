@@ -22,6 +22,7 @@ import com.vertice.api.generated.grpc.session.v1.DiscardWorkoutLogRequest;
 import com.vertice.api.generated.grpc.session.v1.FeedbackRating;
 import com.vertice.api.generated.grpc.session.v1.GetLastSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.GetOrStartWorkoutLogRequest;
+import com.vertice.api.generated.grpc.session.v1.ListProgressExercisesRequest;
 import com.vertice.api.generated.grpc.session.v1.ListSetLogsRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.ListWorkoutLogsRequest;
@@ -31,6 +32,7 @@ import com.vertice.api.generated.grpc.session.v1.SubmitWorkoutFeedbackRequest;
 import com.vertice.api.generated.grpc.session.v1.WorkoutFeedbackServiceGrpc;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogResponse;
 import com.vertice.api.generated.grpc.session.v1.WorkoutLogStatus;
+import com.vertice.api.generated.grpc.session.v1.ProgressExercise;
 import com.vertice.api.generated.grpc.session.v1.WorkoutSessionServiceGrpc;
 import com.vertice.api.grpc.TestJwts;
 import com.vertice.api.plan.exercise.Exercise;
@@ -95,6 +97,7 @@ class WorkoutSessionLifecycleIntegrationTest {
     private User trainer;
     private User client;
     private long workout;
+    private long exerciseId;
     private long firstSet;
     private long secondSet;
 
@@ -112,6 +115,7 @@ class WorkoutSessionLifecycleIntegrationTest {
         exercise.setName("Private of Trainer");
         exercise.setOwner(trainer);
         exercise = exerciseRepository.save(exercise);
+        exerciseId = exercise.getId();
 
         TrainingPlan trainingPlan = new TrainingPlan();
         trainingPlan.setName("Plan");
@@ -340,6 +344,50 @@ class WorkoutSessionLifecycleIntegrationTest {
                 .asInstanceOf(throwable(StatusRuntimeException.class))
                 .extracting(ex -> ex.getStatus().getCode())
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    /**
+     * The progress picker's options (lazy-exercise-search §6 follow-up): only a weighted set in a
+     * completed session counts, as for GetExerciseProgress; in-progress and weightless sets don't.
+     */
+    @Test
+    void progressExercises_areThoseWithAWeightedCompletedSet() {
+        WorkoutLogResponse log = start(week);
+        record(log.getId(), firstSet, "60");
+        assertThat(progressExercises(trainer)).as("still in progress").isEmpty();
+
+        long weightless = seedLeftover(1);
+        jdbc.update("UPDATE workout_logs SET status = 'COMPLETED', completion_kind = 'CLIENT', completed_at = now() WHERE id = :id",
+                Map.of("id", weightless));
+        jdbc.update("INSERT INTO set_logs (workout_log_id, exercise_set_id, weight, reps, recorded_at) VALUES (:log, :set, NULL, 5, now())",
+                Map.of("log", weightless, "set", firstSet));
+        assertThat(progressExercises(trainer)).as("no weight recorded").isEmpty();
+
+        sessions().completeWorkoutLog(CompleteWorkoutLogRequest.newBuilder().setId(log.getId()).build());
+        assertThat(progressExercises(trainer)).extracting(ProgressExercise::getId, ProgressExercise::getName)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(exerciseId, "Private of Trainer"));
+        assertThat(progressExercises(client)).extracting(ProgressExercise::getId).containsExactly(exerciseId);
+    }
+
+    /** Another trainer's private exercise in the client's history: the client sees it, this trainer doesn't. */
+    @Test
+    void progressExercises_hideAnotherTrainersPrivateExercise_fromTheTrainer() {
+        finishWithWeight(start(week), "80");
+        User other = userRepository.save(newUser("Other", Role.TRAINER));
+        try {
+            jdbc.update("UPDATE exercises SET owner_id = :other WHERE id = :id", Map.of("other", other.getId(), "id", exerciseId));
+
+            assertThat(progressExercises(trainer)).isEmpty();
+            assertThat(progressExercises(client)).extracting(ProgressExercise::getId).containsExactly(exerciseId);
+        } finally {
+            jdbc.update("UPDATE exercises SET owner_id = :trainer WHERE id = :id", Map.of("trainer", trainer.getId(), "id", exerciseId));
+            jdbc.update("DELETE FROM users WHERE id = :id", Map.of("id", other.getId()));
+        }
+    }
+
+    private List<ProgressExercise> progressExercises(User caller) {
+        return as(caller, WorkoutSessionServiceGrpc::newBlockingStub).listProgressExercises(
+                ListProgressExercisesRequest.newBuilder().setClientId(client.getId()).build()).getExercisesList();
     }
 
     private int feedbackRows(long logId) {

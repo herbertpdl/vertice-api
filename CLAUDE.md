@@ -169,7 +169,7 @@ existing `NOT_FOUND`/`INVALID_ARGUMENT` (the exercise RPCs already tell those ap
 | `GetOrStartWorkoutLog`, `RestartWorkoutLog` | the plan's client (as themself), ADMIN; never a TRAINER (web-trainer-only-access R15) |
 | `GetWorkoutLog`, `ListSetLogs` | the log's client, the plan's trainer, ADMIN |
 | `RecordSetLog`, `DeleteSetLog`, `CompleteWorkoutLog`, `DiscardWorkoutLog`, `SubmitWorkoutFeedback` | the log's client, ADMIN |
-| `GetExerciseProgress` | the client themself, their active trainer, ADMIN |
+| `GetExerciseProgress`, `ListProgressExercises` | the client themself, their active trainer, ADMIN (`ListProgressExercises`: a trainer or ADMIN sees only exercises the catalog shows them) |
 | `ListWorkoutFeedback` | TRAINER for their own `trainer_id`, ADMIN |
 | `CreateClientForTrainer`, `ListClientsForTrainer`, `IsTrainersClient` | TRAINER for their own `trainer_id`, ADMIN (any trainer); never a CLIENT or a service |
 | `GetClientTrainer` | CLIENT as themself (the request's `client_id` 0 or their own), ADMIN; never a TRAINER |
