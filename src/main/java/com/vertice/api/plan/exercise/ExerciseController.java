@@ -18,6 +18,7 @@ import com.vertice.api.grpc.GrpcRequestValidator;
 import io.grpc.stub.StreamObserver;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
@@ -46,10 +47,10 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
     public void listExercises(ListExercisesRequest request, StreamObserver<ListExercisesResponse> responseObserver) {
         CallerIdentity caller = callerIdentityResolver.requireUser();
         String search = request.getSearch().strip();
-        validator.validate(new ListExercisesValidation(search));
-        responseObserver.onNext(ListExercisesResponse.newBuilder()
-                .addAllExercises(exerciseService.listExercises(caller, request.getMuscleGroupId(), search))
-                .build());
+        validator.validate(new ListExercisesValidation(search, request.getPageSize()));
+        int offset = offset(request.getPageToken());
+        responseObserver.onNext(exerciseService.listExercises(
+                caller, request.getMuscleGroupId(), search, pageSize(request.getPageSize()), offset));
         responseObserver.onCompleted();
     }
 
@@ -94,7 +95,28 @@ public class ExerciseController extends ExerciseServiceGrpc.ExerciseServiceImplB
         }
     }
 
-    private record ListExercisesValidation(@Size(max = 100) String search) {
+    /** 0 is the default; anything larger than the maximum is lowered to it, not refused. */
+    private static int pageSize(int requested) {
+        return requested == 0 ? ExerciseService.DEFAULT_PAGE_SIZE : Math.min(requested, ExerciseService.MAX_PAGE_SIZE);
+    }
+
+    /** The token is the number of rows already returned; empty means the first page. */
+    private static int offset(String pageToken) {
+        if (pageToken.isEmpty()) {
+            return 0;
+        }
+        try {
+            int offset = Integer.parseInt(pageToken);
+            if (offset > 0) {
+                return offset;
+            }
+        } catch (NumberFormatException ignored) {
+            // falls through to the same error as a non-positive offset
+        }
+        throw new ConstraintViolationException("page_token: invalid", Set.of());
+    }
+
+    private record ListExercisesValidation(@Size(max = 100) String search, @PositiveOrZero int pageSize) {
     }
 
     private record ExerciseValidation(

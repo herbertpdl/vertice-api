@@ -55,6 +55,13 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 	testAnnotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
+	constraints {
+		// Not Boot-managed: grpc-java 1.83.1 brings 33.6.0 (GHSA-xxph-c9ww-hj94, high). Drop once
+		// the gRPC starter's grpc-java depends on 33.7.2 or newer.
+		implementation('com.google.guava:guava:33.7.2-jre') {
+			because 'GHSA-xxph-c9ww-hj94'
+		}
+	}
 }
 
 protobuf {

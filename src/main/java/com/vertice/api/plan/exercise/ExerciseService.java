@@ -5,6 +5,7 @@ import com.vertice.api.common.exception.PermissionDeniedException;
 import com.vertice.api.common.exception.ResourceNotFoundException;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseRequest;
 import com.vertice.api.generated.grpc.exercise.v1.ExerciseResponse;
+import com.vertice.api.generated.grpc.exercise.v1.ListExercisesResponse;
 import com.vertice.api.generated.grpc.exercise.v1.MuscleGroupResponse;
 import com.vertice.api.grpc.CallerIdentity;
 import com.vertice.api.plan.workout.WorkoutExerciseRepository;
@@ -31,6 +32,9 @@ import java.util.stream.Collectors;
 @Transactional
 public class ExerciseService {
 
+    public static final int DEFAULT_PAGE_SIZE = 30;
+    public static final int MAX_PAGE_SIZE = 50;
+
     private final ExerciseRepository exerciseRepository;
     private final MuscleGroupRepository muscleGroupRepository;
     private final WorkoutExerciseRepository workoutExerciseRepository;
@@ -45,21 +49,34 @@ public class ExerciseService {
     }
 
     /**
-     * Passing the caller's own id for an ADMIN too is deliberate: an admin never owns an exercise
+     * One page of the catalog: never the whole of it, however it is filtered (the starter set alone
+     * is 199 rows and a trainer's own exercises are unbounded).
+     *
+     * <p>Passing the caller's own id for an ADMIN too is deliberate: an admin never owns an exercise
      * (creating one is trainer-only), so the query collapses to the starter set.
      *
      * @param muscleGroupId {@code 0} = no group filter
      * @param search        name substring, case-insensitive; blank = no filter
+     * @param pageSize      already bounded by the caller (1 to {@link #MAX_PAGE_SIZE})
+     * @param offset        rows to skip, from the previous page's token; {@code 0} for the first page
      */
     @Transactional(readOnly = true)
-    public List<ExerciseResponse> listExercises(CallerIdentity caller, long muscleGroupId, String search) {
+    public ListExercisesResponse listExercises(CallerIdentity caller, long muscleGroupId, String search,
+                                               int pageSize, int offset) {
         caller.requireRole("list exercises", Role.TRAINER, Role.ADMIN);
         if (muscleGroupId != 0 && !muscleGroupRepository.existsById(muscleGroupId)) {
             throw new ResourceNotFoundException("MuscleGroup", muscleGroupId);
         }
-        return exerciseRepository.findVisible(caller.userId(), muscleGroupId, escapeLike(search.strip())).stream()
-                .map(exerciseMapper::toResponse)
-                .toList();
+        // One row past the page tells whether another page exists without a count query.
+        List<Exercise> rows = exerciseRepository.findVisible(
+                caller.userId(), muscleGroupId, escapeLike(search.strip()), pageSize + 1, offset);
+        boolean hasNext = rows.size() > pageSize;
+        ListExercisesResponse.Builder response = ListExercisesResponse.newBuilder();
+        (hasNext ? rows.subList(0, pageSize) : rows).forEach(e -> response.addExercises(exerciseMapper.toResponse(e)));
+        if (hasNext) {
+            response.setNextPageToken(String.valueOf(offset + pageSize));
+        }
+        return response.build();
     }
 
     @Transactional(readOnly = true)

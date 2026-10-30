@@ -12,7 +12,8 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
      * The starter set plus {@code ownerId}'s private exercises, optionally narrowed to one muscle
      * group ({@code 0} = any) and a name substring ({@code ''} = any; the caller escapes LIKE
      * wildcards). Order (R47-R50): own rows by name; then starter rows filed under the filtered
-     * group as primary, in catalog order; then the remaining starter rows by name.
+     * group as primary, in catalog order; then the remaining starter rows by name. The id breaks
+     * name ties so {@code LIMIT}/{@code OFFSET} pages never overlap or skip a row.
      *
      * <p>Native because the ordering needs a correlated {@code catalog_order} lookup, which JPQL
      * cannot express here. {@code 0}/{@code ''} stand in for "no filter" because Postgres cannot
@@ -35,9 +36,13 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
                                   AND g.muscle_group_id = :muscleGroupId
                                   AND g.is_primary)
                      END ASC NULLS LAST,
-                     e.name ASC
+                     e.name ASC,
+                     e.id ASC
+            LIMIT :limit OFFSET :offset
             """)
     List<Exercise> findVisible(@Param("ownerId") Long ownerId,
                                @Param("muscleGroupId") long muscleGroupId,
-                               @Param("search") String search);
+                               @Param("search") String search,
+                               @Param("limit") int limit,
+                               @Param("offset") int offset);
 }
