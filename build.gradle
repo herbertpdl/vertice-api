@@ -1,8 +1,8 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.1.1'
+	id 'org.springframework.boot' version '4.1.2'
 	id 'io.spring.dependency-management' version '1.1.7'
-	id 'com.google.protobuf' version '0.9.6'
+	id 'com.google.protobuf' version '0.10.0'
 }
 
 group = 'com.vertice'
@@ -43,7 +43,7 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	// IAM database authentication for the deployed Aurora cluster (`aws` profile); unused otherwise
 	runtimeOnly 'software.amazon.jdbc:aws-advanced-jdbc-wrapper:4.5.0'
-	runtimeOnly 'software.amazon.awssdk:rds:2.56.0'
+	runtimeOnly 'software.amazon.awssdk:rds:2.57.5'
 	annotationProcessor 'org.projectlombok:lombok'
 	annotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
