@@ -130,18 +130,26 @@ configuration, which accepts IAM authentication only, so the `aws` profile
 ([`application-aws.properties`](src/main/resources/application-aws.properties)) switches the
 datasource to the [AWS Advanced JDBC Wrapper](https://github.com/aws/aws-advanced-jdbc-wrapper)'s
 `iam` plugin: each new connection gets a 15-minute token signed with the container's AWS
-credentials, and there is no password. Run it with:
+credentials, and there is no password. The profile also requires `sslmode=verify-full` against the
+JVM's trust store (the gateway's certificate chains to Amazon Root CA 1). Run it with:
 
 | Variable | Value |
 |---|---|
 | `SPRING_PROFILES_ACTIVE` | `aws` |
 | `VERTICE_ENV` | `prod` |
-| `SPRING_DATASOURCE_URL` | `jdbc:aws-wrapper:postgresql://<cluster endpoint>:5432/vertice?sslmode=require` |
+| `SPRING_DATASOURCE_URL` | `jdbc:aws-wrapper:postgresql://<cluster endpoint>:5432/vertice`, with no `sslmode` parameter: one in the URL would override the profile's |
 | `DB_USERNAME` | a database role granted `rds_iam` (the task role needs `rds-db:connect` on it) |
 | `DB_PASSWORD` | empty |
 | `JWT_SECRET` | the secret shared with vertice-bff |
 
-`/actuator/health` on `8080` needs no token and backs the container health check.
+The container health check is `curl -fs http://localhost:8080/actuator/health/liveness`, which
+leaves the database out, so a database blip doesn't make ECS replace every task at once.
+`/actuator/health` (database included) stays available for diagnostics. Neither needs a token.
+
+To override a Hikari setting from the environment, drop the dashes inside the property name
+(`SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT`, not `..._CONNECTION_TIMEOUT`). The underscored form
+binds a `connection` property, which opens the pool before the profile's settings are applied, so
+it would connect without `sslmode=verify-full` or `logServerErrorDetail=false`.
 
 ## Running locally
 
