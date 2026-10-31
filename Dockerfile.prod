@@ -1,0 +1,29 @@
+# Production image: builds the boot jar, then runs it on a JRE as a non-root user. The plain
+# `Dockerfile` is the development image (gradle bootRun with devtools) used by vertice-local.
+FROM eclipse-temurin:25-jdk AS build
+
+WORKDIR /app
+
+COPY gradlew build.gradle settings.gradle ./
+COPY gradle ./gradle
+RUN ./gradlew --version --no-daemon
+
+COPY src ./src
+RUN ./gradlew bootJar --no-daemon
+
+FROM eclipse-temurin:25-jre
+
+# curl backs the container health check on /actuator/health
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 1001 vertice
+
+WORKDIR /app
+
+COPY --from=build /app/build/libs/vertice-api-0.0.1-SNAPSHOT.jar app.jar
+
+USER vertice
+
+EXPOSE 8080 9090
+
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]
