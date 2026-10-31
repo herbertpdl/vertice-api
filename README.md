@@ -122,6 +122,27 @@ docker-compose setup).
 
 The HTTP server listens on port `8080`; the gRPC server listens on port `9090`.
 
+### Deployed on AWS (`aws` profile)
+
+`Dockerfile.prod` builds the production image (the boot jar on a JRE, as a non-root user; the plain
+`Dockerfile` is the development image). The deployed database is Aurora PostgreSQL with express
+configuration, which accepts IAM authentication only, so the `aws` profile
+([`application-aws.properties`](src/main/resources/application-aws.properties)) switches the
+datasource to the [AWS Advanced JDBC Wrapper](https://github.com/aws/aws-advanced-jdbc-wrapper)'s
+`iam` plugin: each new connection gets a 15-minute token signed with the container's AWS
+credentials, and there is no password. Run it with:
+
+| Variable | Value |
+|---|---|
+| `SPRING_PROFILES_ACTIVE` | `aws` |
+| `VERTICE_ENV` | `prod` |
+| `SPRING_DATASOURCE_URL` | `jdbc:aws-wrapper:postgresql://<cluster endpoint>:5432/vertice?sslmode=require` |
+| `DB_USERNAME` | a database role granted `rds_iam` (the task role needs `rds-db:connect` on it) |
+| `DB_PASSWORD` | empty |
+| `JWT_SECRET` | the secret shared with vertice-bff |
+
+`/actuator/health` on `8080` needs no token and backs the container health check.
+
 ## Running locally
 
 ### Standalone (native Gradle + a Postgres container)
