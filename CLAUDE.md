@@ -36,6 +36,12 @@ gradle and github-actions weekly.
 Third-party actions (anything outside `actions/*`) are pinned by full commit SHA with a version
 comment; Dependabot bumps both together.
 
+On pushes to `main` (and manual runs on `main`), the `deploy` job at the end of `ci.yml`
+deploys to ECS once every CI job passed: GitHub OIDC role `vertice-api-deploy`, `Dockerfile.prod`
+for arm64, task definition [`.aws/task-definition.json`](.aws/task-definition.json) (the deployed
+config; change it by PR, never in the console). See the README's "Continuous deployment" for
+the gate, rollback and cross-repo order. Don't rename the CI jobs the deploy `needs`.
+
 ## Architecture
 
 ### Vertical slices, not layers-first packages
@@ -373,6 +379,11 @@ Two different kinds of value, and conflating them is what XREPO-006/REL-API-008 
 Flyway migrations live in `src/main/resources/db/migration`, run automatically on startup.
 Version numbers are sequential but not zero-padded (`V9` then `V10`) — check the highest existing
 number before adding one, don't infer ordering from string sort.
+
+A deploy (or rollback) changes the code, never the schema: the circuit breaker, a manual rollback
+and every rolling deploy run the previous release against the migrated database. So a migration
+must keep the previous release working: additive first (new nullable columns, new tables), and
+drops/renames only in a later release once no deployed code reads the old shape.
 
 ## Feature workflow: write a spec first
 
