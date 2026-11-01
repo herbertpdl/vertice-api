@@ -380,6 +380,11 @@ Flyway migrations live in `src/main/resources/db/migration`, run automatically o
 Version numbers are sequential but not zero-padded (`V9` then `V10`) — check the highest existing
 number before adding one, don't infer ordering from string sort.
 
+A deploy (or rollback) changes the code, never the schema: the circuit breaker, a manual rollback
+and every rolling deploy run the previous release against the migrated database. So a migration
+must keep the previous release working: additive first (new nullable columns, new tables), and
+drops/renames only in a later release once no deployed code reads the old shape.
+
 ## Feature workflow: write a spec first
 
 Non-trivial new features get a spec under `docs/specs/<feature-name>/spec.md` before/alongside

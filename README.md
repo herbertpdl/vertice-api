@@ -311,6 +311,11 @@ aws ecs wait services-stable --region us-east-2 --cluster vertice --services ver
 The next push to `main` deploys again, so revert the bad commit in a pull request (or unset
 `DEPLOY_ENABLED` until it is fixed).
 
+A rollback changes the image and task configuration, never the database: Flyway migrations
+already applied stay applied. Every migration must therefore keep the previous release working
+(additive first; drop or rename only in a later release), which also covers the moment during a
+rolling deploy when old and new tasks run side by side.
+
 **Order across repositories.** The pipelines are independent. When a change spans repositories,
 merge in the order the spec's "Merge and deploy order" gives (by default vertice-api, then
 vertice-bff, then vertice-web-react / vertice-mobile; removals go the other way), and wait for the
