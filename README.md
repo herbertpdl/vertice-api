@@ -266,3 +266,51 @@ docker run --rm -v "$PWD/build/libs:/scan:ro" anchore/grype:latest dir:/scan --f
 
 [Dependabot](.github/dependabot.yml) opens weekly update PRs for Gradle dependencies and GitHub
 Actions (minor and patch updates grouped, at most 5 open per ecosystem).
+
+## Continuous deployment
+
+Every push to `main` deploys to the `vertice` ECS cluster (us-east-2) once all of CI has passed on
+that commit: the `deploy-gate` and `deploy` jobs at the end of
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). Pull requests never deploy.
+
+1. `deploy-gate` skips the deploy unless the repository variable `DEPLOY_ENABLED` is `true`
+   (Settings → Secrets and variables → Actions → Variables; unset it to freeze deploys), and
+   unless the commit is still the head of `main`: CI runs once per commit, so an older commit whose
+   CI finishes last must not overwrite a newer deploy.
+2. `deploy` runs on a native arm64 runner and assumes the `vertice-api-deploy` IAM role through GitHub
+   OIDC (no AWS keys stored in GitHub; the role trusts only this repository's `main`). It builds
+   `Dockerfile.prod` for `linux/arm64`, pushes it to ECR `vertice-api` tagged with the first 12
+   characters of the commit SHA (tags are immutable; a re-run reuses the pushed image), registers
+   [`.aws/task-definition.json`](.aws/task-definition.json) with that image as a new revision of the
+   `vertice-api` family, and updates the `vertice-api` service.
+3. It then waits, up to 25 minutes, for the rollout to finish. The API needs about 90 seconds
+   to start (Flyway migrates the database on boot), and the health check's start period is 120
+   seconds. If the new task never becomes healthy, the service's deployment circuit breaker rolls back to the
+   previous revision and the job fails.
+
+One deploy of the service runs at a time (concurrency group `deploy-vertice-api`, never
+cancelled mid-rollout). To redeploy the head of `main` without a new commit, run the CI workflow
+manually on `main` (Actions → CI → Run workflow).
+
+**The task definition is the file.** `.aws/task-definition.json` is the deployed configuration:
+CPU/memory, environment, the health check and the secret's ARN (a reference, never a value).
+Change it in a pull request; the deploy registers it as is. A change made in the AWS console is
+overwritten by the next deploy.
+
+**Rolling back** means pointing the service at an earlier task-definition revision (each one pins
+its image tag):
+
+```sh
+aws ecs list-task-definitions --region us-east-2 --family-prefix vertice-api --sort DESC --max-items 5
+aws ecs update-service --region us-east-2 --cluster vertice --service vertice-api \
+  --task-definition vertice-api:<revision>
+aws ecs wait services-stable --region us-east-2 --cluster vertice --services vertice-api
+```
+
+The next push to `main` deploys again, so revert the bad commit in a pull request (or unset
+`DEPLOY_ENABLED` until it is fixed).
+
+**Order across repositories.** The pipelines are independent. When a change spans repositories,
+merge in the order the spec's "Merge and deploy order" gives (by default vertice-api, then
+vertice-bff, then vertice-web-react / vertice-mobile; removals go the other way), and wait for the
+previous repository's deploy job to finish before merging the next one.

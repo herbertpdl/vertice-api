@@ -36,6 +36,12 @@ gradle and github-actions weekly.
 Third-party actions (anything outside `actions/*`) are pinned by full commit SHA with a version
 comment; Dependabot bumps both together.
 
+On pushes to `main` (and manual runs on `main`), the `deploy-gate` and `deploy` jobs at the end of
+`ci.yml` deploy to ECS once every CI job passed: GitHub OIDC role `vertice-api-deploy`, `Dockerfile.prod`
+for arm64, task definition [`.aws/task-definition.json`](.aws/task-definition.json) (the deployed
+config; change it by PR, never in the console). See the README's "Continuous deployment" for
+the gate, rollback and cross-repo order. Don't rename the CI jobs the deploy `needs`.
+
 ## Architecture
 
 ### Vertical slices, not layers-first packages
